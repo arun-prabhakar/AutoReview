@@ -1,0 +1,155 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { parseFindings, filterExcludedPaths, extractFilePaths, analyzeDiff } from "../services/review-engine.js";
+import type { RawFinding } from "../services/review-engine.js";
+import type { CommitInfo } from "../services/bitbucket-client.js";
+import type { RepositoryConfig } from "../services/repository-service.js";
+
+describe("parseFindings", () => {
+  it("should parse valid JSON array", () => {
+    const content = '```json\n[{"file_path":"a.ts","line_number":1,"summary":"s","explanation":"e","risk_level":"must_fix","suggested_fix":null,"category":null}]\n```';
+    const result = parseFindings(content);
+    expect(result).toHaveLength(1);
+    expect(result[0].file_path).toBe("a.ts");
+  });
+
+  it("should parse JSON array without code block", () => {
+    const content = '[{"file_path":"b.ts","line_number":2,"summary":"s","explanation":"e","risk_level":"should_fix_soon","suggested_fix":"fix","category":"bug"}]';
+    const result = parseFindings(content);
+    expect(result).toHaveLength(1);
+    expect(result[0].risk_level).toBe("should_fix_soon");
+  });
+
+  it("should return empty array for invalid JSON", () => {
+    expect(parseFindings("no json here")).toEqual([]);
+    expect(parseFindings("")).toEqual([]);
+    expect(parseFindings("not an array")).toEqual([]);
+  });
+
+  it("should return empty array for non-array JSON", () => {
+    expect(parseFindings('{"key":"value"}')).toEqual([]);
+  });
+
+  it("should parse multiple findings", () => {
+    const content = '```json\n[{"file_path":"a.ts","line_number":1,"summary":"s1","explanation":"e1","risk_level":"must_fix","suggested_fix":null,"category":null},{"file_path":"b.ts","line_number":2,"summary":"s2","explanation":"e2","risk_level":"ignore","suggested_fix":null,"category":null}]\n```';
+    const result = parseFindings(content);
+    expect(result).toHaveLength(2);
+  });
+});
+
+describe("filterExcludedPaths", () => {
+  const findings: RawFinding[] = [
+    { file_path: "src/app.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    { file_path: "node_modules/lodash/index.js", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    { file_path: "vendor/golang/pkg.go", line_number: 3, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    { file_path: "dist/bundle.min.js", line_number: 4, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    { file_path: "dist/bundle.min.css", line_number: 4, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    { file_path: "package-lock.json", line_number: 5, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    { file_path: "yarn.lock", line_number: 6, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    { file_path: "build/output.js", line_number: 7, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    { file_path: "src/something.generated.ts", line_number: 8, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+  ];
+
+  it("should filter default exclusions", () => {
+    const result = filterExcludedPaths(findings, null);
+    expect(result).toHaveLength(1);
+    expect(result[0].file_path).toBe("src/app.ts");
+  });
+
+  it("should filter custom excluded paths", () => {
+    const customFindings: RawFinding[] = [
+      { file_path: "src/app.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+      { file_path: "test/spec.ts", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    ];
+    const result = filterExcludedPaths(customFindings, "test/*");
+    expect(result).toHaveLength(1);
+    expect(result[0].file_path).toBe("src/app.ts");
+  });
+
+  it("should filter with wildcard patterns", () => {
+    const customFindings: RawFinding[] = [
+      { file_path: "src/app.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+      { file_path: "src/generated.types.ts", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    ];
+    const result = filterExcludedPaths(customFindings, "src/generated*");
+    expect(result).toHaveLength(1);
+    expect(result[0].file_path).toBe("src/app.ts");
+  });
+
+  it("should return all findings if no exclusions match", () => {
+    const clean: RawFinding[] = [
+      { file_path: "src/a.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+      { file_path: "src/b.ts", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    ];
+    const result = filterExcludedPaths(clean, null);
+    expect(result).toHaveLength(2);
+  });
+});
+
+describe("extractFilePaths", () => {
+  it("should extract file paths from git diff", () => {
+    const diff = `diff --git a/src/app.ts b/src/app.ts
+index abc..def 100644
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,3 +1,4 @@
+diff --git a/src/utils.ts b/src/utils.ts
+index ghi..jkl 100644`;
+    const result = extractFilePaths(diff);
+    expect(result).toContain("src/app.ts");
+    expect(result).toContain("src/utils.ts");
+  });
+
+  it("should return empty string for no matches", () => {
+    expect(extractFilePaths("no diff here")).toBe("");
+  });
+});
+
+describe("analyzeDiff", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it("should call OpenAI SDK and return findings", async () => {
+    const mockFindings = [{ file_path: "src/app.ts", line_number: 1, summary: "SQL injection", explanation: "e", risk_level: "must_fix", suggested_fix: "use param", category: "security" }];
+
+    vi.doMock("openai", () => {
+      return {
+        default: class MockOpenAI {
+          baseURL: string;
+          apiKey: string;
+          constructor(opts: { apiKey: string; baseURL: string }) {
+            this.apiKey = opts.apiKey;
+            this.baseURL = opts.baseURL;
+          }
+          chat = {
+            completions: {
+              create: async () => ({
+                choices: [{ message: { content: JSON.stringify(mockFindings) } }],
+              }),
+            },
+          };
+        },
+      };
+    });
+
+    const { analyzeDiff } = await import("../services/review-engine.js");
+
+    const commit: CommitInfo = { hash: "abc123", message: "fix bug", author: { raw: "dev" }, date: "2024-01-01" };
+    const repo: RepositoryConfig = {
+      id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
+      branch: "main", strictness: "strict", llm_model: "gemini-flash-latest",
+      llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
+      review_mode: "auto", trigger_on_pr_update: 0,
+      auto_review_enabled: 1, poll_interval_minutes: 5, trigger_on_commit: 1,
+      generate_email: 1, post_to_bitbucket: 0, notification_recipients: null,
+      include_commit_author: 0, llm_provider: "google", llm_provider_id: "prov-1",
+    };
+
+    const provider = { apiBase: "https://api.example.com/v1", apiKey: "test-key" };
+
+    const result = await analyzeDiff("fake diff", commit, repo, "Review this: {{diff}}", provider, false);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].file_path).toBe("src/app.ts");
+    expect(result.incomplete).toBe(false);
+  });
+});

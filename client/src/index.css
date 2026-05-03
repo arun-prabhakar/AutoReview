@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* AutoReview Light Theme (Linear-inspired) */
+    --background: 240 10% 98%; /* #fafafa */
+    --foreground: 240 10% 3.9%; /* #09090b */
+
+    --card: 0 0% 100%; /* #ffffff */
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 240 5% 96%; /* #f4f4f5 */
+    --popover-foreground: 240 10% 3.9%;
+
+    --primary: 234 62% 60%; /* Lavender #5e6ad2 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 5% 90%; /* #e4e4e7 - Darker for visibility */
+    --secondary-foreground: 240 10% 3.9%;
+
+    --muted: 240 5% 90%; /* #e4e4e7 */
+    --muted-foreground: 240 4% 46%;
+
+    --accent: 240 5% 90%; /* #e4e4e7 - Darker for visibility */
+    --accent-foreground: 240 10% 3.9%;
+
+    --destructive: 0 84% 60%; /* #ef4444 */
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5% 90%; /* #e4e4e7 */
+    --input: 240 5% 90%;
+    --ring: 234 62% 60%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* AutoReview Dark Theme (Linear-inspired) */
+    --background: 240 10% 0.6%; /* #010102 */
+    --foreground: 210 20% 98%; /* #f7f8f8 */
+
+    --card: 240 6% 4%; /* Surface 1: #09090b */
+    --card-foreground: 210 20% 98%;
+
+    --popover: 240 5% 10%; /* Surface 2: #18181b */
+    --popover-foreground: 210 20% 98%;
+
+    --primary: 234 58% 60%; /* Lavender #5e6ad2 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 5% 15%; /* #23252a Surface 3 */
+    --secondary-foreground: 210 20% 98%;
+
+    --muted: 240 5% 15%; /* #23252a Hairline */
+    --muted-foreground: 215 15% 65%;
+
+    --accent: 240 5% 15%; /* #23252a */
+    --accent-foreground: 210 20% 98%;
+
+    --destructive: 0 91% 71%; /* #f87171 */
+    --destructive-foreground: 210 20% 98%;
+
+    --border: 240 5% 12%; /* #1e1e21 - Slightly softer hairline */
+    --input: 240 5% 12%;
+    --ring: 234 58% 60%;
+  }
+  .theme {
+    --animate-shimmer-slide: shimmer-slide var(--speed) ease-in-out infinite alternate;
+    --animate-spin-around: spin-around calc(var(--speed) * 2) infinite linear;
+    --animate-shiny-text: shiny-text 8s infinite;
+    --animate-shine: shine var(--duration) infinite linear;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight font-bold;
+  }
+}
+
+@layer utilities {
+  .surface-1 { background-color: hsl(var(--card)); }
+  .surface-2 { background-color: hsl(var(--popover)); }
+  .surface-3 { background-color: hsl(var(--secondary)); }
+
+  .hairline { border: 1px solid hsl(var(--border)); }
+
+  .text-ink { color: hsl(var(--foreground)); }
+  .text-ink-muted { color: hsl(var(--muted-foreground)); }
+
+  .negative-tracking-display { letter-spacing: -1.2px; }
+  .negative-tracking-headline { letter-spacing: -0.6px; }
+}
+
+@theme inline {
+  @keyframes shimmer-slide {
+  to {
+    transform: translate(calc(100cqw - 100%), 0);
+    }
+  }
+  @keyframes spin-around {
+  0% {
+    transform: translateZ(0) rotate(0);
+    }
+  15%, 35% {
+    transform: translateZ(0) rotate(90deg);
+    }
+  65%, 85% {
+    transform: translateZ(0) rotate(270deg);
+    }
+  100% {
+    transform: translateZ(0) rotate(360deg);
+    }
+  }
+  @keyframes shiny-text {
+  0%, 90%, 100% {
+    background-position: calc(-100% - var(--shiny-width)) 0;
+    }
+  30%, 60% {
+    background-position: calc(100% + var(--shiny-width)) 0;
+    }
+  }
+  @keyframes shine {
+  0% {
+    background-position: 0% 0%;
+    }
+  50% {
+    background-position: 100% 100%;
+    }
+  to {
+    background-position: 0% 0%;
+    }
+  }
+}
+
+::view-transition-old(root), ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}

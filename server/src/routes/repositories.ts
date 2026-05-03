@@ -1,0 +1,71 @@
+import { Router } from "express";
+import { v4 as uuid } from "uuid";
+import type { SqlValue } from "sql.js";
+import { all, get, run } from "../db/queries.js";
+
+export const repositoriesRouter = Router();
+
+repositoriesRouter.get("/", async (_req, res) => {
+  const repos = await all("SELECT * FROM repositories ORDER BY created_at DESC");
+  res.json(repos);
+});
+
+repositoriesRouter.get("/:id", async (req, res) => {
+  const repo = await get("SELECT * FROM repositories WHERE id = ?", [req.params.id]);
+  if (!repo) {
+    res.status(404).json({ error: "Repository not found" });
+    return;
+  }
+  res.json(repo);
+});
+
+repositoriesRouter.post("/", async (req, res) => {
+  const id = uuid();
+  const {
+    name, slug, workspace, credential_id, branch = "main",
+    review_mode = "manual", strictness = "balanced",
+  } = req.body;
+
+  if (!name || !slug || !workspace || !credential_id) {
+    res.status(400).json({ error: "name, slug, workspace, and credential_id are required" });
+    return;
+  }
+
+  await run(
+    `INSERT INTO repositories (id, name, slug, workspace, credential_id, branch, review_mode, strictness)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, name, slug, workspace, credential_id, branch, review_mode, strictness]
+  );
+
+  const repo = await get("SELECT * FROM repositories WHERE id = ?", [id]);
+  res.status(201).json(repo);
+});
+
+repositoriesRouter.put("/:id", async (req, res) => {
+  const fields = Object.keys(req.body);
+  const values = Object.values(req.body);
+
+  if (fields.length === 0) {
+    res.status(400).json({ error: "No fields to update" });
+    return;
+  }
+
+  const setClause = fields.map((f) => `${f} = ?`).join(", ");
+  await run(
+    `UPDATE repositories SET ${setClause}, updated_at = datetime('now') WHERE id = ?`,
+    [...values as SqlValue[], req.params.id]
+  );
+
+  const repo = await get("SELECT * FROM repositories WHERE id = ?", [req.params.id]);
+  res.json(repo);
+});
+
+repositoriesRouter.delete("/:id", async (req, res) => {
+  const repo = await get("SELECT id FROM repositories WHERE id = ?", [req.params.id]);
+  if (!repo) {
+    res.status(404).json({ error: "Repository not found" });
+    return;
+  }
+  await run("DELETE FROM repositories WHERE id = ?", [req.params.id]);
+  res.status(204).send();
+});
