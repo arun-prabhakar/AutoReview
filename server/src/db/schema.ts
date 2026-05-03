@@ -1,7 +1,15 @@
 import type { Database as SqlJsDatabase } from "sql.js";
-import bcrypt from "bcryptjs";
+import fs from "fs";
+import path from "path";
 
 export function ensureSchema(db: SqlJsDatabase): void {
+  const initSqlPath = path.join(process.cwd(), "db", "init.sql");
+  if (fs.existsSync(initSqlPath)) {
+    const sql = fs.readFileSync(initSqlPath, "utf8");
+    db.run(sql);
+    return;
+  }
+
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -116,9 +124,16 @@ export function ensureSchema(db: SqlJsDatabase): void {
   db.run(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
 
+  const { v4: uuid } = require("uuid") as { v4: () => string };
+  const bcrypt = require("bcryptjs") as { hashSync: (s: string, rounds: number) => string };
+  const adminHash = bcrypt.hashSync("admin", 10);
+  db.run(
+    `INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)`,
+    [uuid(), "admin", adminHash, "admin"]
+  );
+
   const result = db.exec("SELECT COUNT(*) as count FROM prompt_templates");
   const count = (result[0]?.values?.[0]?.[0] as number) || 0;
-
   if (count === 0) {
     db.run(
       `INSERT INTO prompt_templates (id, name, content, strictness, is_default) VALUES (?, ?, ?, ?, ?)`,
@@ -154,17 +169,6 @@ Respond in JSON format as an array of findings.`,
         "all",
         1,
       ]
-    );
-  }
-
-  const userCount = db.exec("SELECT COUNT(*) as count FROM users");
-  const uCount = (userCount[0]?.values?.[0]?.[0] as number) || 0;
-  if (uCount === 0) {
-    const { v4: uuid } = require("uuid");
-    const adminHash = bcrypt.hashSync("admin", 10);
-    db.run(
-      `INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)`,
-      [uuid(), "admin", adminHash, "admin"]
     );
   }
 }
