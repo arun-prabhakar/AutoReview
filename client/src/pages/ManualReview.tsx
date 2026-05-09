@@ -36,7 +36,7 @@ type OpenPr = {
 export default function ManualReview() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const { items: repos } = useSelector((state: RootState) => state.repositories);
+  const { items: repos, loading: loadingRepos } = useSelector((state: RootState) => state.repositories);
   const { toast } = useToast();
 
   const [mode, setMode] = useState<"commit" | "pr">("pr");
@@ -187,9 +187,13 @@ export default function ManualReview() {
                 <Select value={repoId} onValueChange={handleRepoChange}>
                   <SelectTrigger id="repo" className="bg-background border-border h-11"><SelectValue placeholder="Select repository" /></SelectTrigger>
                   <SelectContent>
-                    {(repos as Repository[]).map((repo) => (
-                      <SelectItem key={repo.id} value={String(repo.id)}>{repo.name}</SelectItem>
-                    ))}
+                    {loadingRepos ? (
+                      <SelectItem value="_loading" disabled>Loading repositories...</SelectItem>
+                    ) : (
+                      (repos as Repository[]).map((repo) => (
+                        <SelectItem key={repo.id} value={String(repo.id)}>{repo.name}</SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>

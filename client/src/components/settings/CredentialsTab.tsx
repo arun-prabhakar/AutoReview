@@ -12,9 +12,11 @@ import type { Credential } from "./types";
 export function CredentialsTab({
   credentials,
   onRefresh,
+  loading,
 }: {
   credentials: Credential[];
   onRefresh: () => void;
+  loading?: boolean;
 }) {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -63,7 +65,8 @@ export function CredentialsTab({
           </DialogContent>
         </Dialog>
       </div>
-      {credentials.map((cred) => (
+      {loading && Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-20 rounded-lg bg-secondary animate-pulse" />)}
+      {!loading && credentials.map((cred) => (
         <Card key={cred.id}>
           <CardContent className="flex items-center justify-between pt-6">
             <div>
@@ -74,7 +77,7 @@ export function CredentialsTab({
           </CardContent>
         </Card>
       ))}
-      {credentials.length === 0 && (
+      {!loading && credentials.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <KeyRound className="h-10 w-10 text-muted-foreground/50 mb-4" />
           <p className="text-sm font-medium text-muted-foreground mb-1">No credentials configured</p>

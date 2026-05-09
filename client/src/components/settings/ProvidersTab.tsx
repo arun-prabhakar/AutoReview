@@ -14,9 +14,11 @@ import { PROVIDER_PRESETS, detectProviderPreset } from "./types";
 export function ProvidersTab({
   providers,
   onRefresh,
+  loading,
 }: {
   providers: Provider[];
   onRefresh: () => void;
+  loading?: boolean;
 }) {
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -128,7 +130,8 @@ export function ProvidersTab({
         </Dialog>
       </div>
 
-      {providers.map((p) => (
+      {loading && Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-20 rounded-lg bg-secondary animate-pulse" />)}
+      {!loading && providers.map((p) => (
         <Card key={p.id}>
           <CardContent className="flex items-center justify-between pt-6">
             <div>
@@ -145,7 +148,7 @@ export function ProvidersTab({
           </CardContent>
         </Card>
       ))}
-      {providers.length === 0 && (
+      {!loading && providers.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Cpu className="h-10 w-10 text-muted-foreground/50 mb-4" />
           <p className="text-sm font-medium text-muted-foreground mb-1">No providers configured</p>

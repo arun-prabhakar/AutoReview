@@ -32,9 +32,9 @@ function parseBitbucketUrl(url: string): { workspace: string; slug: string } | n
   return null;
 }
 
-export function RepositoriesTab({ credentials }: { credentials: Credential[] }) {
+export function RepositoriesTab({ credentials, loadingCredentials: _loadingCredentials }: { credentials: Credential[]; loadingCredentials?: boolean }) {
   const dispatch = useDispatch<AppDispatch>();
-  const { items: repos } = useSelector((state: RootState) => state.repositories);
+  const { items: repos, loading: loadingRepos } = useSelector((state: RootState) => state.repositories);
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [repoUrl, setRepoUrl] = useState("");
@@ -140,7 +140,8 @@ export function RepositoriesTab({ credentials }: { credentials: Credential[] }) 
           </DialogContent>
         </Dialog>
       </div>
-      {repos.map((repo) => (
+      {loadingRepos && Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-20 rounded-lg bg-secondary animate-pulse" />)}
+      {!loadingRepos && repos.map((repo) => (
         <Card key={String(repo.id)}>
           <CardContent className="flex items-center justify-between pt-6">
             <div>
@@ -155,7 +156,7 @@ export function RepositoriesTab({ credentials }: { credentials: Credential[] }) 
           </CardContent>
         </Card>
       ))}
-      {repos.length === 0 && (
+      {!loadingRepos && repos.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <FolderGit2 className="h-10 w-10 text-muted-foreground/50 mb-4" />
           <p className="text-sm font-medium text-muted-foreground mb-1">No repositories configured</p>

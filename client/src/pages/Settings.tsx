@@ -21,6 +21,8 @@ export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [loadingCredentials, setLoadingCredentials] = useState(true);
+  const [loadingProviders, setLoadingProviders] = useState(true);
   const { toast } = useToast();
   const activeTab = searchParams.get("tab") || "providers";
 
@@ -31,11 +33,15 @@ export default function Settings() {
   }, [dispatch]);
 
   const loadCredentials = async () => {
+    setLoadingCredentials(true);
     try { setCredentials(await api.get<Credential[]>("/api/credentials")); } catch { toast({ title: "Failed to load credentials", variant: "destructive" }); }
+    finally { setLoadingCredentials(false); }
   };
 
   const loadProviders = async () => {
+    setLoadingProviders(true);
     try { setProviders(await api.get<Provider[]>("/api/providers")); } catch { toast({ title: "Failed to load providers", variant: "destructive" }); }
+    finally { setLoadingProviders(false); }
   };
 
   return (
@@ -54,15 +60,15 @@ export default function Settings() {
         </TabsList>
 
         <TabsContent value="providers" className="space-y-4 mt-4">
-          <ProvidersTab providers={providers} onRefresh={loadProviders} />
+          <ProvidersTab providers={providers} onRefresh={loadProviders} loading={loadingProviders} />
         </TabsContent>
 
         <TabsContent value="credentials" className="space-y-4 mt-4">
-          <CredentialsTab credentials={credentials} onRefresh={loadCredentials} />
+          <CredentialsTab credentials={credentials} onRefresh={loadCredentials} loading={loadingCredentials} />
         </TabsContent>
 
         <TabsContent value="repositories" className="space-y-4 mt-4">
-          <RepositoriesTab credentials={credentials} />
+          <RepositoriesTab credentials={credentials} loadingCredentials={loadingCredentials} />
         </TabsContent>
 
         <TabsContent value="review" className="space-y-4 mt-4">
@@ -70,7 +76,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="llm" className="space-y-4 mt-4">
-          <LlmTab providers={providers} />
+          <LlmTab providers={providers} loading={loadingProviders} />
         </TabsContent>
 
         <TabsContent value="prompt" className="space-y-4 mt-4">

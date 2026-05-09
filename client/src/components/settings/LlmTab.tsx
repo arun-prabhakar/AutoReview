@@ -14,7 +14,7 @@ import { Loader2 } from "lucide-react";
 import type { Provider } from "./types";
 import { PROVIDER_PRESETS, detectProviderPreset } from "./types";
 
-export function LlmTab({ providers }: { providers: Provider[] }) {
+export function LlmTab({ providers, loading }: { providers: Provider[]; loading?: boolean }) {
   const dispatch = useDispatch<AppDispatch>();
   const { items: repos } = useSelector((state: RootState) => state.repositories);
   const { toast } = useToast();
@@ -136,7 +136,8 @@ export function LlmTab({ providers }: { providers: Provider[] }) {
           </Card>
         );
       })}
-      {providers.length === 0 && <p className="text-sm text-warning">Add an LLM provider first (see LLM Providers tab).</p>}
+      {loading && Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-20 rounded-lg bg-secondary animate-pulse" />)}
+      {!loading && providers.length === 0 && <p className="text-sm text-warning">Add an LLM provider first (see LLM Providers tab).</p>}
     </>
   );
 }
