@@ -18,9 +18,11 @@ jobs:
         with:
           project_id: arun-prabhakar
 
+      - name: Configure Docker
+        run: gcloud auth configure-docker gcr.io --quiet
+
       - name: Build and push
-        run: |
-          gcloud builds submit --tag gcr.io/arun-prabhakar/autoreview
+        run: docker build -t gcr.io/arun-prabhakar/autoreview . && docker push gcr.io/arun-prabhakar/autoreview
 
       - name: Deploy to Cloud Run
         run: |
