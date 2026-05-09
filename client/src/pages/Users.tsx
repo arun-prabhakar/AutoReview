@@ -49,7 +49,7 @@ export default function Users() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const password = autoGenPassword ? generatePassword() : manualPassword;
-    if (!password || password.length < 4) {
+    if (!password || password.length < 8) {
       toast({ title: "Error", description: "Password must be at least 4 characters", variant: "destructive" });
       return;
     }

@@ -28,6 +28,9 @@ export function getPool(): Pool {
 
   _pool = new Pool({
     ...poolConfig,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
     ...(isSupabase ? { ssl: { rejectUnauthorized: false } } : {}),
   });
 

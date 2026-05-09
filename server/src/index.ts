@@ -101,6 +101,9 @@ async function start() {
   process.on("SIGINT", shutdown);
 }
 
-start();
+start().catch((err) => {
+  logger.error("Failed to start server", { error: String(err) });
+  process.exit(1);
+});
 
 export default app;

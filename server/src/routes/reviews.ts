@@ -11,6 +11,8 @@ export const reviewsRouter = Router();
 
 reviewsRouter.get("/", async (req, res) => {
   const { repository_id, status, review_mode, created_by, limit = "20", offset = "0" } = req.query;
+  const clampedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+  const clampedOffset = Math.max(Number(offset) || 0, 0);
 
   let query = `
     SELECT r.*, repo.name as repository_name
@@ -47,7 +49,7 @@ reviewsRouter.get("/", async (req, res) => {
   const statusCounts = { pending: Number(counts?.pending ?? 0), completed: Number(counts?.completed ?? 0), failed: Number(counts?.failed ?? 0) };
 
   query += ` ORDER BY r.created_at DESC LIMIT $${paramIdx++} OFFSET $${paramIdx++}`;
-  params.push(Number(limit), Number(offset));
+  params.push(clampedLimit, clampedOffset);
 
   const reviews = await all(query, params);
   res.json({ reviews, total, statusCounts, limit: Number(limit), offset: Number(offset) });

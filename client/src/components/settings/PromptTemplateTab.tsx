@@ -36,7 +36,7 @@ export function PromptTemplateTab() {
       setTemplates(data);
       const match = data.find((t) => t.strictness === activeStrictness || (activeStrictness === "all" && t.strictness === "all"));
       if (match) { setActiveTemplateId(match.id); setEditorContent(match.content); setTemplateDirty(false); }
-    } catch {}
+    } catch { toast({ title: "Failed to load templates", variant: "destructive" }); }
   }
 
   const handleStrictnessChange = (level: string) => {

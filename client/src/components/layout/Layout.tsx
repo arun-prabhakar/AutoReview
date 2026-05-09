@@ -6,7 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, PanelLeft, PanelLeftClose, Users, KeyRound } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { logoutUser, changePassword } from "../../store/authSlice";
 import type { RootState, AppDispatch } from "../../store";
@@ -134,6 +134,7 @@ export function Layout() {
     return window.localStorage.getItem("autoreview-sidebar-collapsed") === "true";
   });
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     const stored = window.localStorage.getItem("theme");
@@ -157,7 +158,7 @@ export function Layout() {
       <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
       <motion.aside
         animate={{ width: collapsed ? 64 : 260 }}
-        transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
         className="hidden flex-shrink-0 border-r border-border bg-card md:flex md:flex-col overflow-hidden z-20 shadow-card"
       >
         <div className={cn("relative overflow-hidden flex items-center gap-3 p-6 mb-2", collapsed && "flex-col gap-4")}>
@@ -221,7 +222,7 @@ export function Layout() {
                   <NavLinks onNavigate={() => setOpen(false)} />
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 border-t border-border p-6">
-                   <div className="flex items-center gap-3 mb-6">
+                   <div className="flex items-center gap-3 mb-4">
                     <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-xs font-bold text-foreground">
                       {user?.username?.substring(0, 2).toUpperCase()}
                     </div>
@@ -229,6 +230,13 @@ export function Layout() {
                       <p className="text-sm font-semibold text-ink">{user?.username}</p>
                       <p className="text-xs uppercase tracking-widest text-muted-foreground">{user?.role}</p>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-md flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
+                    <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors px-3 h-8 flex-1 justify-start" onClick={() => { setChangePasswordOpen(true); setOpen(false); }}>
+                      <KeyRound className="h-4 w-4" />
+                      <span className="text-xs font-semibold">Change Password</span>
+                    </Button>
                   </div>
                   <Button variant="ghost" size="sm" className="w-full justify-start gap-3 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors px-3 h-10" onClick={() => { handleLogout(); setOpen(false); }}>
                     <LogOut className="h-4 w-4" />

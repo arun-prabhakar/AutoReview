@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import type { AppDispatch } from "@/store";
 import { fetchRepositories } from "@/store/repositoriesSlice";
 import { api } from "@/services/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
 import { Cpu, KeyRound, FolderGit2, Settings2, Brain, FileText, Bell } from "lucide-react";
 import type { Credential, Provider } from "@/components/settings/types";
 import { ProvidersTab } from "@/components/settings/ProvidersTab";
@@ -16,8 +18,11 @@ import { NotificationsTab } from "@/components/settings/NotificationsTab";
 
 export default function Settings() {
   const dispatch = useDispatch<AppDispatch>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const { toast } = useToast();
+  const activeTab = searchParams.get("tab") || "providers";
 
   useEffect(() => {
     dispatch(fetchRepositories());
@@ -26,18 +31,18 @@ export default function Settings() {
   }, [dispatch]);
 
   const loadCredentials = async () => {
-    try { setCredentials(await api.get<Credential[]>("/api/credentials")); } catch {}
+    try { setCredentials(await api.get<Credential[]>("/api/credentials")); } catch { toast({ title: "Failed to load credentials", variant: "destructive" }); }
   };
 
   const loadProviders = async () => {
-    try { setProviders(await api.get<Provider[]>("/api/providers")); } catch {}
+    try { setProviders(await api.get<Provider[]>("/api/providers")); } catch { toast({ title: "Failed to load providers", variant: "destructive" }); }
   };
 
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
 
-      <Tabs defaultValue="providers">
+      <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
         <TabsList className="w-full flex-wrap h-auto gap-1">
           <TabsTrigger value="providers"><Cpu className="h-3.5 w-3.5 mr-1.5" />LLM Providers</TabsTrigger>
           <TabsTrigger value="credentials"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Credentials</TabsTrigger>

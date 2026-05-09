@@ -69,7 +69,7 @@ async function performDedup(repositoryId: string, dedupKey: string, force: boole
 
 async function executeReview(ctx: ReviewContext, createdBy?: string) {
   const reviewId = uuid();
-  await createReview({
+  const { created } = await createReview({
     id: reviewId,
     repository_id: ctx.repo.id,
     commit_hash: ctx.dedupKey,
@@ -81,6 +81,14 @@ async function executeReview(ctx: ReviewContext, createdBy?: string) {
     completed_at: null,
     created_by: createdBy ?? null,
   });
+
+  if (!created) {
+    const existing = await findExistingReview(ctx.repo.id, ctx.dedupKey);
+    if (existing) {
+      const findings = await findFindingsByReviewId(existing.id);
+      return { reviewId: existing.id, findings, cached: true, incomplete: false, aiOverview: existing.ai_overview || "" };
+    }
+  }
 
   try {
     const template = await getPromptTemplate(ctx.repo.strictness);

@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, GitCommit, GitPullRequest, RefreshCw } from "lucide-react";
+import { AlertTriangle, GitCommit, GitPullRequest, RefreshCw, Loader2 } from "lucide-react";
 import type { Repository } from "@/types";
 
 type ReviewResult = {
@@ -158,9 +158,11 @@ export default function ManualReview() {
           <CardHeader className="pb-4 border-b border-border">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg font-semibold tracking-headline">Start a Review</CardTitle>
-              <div className="flex rounded-lg bg-secondary p-1 text-xs font-medium">
+              <div role="tablist" className="flex rounded-lg bg-secondary p-1 text-xs font-medium">
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={mode === "commit"}
                   onClick={() => handleModeChange("commit")}
                   className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors rounded-md ${mode === "commit" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"}`}
                 >
@@ -168,6 +170,8 @@ export default function ManualReview() {
                 </button>
                 <button
                   type="button"
+                  role="tab"
+                  aria-selected={mode === "pr"}
                   onClick={() => handleModeChange("pr")}
                   className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors rounded-md ${mode === "pr" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"}`}
                 >
@@ -259,9 +263,9 @@ export default function ManualReview() {
               <Button
                 type="submit"
                 disabled={isSubmitDisabled}
-                className={cn("w-full h-11 rounded-lg font-bold", submitting && "animate-pulse")}
+                className={cn("w-full h-11 rounded-lg font-bold")}
               >
-                {submitting ? `Reviewing with AI... (${elapsed}s)` : mode === "pr" ? "Review Pull Request" : "Start Review"}
+                {submitting ? <><Loader2 className="h-4 w-4 animate-spin mr-2 inline" />Reviewing with AI... ({elapsed}s)</> : mode === "pr" ? "Review Pull Request" : "Start Review"}
               </Button>
             </form>
           </CardContent>

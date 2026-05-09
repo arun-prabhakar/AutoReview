@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate, Link } from "react-router-dom";
 import { type RootState, type AppDispatch } from "@/store";
@@ -31,34 +31,43 @@ export default function Dashboard() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterUser, setFilterUser] = useState("");
+  const [debouncedFilterUser, setDebouncedFilterUser] = useState("");
   const [page, setPage] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<Review | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const filterUserTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const PAGE_SIZE = 20;
 
-  const activeFilters = () => {
+  const activeFilters = (userFilter?: string) => {
     const params: Record<string, string> = {};
     if (filterRepo !== "all") params.repository_id = filterRepo;
     if (filterStatus !== "all") params.status = filterStatus;
     if (filterType !== "all") params.review_mode = filterType;
-    if (filterUser.trim()) params.created_by = filterUser.trim();
+    const userVal = userFilter ?? debouncedFilterUser;
+    if (userVal.trim()) params.created_by = userVal.trim();
     return params;
   };
 
   useEffect(() => {
     dispatch(fetchReviews({ limit: PAGE_SIZE, offset: 0 }));
     dispatch(fetchRepositories());
-  }, [dispatch]);
+  }, [dispatch]); // eslint-disable-line
+
+  useEffect(() => {
+    if (filterUserTimeoutRef.current) clearTimeout(filterUserTimeoutRef.current);
+    filterUserTimeoutRef.current = setTimeout(() => setDebouncedFilterUser(filterUser), 300);
+    return () => { if (filterUserTimeoutRef.current) clearTimeout(filterUserTimeoutRef.current); };
+  }, [filterUser]);
 
   useEffect(() => {
     setPage(0);
-    dispatch(fetchReviews({ ...activeFilters(), limit: PAGE_SIZE, offset: 0 }));
-  }, [filterRepo, filterStatus, filterType, filterUser]); // eslint-disable-line
+    dispatch(fetchReviews({ ...activeFilters(debouncedFilterUser), limit: PAGE_SIZE, offset: 0 }));
+  }, [filterRepo, filterStatus, filterType, debouncedFilterUser]); // eslint-disable-line
 
   useEffect(() => {
     if (page > 0) {
-      dispatch(fetchReviews({ ...activeFilters(), limit: PAGE_SIZE, offset: page * PAGE_SIZE }));
+      dispatch(fetchReviews({ ...activeFilters(debouncedFilterUser), limit: PAGE_SIZE, offset: page * PAGE_SIZE }));
     }
   }, [page]); // eslint-disable-line
 
@@ -276,7 +285,7 @@ export default function Dashboard() {
                           <button
                             onClick={(e) => { e.stopPropagation(); setDeleteTarget(review); }}
                             aria-label={`Delete review for ${review.repository_name || review.repository_id}`}
-                            className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 transition-opacity inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>

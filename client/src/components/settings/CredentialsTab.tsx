@@ -43,7 +43,7 @@ export function CredentialsTab({
 
   const handleDelete = async (id: string) => {
     setDeleting(id);
-    try { await api.del(`/api/credentials/${id}`); toast({ title: "Credential deleted", variant: "success" }); onRefresh(); } catch {} finally { setDeleting(null); }
+    try { await api.del(`/api/credentials/${id}`); toast({ title: "Credential deleted", variant: "success" }); onRefresh(); } catch { toast({ title: "Failed to delete credential", variant: "destructive" }); } finally { setDeleting(null); }
   };
 
   return (

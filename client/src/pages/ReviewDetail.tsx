@@ -30,7 +30,14 @@ export default function ReviewDetail() {
   }, [id, dispatch]);
 
   if (loading) return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>;
-  if (!review) return <p className="py-8 text-center text-muted-foreground">Review not found</p>;
+  if (!review) return (
+    <div className="flex flex-col items-center justify-center py-16 gap-4">
+      <FileSearch className="h-12 w-12 text-muted-foreground/50" />
+      <h3 className="text-lg font-semibold">Review not found</h3>
+      <p className="text-sm text-muted-foreground">This review may have been deleted or doesn&apos;t exist.</p>
+      <Button variant="outline" onClick={() => navigate("/")}>Go to Dashboard</Button>
+    </div>
+  );
 
   const grouped = {
     must_fix: findings.filter((f) => f.risk_level === "must_fix"),
@@ -110,17 +117,19 @@ AutoReview`;
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold tracking-tight">Review Detail</h2>
-          <div className="flex items-center gap-2">
-            {user?.role === "admin" && (
-              <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                Delete
-              </Button>
-            )}
-            <Button variant="outline" size="sm" className="border-border bg-card hover:bg-accent" onClick={() => navigate("/")}>
-              Back
-            </Button>
-          </div>
+            <nav className="flex items-center gap-2 text-sm text-muted-foreground">
+              <button onClick={() => navigate("/")} className="hover:text-foreground transition-colors">Dashboard</button>
+              <span>/</span>
+              <span className="text-foreground font-medium">Review</span>
+            </nav>
+            <div className="flex items-center gap-2">
+              {user?.role === "admin" && (
+                <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  Delete
+                </Button>
+              )}
+            </div>
         </div>
 
       <Card className="border-border bg-card">

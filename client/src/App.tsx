@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from "react";
+import { useEffect, lazy, Suspense, Component, type ReactNode } from "react";
 import { useDispatch } from "react-redux";
 import { Routes, Route, Link } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
@@ -18,6 +18,23 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Users = lazy(() => import("./pages/Users"));
 
 setOnUnauthorized(() => store.dispatch(logoutUser()));
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+          <h2 className="text-xl font-bold">Something went wrong</h2>
+          <p className="text-muted-foreground text-sm">An unexpected error occurred.</p>
+          <Button variant="outline" onClick={() => window.location.reload()}>Reload page</Button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function useDismissLoader() {
   useEffect(() => {
@@ -52,8 +69,9 @@ export default function App() {
   }, [dispatch]);
   return (
     <>
-      <Suspense>
-        <Routes>
+      <ErrorBoundary>
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-foreground" /></div>}>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route
             element={
@@ -83,8 +101,9 @@ export default function App() {
             />
             <Route path="*" element={<NotFound />} />
           </Route>
-        </Routes>
-      </Suspense>
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
       <Toaster />
     </>
   );

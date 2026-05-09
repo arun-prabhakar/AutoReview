@@ -19,7 +19,7 @@ export function ChangePasswordForm({ onSubmit, loading, error, showCurrentPasswo
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setValidationError("");
-    if (newPassword.length < 6) { setValidationError("New password must be at least 6 characters"); return; }
+    if (newPassword.length < 8) { setValidationError("New password must be at least 8 characters"); return; }
     if (newPassword !== confirmPassword) { setValidationError("New passwords do not match"); return; }
     await onSubmit(currentPassword, newPassword);
   }
@@ -53,7 +53,7 @@ export function ChangePasswordForm({ onSubmit, loading, error, showCurrentPasswo
           value={newPassword}
           onChange={(e) => setNewPassword(e.target.value)}
           required
-          minLength={6}
+          minLength={8}
         />
       </div>
 
@@ -65,7 +65,7 @@ export function ChangePasswordForm({ onSubmit, loading, error, showCurrentPasswo
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
-          minLength={6}
+          minLength={8}
         />
       </div>
 

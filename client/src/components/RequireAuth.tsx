@@ -11,7 +11,11 @@ export function RequireAuth({ children, roles }: RequireAuthProps) {
   const { isAuthenticated, user, loading } = useSelector((state: RootState) => state.auth);
 
   if (loading) {
-    return null;
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-foreground" />
+      </div>
+    );
   }
 
   if (!isAuthenticated) {
