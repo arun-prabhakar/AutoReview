@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { v4 as uuid } from "uuid";
 import { all, get, run } from "../db/queries.js";
+import { requireRole } from "../middleware/jwt-auth.js";
 
 export const repositoriesRouter = Router();
 
@@ -28,7 +29,7 @@ repositoriesRouter.get("/:id", async (req, res) => {
   }
 });
 
-repositoriesRouter.post("/", async (req, res) => {
+repositoriesRouter.post("/", requireRole("admin"), async (req, res) => {
   const id = uuid();
   const {
     name, slug, workspace, credential_id, branch,
@@ -63,7 +64,7 @@ const ALLOWED_UPDATE_FIELDS: readonly string[] = [
   "llm_temperature", "smtp_host", "smtp_port", "smtp_user", "smtp_from_address",
 ] as const;
 
-repositoriesRouter.put("/:id", async (req, res) => {
+repositoriesRouter.put("/:id", requireRole("admin"), async (req, res) => {
   const filteredEntries = Object.entries(req.body).filter(
     ([key]) => ALLOWED_UPDATE_FIELDS.includes(key),
   );
@@ -100,7 +101,7 @@ repositoriesRouter.put("/:id", async (req, res) => {
   }
 });
 
-repositoriesRouter.delete("/:id", async (req, res) => {
+repositoriesRouter.delete("/:id", requireRole("admin"), async (req, res) => {
   try {
     const repo = await get("SELECT id FROM repositories WHERE id = $1", [req.params.id]);
     if (!repo) {

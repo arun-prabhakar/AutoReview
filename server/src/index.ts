@@ -68,7 +68,7 @@ app.get("/api/health", publicLimiter, (_req, res) => {
 app.use("/api", apiLimiter, jwtAuth);
 
 app.use("/api/reviews", reviewsRouter);
-app.use("/api/repositories", requireRole("admin"), repositoriesRouter);
+app.use("/api/repositories", repositoriesRouter);
 app.use("/api/settings", requireRole("admin"), settingsRouter);
 app.use("/api/credentials", requireRole("admin"), credentialsRouter);
 app.use("/api/providers", requireRole("admin"), providersRouter);
