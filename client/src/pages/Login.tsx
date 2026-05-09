@@ -28,13 +28,13 @@ export default function Login() {
         <div className="rounded-lg border bg-card p-8 shadow-sm relative overflow-hidden">
           <div className="text-center space-y-1">
             <img src="/favicon.svg" alt="" className="mx-auto mb-3 h-10 w-10" />
-            <h1 className="text-2xl font-bold tracking-tight">Auto<span className="text-indigo-400">Review</span></h1>
+            <h1 className="text-2xl font-bold tracking-tight">Auto<span className="text-foreground">Review</span></h1>
             <p className="text-sm text-muted-foreground">Sign in to your account</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-6">
             {error && (
-              <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
+              <div className="rounded-md bg-secondary px-3 py-2 text-sm text-destructive">{error}</div>
             )}
 
             <div className="space-y-2">
@@ -76,7 +76,7 @@ export default function Login() {
             <ShimmerButton
               type="submit"
               disabled={loading}
-              shimmerColor="rgba(129, 140, 248, 0.3)"
+              shimmerColor="rgba(115, 115, 115, 0.3)"
               background="hsl(var(--primary))"
               className="w-full h-10 rounded-lg font-semibold"
             >
