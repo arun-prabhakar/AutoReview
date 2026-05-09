@@ -7,19 +7,39 @@ import { runManualReview } from "./manual-review-service.js";
 import { logger } from "../middleware/index.js";
 
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
+let currentIntervalMs: number | null = null;
 const lastSeenCommits = new Map<string, string>();
+
+async function computeInterval(): Promise<number> {
+  const repos = await getAutoReviewRepos();
+  if (repos.length === 0) return 5 * 60 * 1000;
+  return Math.min(...repos.map((r) => r.poll_interval_minutes)) * 60 * 1000;
+}
+
+async function reschedulePolling(): Promise<void> {
+  const intervalMs = await computeInterval();
+  if (intervalMs === currentIntervalMs && pollingTimer) return;
+
+  if (pollingTimer) clearInterval(pollingTimer);
+  currentIntervalMs = intervalMs;
+
+  pollingTimer = setInterval(async () => {
+    await pollAllRepos();
+    await reschedulePolling();
+  }, intervalMs);
+}
 
 export function startAutoReviewPolling(): void {
   (async () => {
     const repos = await getAutoReviewRepos();
     if (repos.length === 0) return;
 
-    const minInterval = Math.min(...repos.map((r) => r.poll_interval_minutes));
-    const intervalMs = minInterval * 60 * 1000;
+    currentIntervalMs = await computeInterval();
 
     pollingTimer = setInterval(async () => {
       await pollAllRepos();
-    }, intervalMs);
+      await reschedulePolling();
+    }, currentIntervalMs);
 
     await pollAllRepos();
   })();
@@ -46,7 +66,7 @@ async function pollAllRepos(): Promise<void> {
 
 async function pollRepo(repo: RepositoryConfig): Promise<void> {
   const password = await getDecryptedPassword(repo.credential_id);
-  const credential = await get<{ username: string }>("SELECT username FROM credentials WHERE id = ?", [repo.credential_id]);
+  const credential = await get<{ username: string }>("SELECT username FROM credentials WHERE id = $1", [repo.credential_id]);
   if (!credential) return;
 
   const tasks: Promise<void>[] = [];
@@ -90,7 +110,7 @@ async function pollCommits(repo: RepositoryConfig, password: string, username: s
       try {
         await runManualReview(repo.id, commit.hash);
       } catch (error) {
-        // Log but continue processing other commits
+        logger.error(`Auto-review failed for commit`, { repoId: repo.id, commit: commit.hash, error: String(error) });
       }
     }
   }

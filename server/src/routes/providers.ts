@@ -58,10 +58,31 @@ providersRouter.delete("/:id", async (req, res) => {
   }
 });
 
+providersRouter.post("/:id/test", async (req, res) => {
+  try {
+    const provider = await get<{ api_base: string; name: string }>(
+      "SELECT api_base, name FROM llm_providers WHERE id = $1", [req.params.id]
+    );
+    if (!provider) {
+      res.status(404).json({ error: "Provider not found" });
+      return;
+    }
+
+    const apiKey = await getDecryptedApiKey(req.params.id);
+    const client = new OpenAI({ apiKey, baseURL: provider.api_base });
+
+    await client.models.list();
+    res.json({ success: true, message: "Connection successful" });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Connection failed";
+    res.status(502).json({ success: false, error: message });
+  }
+});
+
 providersRouter.get("/:id/models", async (req, res) => {
   try {
     const provider = await get<{ api_base: string; name: string }>(
-      "SELECT api_base, name FROM llm_providers WHERE id = ?", [req.params.id]
+      "SELECT api_base, name FROM llm_providers WHERE id = $1", [req.params.id]
     );
     if (!provider) {
       res.status(404).json({ error: "Provider not found" });

@@ -1,22 +1,31 @@
 import { Router } from "express";
 import { v4 as uuid } from "uuid";
-import type { SqlValue } from "sql.js";
 import { all, get, run } from "../db/queries.js";
 
 export const repositoriesRouter = Router();
 
 repositoriesRouter.get("/", async (_req, res) => {
-  const repos = await all("SELECT * FROM repositories ORDER BY created_at DESC");
-  res.json(repos);
+  try {
+    const repos = await all("SELECT * FROM repositories ORDER BY created_at DESC");
+    res.json(repos);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
+  }
 });
 
 repositoriesRouter.get("/:id", async (req, res) => {
-  const repo = await get("SELECT * FROM repositories WHERE id = ?", [req.params.id]);
-  if (!repo) {
-    res.status(404).json({ error: "Repository not found" });
-    return;
+  try {
+    const repo = await get("SELECT * FROM repositories WHERE id = $1", [req.params.id]);
+    if (!repo) {
+      res.status(404).json({ error: "Repository not found" });
+      return;
+    }
+    res.json(repo);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
   }
-  res.json(repo);
 });
 
 repositoriesRouter.post("/", async (req, res) => {
@@ -31,14 +40,19 @@ repositoriesRouter.post("/", async (req, res) => {
     return;
   }
 
-  await run(
-    `INSERT INTO repositories (id, name, slug, workspace, credential_id, branch, review_mode, strictness)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, name, slug, workspace, credential_id, branch || "main", review_mode, strictness]
-  );
+  try {
+    await run(
+      `INSERT INTO repositories (id, name, slug, workspace, credential_id, branch, review_mode, strictness)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [id, name, slug, workspace, credential_id, branch || "main", review_mode, strictness]
+    );
 
-  const repo = await get("SELECT * FROM repositories WHERE id = ?", [id]);
-  res.status(201).json(repo);
+    const repo = await get("SELECT * FROM repositories WHERE id = $1", [id]);
+    res.status(201).json(repo);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
+  }
 });
 
 const ALLOWED_UPDATE_FIELDS: readonly string[] = [
@@ -59,25 +73,44 @@ repositoriesRouter.put("/:id", async (req, res) => {
     return;
   }
 
-  const fields = filteredEntries.map(([key]) => key);
-  const values = filteredEntries.map(([, val]) => val);
+  const credentialEntry = filteredEntries.find(([key]) => key === "credential_id");
+  if (credentialEntry && credentialEntry[1]) {
+    const cred = await get("SELECT id FROM credentials WHERE id = $1", [credentialEntry[1]]);
+    if (!cred) {
+      res.status(400).json({ error: "Credential not found" });
+      return;
+    }
+  }
 
-  const setClause = fields.map((f) => `${f} = ?`).join(", ");
-  await run(
-    `UPDATE repositories SET ${setClause}, updated_at = datetime('now') WHERE id = ?`,
-    [...values as SqlValue[], req.params.id]
-  );
+  try {
+    const fields = filteredEntries.map(([key]) => key);
+    const values = filteredEntries.map(([, val]) => val);
 
-  const repo = await get("SELECT * FROM repositories WHERE id = ?", [req.params.id]);
-  res.json(repo);
+    const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(", ");
+    await run(
+      `UPDATE repositories SET ${setClause}, updated_at = NOW() WHERE id = $${fields.length + 1}`,
+      [...values, req.params.id]
+    );
+
+    const repo = await get("SELECT * FROM repositories WHERE id = $1", [req.params.id]);
+    res.json(repo);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
+  }
 });
 
 repositoriesRouter.delete("/:id", async (req, res) => {
-  const repo = await get("SELECT id FROM repositories WHERE id = ?", [req.params.id]);
-  if (!repo) {
-    res.status(404).json({ error: "Repository not found" });
-    return;
+  try {
+    const repo = await get("SELECT id FROM repositories WHERE id = $1", [req.params.id]);
+    if (!repo) {
+      res.status(404).json({ error: "Repository not found" });
+      return;
+    }
+    await run("DELETE FROM repositories WHERE id = $1", [req.params.id]);
+    res.status(204).send();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
   }
-  await run("DELETE FROM repositories WHERE id = ?", [req.params.id]);
-  res.status(204).send();
 });

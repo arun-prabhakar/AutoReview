@@ -11,9 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { BlurFade } from "@/components/ui/blur-fade";
-import { BorderBeam } from "@/components/ui/border-beam";
-import { NumberTicker } from "@/components/ui/number-ticker";
 import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -39,14 +36,6 @@ export default function ReviewDetail() {
     must_fix: findings.filter((f) => f.risk_level === "must_fix"),
     should_fix_soon: findings.filter((f) => f.risk_level === "should_fix_soon"),
     ignore: findings.filter((f) => f.risk_level === "ignore"),
-  };
-
-  const riskBadgeStyles = (risk: string) => {
-    switch (risk) {
-      case "must_fix": return "bg-destructive/10 text-destructive border-destructive/20";
-      case "should_fix_soon": return "bg-yellow-500/10 text-yellow-600 border-yellow-500/20";
-      default: return "bg-secondary text-muted-foreground border-border";
-    }
   };
 
   const isPrReview = String(review.commit_hash).startsWith("pr:");
@@ -104,7 +93,7 @@ AutoReview`;
     setDeleting(true);
     try {
       await api.del(`/api/reviews/${id}`);
-      toast({ title: "Review deleted" });
+      toast({ title: "Review deleted", variant: "success" });
       navigate("/");
     } catch (err) {
       toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
@@ -119,9 +108,8 @@ AutoReview`;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <BlurFade delay={0.05} duration={0.35} inView>
-        <div className="flex items-center justify-between">
-          <h2 className="text-3xl font-bold tracking-display">Review Detail</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold tracking-tight">Review Detail</h2>
           <div className="flex items-center gap-2">
             {user?.role === "admin" && (
               <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
@@ -134,21 +122,18 @@ AutoReview`;
             </Button>
           </div>
         </div>
-      </BlurFade>
 
-      <BlurFade delay={0.1} duration={0.4} inView>
-        <Card className="border-border bg-card relative overflow-hidden">
-          <BorderBeam size={80} duration={12} colorFrom="#e5e5e5" colorTo="#e5e5e51a" borderWidth={1} />
-          <CardContent className="pt-6 pb-5">
+      <Card className="border-border bg-card">
+        <CardContent className="pt-6 pb-5">
             <div className="flex items-start justify-between gap-6 mb-4">
               <div className="flex items-center gap-3">
                 <div className={cn(
                   "h-10 w-10 rounded-lg flex items-center justify-center",
-                  worstRisk === "critical" ? "bg-destructive/10" : worstRisk === "warning" ? "bg-yellow-500/10" : "bg-emerald-500/10"
+                  worstRisk === "critical" ? "bg-destructive/10" : worstRisk === "warning" ? "bg-warning/10" : "bg-success/10"
                 )}>
                   <Shield className={cn(
                     "h-5 w-5",
-                    worstRisk === "critical" ? "text-destructive" : worstRisk === "warning" ? "text-yellow-600" : "text-emerald-600"
+                    worstRisk === "critical" ? "text-destructive" : worstRisk === "warning" ? "text-warning" : "text-success"
                   )} />
                 </div>
                 <div>
@@ -166,28 +151,28 @@ AutoReview`;
               <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
                 <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Branch</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Branch</p>
                   <p className="text-sm font-medium text-foreground">{branch}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
                 <GitCommitHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Commit</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Commit</p>
                   <p className="text-sm font-mono text-foreground">{isPrReview ? `PR #${prId}` : String(review.commit_hash).substring(0, 8)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
                 <FileSearch className="h-3.5 w-3.5 text-muted-foreground" />
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Mode</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode</p>
                   <p className="text-sm font-medium capitalize text-foreground">{String(review.review_mode)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Strictness</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Strictness</p>
                   <p className="text-sm font-medium capitalize text-foreground">{String(review.strictness)}</p>
                 </div>
               </div>
@@ -195,63 +180,50 @@ AutoReview`;
 
             {aiOverview && aiOverview !== "Review completed." && (
               <div className="mt-4 rounded-lg border border-border p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2">AI Overview</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">AI Overview</p>
                 <p className="text-sm leading-relaxed text-foreground">{aiOverview}</p>
               </div>
             )}
           </CardContent>
-        </Card>
-      </BlurFade>
+      </Card>
 
-      <div className="grid grid-cols-4 gap-3">
-        <BlurFade delay={0.15} duration={0.3} inView>
-          <div className="p-4 rounded-xl border border-border bg-card text-center">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-destructive">Must Fix</p>
-            <NumberTicker value={grouped.must_fix.length} className="text-2xl font-bold text-destructive" />
-          </div>
-        </BlurFade>
-        <BlurFade delay={0.18} duration={0.3} inView>
-          <div className="p-4 rounded-xl border border-border bg-card text-center">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-yellow-600">Should Fix</p>
-            <NumberTicker value={grouped.should_fix_soon.length} className="text-2xl font-bold text-yellow-600" />
-          </div>
-        </BlurFade>
-        <BlurFade delay={0.21} duration={0.3} inView>
-          <div className="p-4 rounded-xl border border-border bg-card text-center">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ignored</p>
-            <NumberTicker value={grouped.ignore.length} className="text-2xl font-bold text-foreground" />
-          </div>
-        </BlurFade>
-        <BlurFade delay={0.24} duration={0.3} inView>
-          <div className="p-4 rounded-xl border border-border bg-card text-center">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total</p>
-            <NumberTicker value={totalFindings} className="text-2xl font-bold text-foreground" />
-          </div>
-        </BlurFade>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-4 rounded-xl border border-border bg-card text-center">
+          <p className="text-xs font-bold uppercase tracking-wider text-destructive">Must Fix</p>
+          <span className="text-2xl font-bold tabular-nums text-destructive">{grouped.must_fix.length}</span>
+        </div>
+        <div className="p-4 rounded-xl border border-border bg-card text-center">
+          <p className="text-xs font-bold uppercase tracking-wider text-warning">Should Fix</p>
+          <span className="text-2xl font-bold tabular-nums text-warning">{grouped.should_fix_soon.length}</span>
+        </div>
+        <div className="p-4 rounded-xl border border-border bg-card text-center">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Ignored</p>
+          <span className="text-2xl font-bold tabular-nums text-foreground">{grouped.ignore.length}</span>
+        </div>
+        <div className="p-4 rounded-xl border border-border bg-card text-center">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total</p>
+          <span className="text-2xl font-bold tabular-nums text-foreground">{totalFindings}</span>
+        </div>
       </div>
 
-      {(["must_fix", "should_fix_soon", "ignore"] as const).map((level, groupIdx) => {
+      {(["must_fix", "should_fix_soon", "ignore"] as const).map((level) => {
         const items = grouped[level];
         if (items.length === 0) return null;
         return (
           <div key={level} className="space-y-3">
-            <BlurFade delay={0.3 + groupIdx * 0.08} duration={0.35} inView>
               <div className="flex items-center gap-3 pt-2">
                 <div className={cn(
-                  "h-2 w-2 rounded-full",
-                  level === "must_fix" ? "bg-destructive" : level === "should_fix_soon" ? "bg-yellow-500" : "bg-muted-foreground"
+                  "h-3 w-3 rounded-full",
+                  level === "must_fix" ? "bg-destructive" : level === "should_fix_soon" ? "bg-warning" : "bg-muted-foreground"
                 )} />
                 <h3 className="text-lg font-bold tracking-tight capitalize text-foreground">{level.replace("_", " ")}</h3>
                 <span className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "finding" : "findings"}</span>
               </div>
-            </BlurFade>
-            {items.map((finding, i) => (
-              <BlurFade key={finding.id} delay={0.02 * i} duration={0.3} inView>
-                <Card className="border-border shadow-sm overflow-hidden">
-                  <div className={cn(
-                    "h-0.5 w-full",
-                    level === "must_fix" ? "bg-destructive" : level === "should_fix_soon" ? "bg-yellow-500" : "bg-border"
-                  )} />
+            {items.map((finding) => (
+              <Card key={finding.id} className={cn(
+                    "border-border shadow-sm overflow-hidden",
+                    level === "must_fix" ? "border-l-4 border-l-destructive" : level === "should_fix_soon" ? "border-l-4 border-l-warning" : "border-l-4 border-l-border"
+                  )}>
                   <CardContent className="pt-4 space-y-3">
                     <div className="flex items-start justify-between gap-4">
                       <div className="space-y-1.5">
@@ -261,15 +233,15 @@ AutoReview`;
                         </p>
                       </div>
                       <div className="flex gap-2 flex-shrink-0 mt-0.5">
-                        <Badge variant="outline" className={cn("capitalize border-0 text-[10px]", riskBadgeStyles(level))}>{level.replace("_", " ")}</Badge>
-                        {finding.category != null && <Badge variant="outline" className="text-[10px] border-border">{finding.category}</Badge>}
+                        <Badge variant={level === "must_fix" ? "critical" : level === "should_fix_soon" ? "moderate" : "low"} className="capitalize text-xs">{level.replace("_", " ")}</Badge>
+                        {finding.category != null && <Badge variant="outline" className="text-xs border-border">{finding.category}</Badge>}
                       </div>
                     </div>
                     <p className="text-sm leading-relaxed text-muted-foreground">{finding.explanation}</p>
                     {finding.suggested_fix != null && (
                       <div className="rounded-lg bg-secondary p-3 border border-border">
                         <div className="flex items-center gap-2 mb-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">Suggested Fix</span>
+                          <span className="text-xs font-bold uppercase tracking-wider text-foreground">Suggested Fix</span>
                           <div className="h-px flex-1 bg-border" />
                         </div>
                         <code className="text-xs font-mono block text-foreground leading-relaxed whitespace-pre-wrap">{finding.suggested_fix}</code>
@@ -277,16 +249,16 @@ AutoReview`;
                     )}
                   </CardContent>
                 </Card>
-              </BlurFade>
             ))}
           </div>
         );
       })}
 
-      <BlurFade delay={0.4} duration={0.35} inView>
-        <Card className="border-border">
-          <button
+      <Card className="border-border">
+        <button
             onClick={() => setEmailVisible(!emailVisible)}
+            aria-expanded={emailVisible}
+            aria-controls="email-draft-content"
             className="w-full flex items-center justify-between px-6 py-4 hover:bg-accent transition-colors rounded-t-lg"
           >
             <div className="flex items-center gap-2.5">
@@ -296,7 +268,7 @@ AutoReview`;
             </div>
             <div className="flex items-center gap-3">
               {emailVisible && (
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(emailBody); toast({ title: "Copied to clipboard" }); }}>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(emailBody); toast({ title: "Copied to clipboard", variant: "success" }); }}>
                   Copy
                 </Button>
               )}
@@ -304,12 +276,11 @@ AutoReview`;
             </div>
           </button>
           {emailVisible && (
-            <CardContent className="pt-0 pb-4 border-t border-border">
+            <CardContent id="email-draft-content" className="pt-0 pb-4 border-t border-border">
               <pre className="whitespace-pre-wrap rounded-md bg-secondary p-4 text-xs font-mono leading-relaxed mt-4">{emailBody}</pre>
             </CardContent>
           )}
         </Card>
-      </BlurFade>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-md">

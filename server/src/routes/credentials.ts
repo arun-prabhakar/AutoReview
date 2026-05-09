@@ -4,8 +4,13 @@ import { getAllCredentials, createCredential, deleteCredential } from "../servic
 export const credentialsRouter = Router();
 
 credentialsRouter.get("/", async (_req, res) => {
-  const creds = await getAllCredentials();
-  res.json(creds);
+  try {
+    const creds = await getAllCredentials();
+    res.json(creds);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
+  }
 });
 
 credentialsRouter.post("/", async (req, res) => {
@@ -16,8 +21,13 @@ credentialsRouter.post("/", async (req, res) => {
     return;
   }
 
-  const result = await createCredential(username, app_password, workspace);
-  res.status(201).json(result);
+  try {
+    const result = await createCredential(username, app_password, workspace);
+    res.status(201).json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
+  }
 });
 
 credentialsRouter.delete("/:id", async (req, res) => {

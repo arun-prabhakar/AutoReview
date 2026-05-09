@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { v4 as uuid } from "uuid";
-import type { SqlValue } from "sql.js";
 import OpenAI from "openai";
 import { all, get, run } from "../db/queries.js";
 import { getDecryptedApiKey } from "../services/provider-service.js";
@@ -19,7 +18,7 @@ promptTemplateRouter.get("/", async (_req, res) => {
 });
 
 promptTemplateRouter.get("/:id", async (req, res) => {
-  const template = await get("SELECT * FROM prompt_templates WHERE id = ?", [req.params.id]);
+  const template = await get("SELECT * FROM prompt_templates WHERE id = $1", [req.params.id]);
   if (!template) {
     res.status(404).json({ error: "Template not found" });
     return;
@@ -38,17 +37,17 @@ promptTemplateRouter.post("/", async (req, res) => {
 
   await run(
     `INSERT INTO prompt_templates (id, name, content, strictness, is_default)
-     VALUES (?, ?, ?, ?, ?)`,
-    [id, name, content, strictness, 0]
+     VALUES ($1, $2, $3, $4, $5)`,
+    [id, name, content, strictness, false]
   );
 
-  const template = await get("SELECT * FROM prompt_templates WHERE id = ?", [id]);
+  const template = await get("SELECT * FROM prompt_templates WHERE id = $1", [id]);
   res.status(201).json(template);
 });
 
 promptTemplateRouter.put("/:id", async (req, res) => {
   const { name, content, strictness } = req.body;
-  const existing = await get<{ content: string }>("SELECT content FROM prompt_templates WHERE id = ?", [req.params.id]);
+  const existing = await get<{ content: string }>("SELECT content FROM prompt_templates WHERE id = $1", [req.params.id]);
 
   if (!existing) {
     res.status(404).json({ error: "Template not found" });
@@ -56,35 +55,36 @@ promptTemplateRouter.put("/:id", async (req, res) => {
   }
 
   const fields: string[] = [];
-  const values: SqlValue[] = [];
+  const values: unknown[] = [];
+  let paramIdx = 1;
 
-  if (name !== undefined) { fields.push("name = ?"); values.push(name); }
-  if (content !== undefined) { fields.push("content = ?"); values.push(content); }
-  if (strictness !== undefined) { fields.push("strictness = ?"); values.push(strictness); }
+  if (name !== undefined) { fields.push(`name = $${paramIdx++}`); values.push(name); }
+  if (content !== undefined) { fields.push(`content = $${paramIdx++}`); values.push(content); }
+  if (strictness !== undefined) { fields.push(`strictness = $${paramIdx++}`); values.push(strictness); }
 
   if (fields.length === 0) {
     res.status(400).json({ error: "No fields to update" });
     return;
   }
 
-  fields.push("updated_at = datetime('now')");
-  await run(`UPDATE prompt_templates SET ${fields.join(", ")} WHERE id = ?`, [...values, req.params.id]);
+  fields.push("updated_at = NOW()");
+  await run(`UPDATE prompt_templates SET ${fields.join(", ")} WHERE id = $${paramIdx}`, [...values, req.params.id]);
 
-  const template = await get("SELECT * FROM prompt_templates WHERE id = ?", [req.params.id]);
+  const template = await get("SELECT * FROM prompt_templates WHERE id = $1", [req.params.id]);
   res.json(template);
 });
 
 promptTemplateRouter.delete("/:id", async (req, res) => {
-  const template = await get("SELECT id, is_default FROM prompt_templates WHERE id = ?", [req.params.id]);
+  const template = await get("SELECT id, is_default FROM prompt_templates WHERE id = $1", [req.params.id]);
   if (!template) {
     res.status(404).json({ error: "Template not found" });
     return;
   }
-  if ((template as { is_default: number }).is_default) {
+  if ((template as { is_default: boolean }).is_default) {
     res.status(400).json({ error: "Cannot delete the default template" });
     return;
   }
-  await run("DELETE FROM prompt_templates WHERE id = ?", [req.params.id]);
+  await run("DELETE FROM prompt_templates WHERE id = $1", [req.params.id]);
   res.status(204).send();
 });
 
@@ -111,25 +111,21 @@ promptTemplateRouter.post("/enhance", async (req, res) => {
     const apiKey = await getDecryptedApiKey(provider.id);
     const client = new OpenAI({ apiKey, baseURL: provider.api_base });
 
-    const systemPrompt = `You are an expert prompt engineer specializing in code review AI systems. Your task is to improve a code review prompt template.
+    const modelName = req.body.model || "gemini-flash-latest";
 
-Rules:
-- Preserve all {{variable}} placeholders exactly as they are ({{diff}}, {{file_paths}}, {{strictness_level}}, {{excluded_paths}}, {{commit_hash}}, {{commit_message}}, {{branch}}, {{repository}})
-- The template contains ONLY the instruction section — do NOT add any output format instructions, JSON schema, or field definitions. The output format is fixed and appended automatically by the server.
-- Make the prompt more specific, structured, and effective at catching real issues
-- Reduce false positives by being explicit about what constitutes a real finding
-- Keep the prompt concise but thorough
-- Return ONLY the improved instruction text, no explanations or markdown formatting`;
+    const systemMsg = custom_prompt
+      ? `You are an expert code review prompt engineer. Enhance the following prompt template while preserving its intent. Return only the enhanced template.`
+      : `You are an expert code review prompt engineer. Enhance the following code review prompt template to be more thorough and specific. Return only the enhanced template.`;
 
-    const userMessage = custom_prompt
-      ? `Improve this code review prompt template with these specific instructions:\n\n${custom_prompt}\n\nTemplate to improve:\n\n${content}`
-      : `Improve this code review prompt template:\n\n${content}`;
+    const userMsg = custom_prompt
+      ? `Enhance this prompt template:\n\n${content}\n\nAdditional instructions: ${custom_prompt}`
+      : `Enhance this prompt template:\n\n${content}`;
 
     const response = await client.chat.completions.create({
-      model: "gemini-flash-latest",
+      model: modelName,
       messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
+        { role: "system", content: systemMsg },
+        { role: "user", content: userMsg },
       ],
       max_tokens: 4096,
       temperature: 0.7,

@@ -4,3 +4,7 @@ data/
 *.db
 .env
 *.log
+cloud-run/service.yaml
+server/.env
+server/data/
+login-page.png

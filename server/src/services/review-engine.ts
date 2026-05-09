@@ -41,6 +41,22 @@ export type ProviderConfig = {
   apiKey: string;
 };
 
+const openAIClientCache = new Map<string, OpenAI>();
+
+function getOpenAIClient(provider: ProviderConfig): OpenAI {
+  const cacheKey = `${provider.apiBase}:${provider.apiKey.substring(0, 8)}`;
+  let client = openAIClientCache.get(cacheKey);
+  if (!client) {
+    client = new OpenAI({ apiKey: provider.apiKey, baseURL: provider.apiBase });
+    openAIClientCache.set(cacheKey, client);
+    if (openAIClientCache.size > 20) {
+      const firstKey = openAIClientCache.keys().next().value;
+      if (firstKey) openAIClientCache.delete(firstKey);
+    }
+  }
+  return client;
+}
+
 export async function analyzeDiff(
   diff: string,
   commit: CommitInfo,
@@ -65,10 +81,7 @@ export async function analyzeDiff(
     prompt += "\n\nNOTE: The diff was truncated due to size. Your review may be incomplete. Focus on the available changes.";
   }
 
-  const client = new OpenAI({
-    apiKey: provider.apiKey,
-    baseURL: provider.apiBase,
-  });
+  const client = getOpenAIClient(provider);
 
   const response = await client.chat.completions.create({
     model: repo.llm_model,
@@ -146,10 +159,7 @@ Branch: ${repo.branch}
 Diff:
 ${snippet}`;
 
-  const client = new OpenAI({
-    apiKey: provider.apiKey,
-    baseURL: provider.apiBase,
-  });
+  const client = getOpenAIClient(provider);
 
   const response = await client.chat.completions.create({
     model: repo.llm_model,
@@ -188,7 +198,11 @@ export function parseFindings(content: string): RawFinding[] {
     return mapped.sort(
       (a, b) => (RISK_ORDER[a.risk_level] ?? 3) - (RISK_ORDER[b.risk_level] ?? 3)
     );
-  } catch {
+  } catch (err) {
+    logger.warn("Failed to parse LLM findings", {
+      error: err instanceof Error ? err.message : String(err),
+      rawContent: content.substring(0, 200),
+    });
     return [];
   }
 }

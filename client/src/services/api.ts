@@ -1,25 +1,13 @@
-const TOKEN_KEY = "autoreview_token";
-
 let onUnauthorized: (() => void) | null = null;
 
 export function setOnUnauthorized(callback: () => void): void {
   onUnauthorized = callback;
 }
 
-function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-function clearAuth(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem("autoreview_user");
-  onUnauthorized?.();
-  window.location.href = "/login";
-}
-
 async function handleResponse<T>(response: Response): Promise<T> {
   if (response.status === 401) {
-    clearAuth();
+    localStorage.removeItem("autoreview_user");
+    onUnauthorized?.();
     throw new Error("Session expired");
   }
   if (!response.ok) {
@@ -32,44 +20,34 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export const api = {
   async get<T = unknown>(path: string): Promise<T> {
-    const token = getToken();
-    const response = await fetch(path, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const response = await fetch(path, { credentials: "include" });
     return handleResponse<T>(response);
   },
 
   async post<T = unknown>(path: string, body: unknown): Promise<T> {
-    const token = getToken();
     const response = await fetch(path, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(body),
     });
     return handleResponse<T>(response);
   },
 
   async put<T = unknown>(path: string, body: unknown): Promise<T> {
-    const token = getToken();
     const response = await fetch(path, {
       method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(body),
     });
     return handleResponse<T>(response);
   },
 
   async del<T = unknown>(path: string): Promise<T> {
-    const token = getToken();
     const response = await fetch(path, {
       method: "DELETE",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
     });
     return handleResponse<T>(response);
   },

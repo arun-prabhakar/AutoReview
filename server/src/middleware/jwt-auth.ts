@@ -18,14 +18,16 @@ declare global {
 
 export function jwtAuth(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
+  const cookieToken = req.cookies?.token;
+  const token = (authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : null) || cookieToken;
 
-  if (!authHeader?.startsWith("Bearer ")) {
+  if (!token) {
     res.status(401).json({ error: "Authentication required" });
     return;
   }
 
   try {
-    const payload = jwt.verify(authHeader.split(" ")[1], getJwtSecret()) as AuthUser;
+    const payload = jwt.verify(token, getJwtSecret()) as AuthUser;
     req.user = { id: payload.id, username: payload.username, role: payload.role };
     next();
   } catch {

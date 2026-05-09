@@ -151,10 +151,10 @@ describe("analyzeDiff", () => {
       id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
       branch: "main", strictness: "strict", llm_model: "gemini-flash-latest",
       llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
-      review_mode: "auto", trigger_on_pr_update: 0,
-      auto_review_enabled: 1, poll_interval_minutes: 5, trigger_on_commit: 1,
-      generate_email: 1, post_to_bitbucket: 0, notification_recipients: null,
-      include_commit_author: 0, llm_provider: "google", llm_provider_id: "prov-1",
+      review_mode: "auto", trigger_on_pr_update: false,
+      auto_review_enabled: true, poll_interval_minutes: 5, trigger_on_commit: true,
+      generate_email: true, post_to_bitbucket: false, notification_recipients: null,
+      include_commit_author: false, llm_provider: "google", llm_provider_id: "prov-1",
     };
 
     const provider = { apiBase: "https://api.example.com/v1", apiKey: "test-key" };

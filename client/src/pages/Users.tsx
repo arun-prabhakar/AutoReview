@@ -5,14 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Trash2 } from "lucide-react";
-import { BlurFade } from "@/components/ui/blur-fade";
-import { BorderBeam } from "@/components/ui/border-beam";
+import { Plus, Trash2, Pencil } from "lucide-react";
 
-type User = { id: string; username: string; role: string; must_change_password: number; created_at: string };
+type User = { id: string; username: string; name: string | null; role: string; must_change_password: number; created_at: string };
 
 export default function Users() {
   const { toast } = useToast();
@@ -22,6 +20,12 @@ export default function Users() {
   const [manualPassword, setManualPassword] = useState("");
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [editTarget, setEditTarget] = useState<User | null>(null);
+  const [editRole, setEditRole] = useState<string>("user");
+  const [editUsername, setEditUsername] = useState<string>("");
+  const [editName, setEditName] = useState<string>("");
 
   useEffect(() => { loadUsers(); }, []);
 
@@ -29,7 +33,9 @@ export default function Users() {
     try {
       const data = await api.get<User[]>("/api/auth/users");
       setUsers(data);
-    } catch {}
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to load users", variant: "destructive" });
+    }
   };
 
   const generatePassword = () => {
@@ -48,7 +54,7 @@ export default function Users() {
       return;
     }
     try {
-      await api.post("/api/auth/users", { username: fd.get("username"), password, role: fd.get("role") });
+      await api.post("/api/auth/users", { username: fd.get("username"), password, role: fd.get("role"), name: fd.get("name") || null });
       setUserDialogOpen(false);
       setAutoGenPassword(true);
       setManualPassword("");
@@ -65,7 +71,7 @@ export default function Users() {
     const fd = new FormData(e.currentTarget);
     try {
       await api.put(`/api/auth/users/${resetPasswordUser.id}/password`, { password: fd.get("password") });
-      toast({ title: "Password reset" });
+      toast({ title: "Password reset", variant: "success" });
       setResetPasswordUser(null);
       loadUsers();
     } catch (err) {
@@ -73,19 +79,35 @@ export default function Users() {
     }
   };
 
-  const handleDeleteUser = async (id: string) => {
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await api.del(`/api/auth/users/${id}`);
-      toast({ title: "User deleted" });
+      await api.del(`/api/auth/users/${deleteTarget.id}`);
+      toast({ title: "User deleted", variant: "success" });
+      setDeleteTarget(null);
       loadUsers();
     } catch (err) {
-      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to delete user", variant: "destructive" });
+      toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleEditUser = async () => {
+    if (!editTarget) return;
+    try {
+      await api.put(`/api/auth/users/${editTarget.id}`, { username: editUsername, name: editName, role: editRole });
+      toast({ title: "User updated", variant: "success" });
+      setEditTarget(null);
+      loadUsers();
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to update user", variant: "destructive" });
     }
   };
 
   return (
     <div className="space-y-6">
-      <BlurFade delay={0.05} duration={0.35} inView>
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-bold tracking-tight">Users</h2>
           <Dialog open={userDialogOpen} onOpenChange={(o) => { setUserDialogOpen(o); if (o) { setAutoGenPassword(true); setManualPassword(""); } }}>
@@ -93,6 +115,7 @@ export default function Users() {
             <DialogContent>
               <DialogHeader><DialogTitle>Add User</DialogTitle></DialogHeader>
               <form onSubmit={handleAddUser} className="space-y-4">
+                <div className="space-y-2"><Label>Name</Label><Input name="name" placeholder="Display name (optional)" /></div>
                 <div className="space-y-2"><Label>Username</Label><Input name="username" required /></div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -122,32 +145,30 @@ export default function Users() {
             </DialogContent>
           </Dialog>
         </div>
-      </BlurFade>
 
-      <BlurFade delay={0.1} duration={0.4} inView>
         <div className="space-y-4">
           {users.map((u) => (
-            <Card key={u.id} className="relative overflow-hidden">
-              <BorderBeam size={40} duration={8} colorFrom="#e5e5e5" colorTo="#e5e5e51a" borderWidth={1} />
+            <Card key={u.id}>
               <CardContent className="flex items-center justify-between pt-6">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-medium">{u.username}</p>
+                    <p className="font-medium">{u.name || u.username}</p>
+                    {u.name && <span className="text-sm text-muted-foreground">@{u.username}</span>}
                     <Badge variant={u.role === "admin" ? "default" : "secondary"}>{u.role}</Badge>
-                    {!!u.must_change_password && <Badge variant="outline" className="text-amber-500 border-amber-500">Must change password</Badge>}
+                    {!!u.must_change_password && <Badge variant="outline" className="text-warning border-warning">Must change password</Badge>}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">Created {new Date(u.created_at).toLocaleDateString()}</p>
                 </div>
                 <div className="flex items-center gap-1">
+                   <Button variant="ghost" size="icon" aria-label="Edit user" onClick={() => { setEditTarget(u); setEditUsername(u.username); setEditName(u.name || ""); setEditRole(u.role); }}><Pencil className="h-4 w-4" /></Button>
                   <Button variant="ghost" size="sm" onClick={() => setResetPasswordUser(u)}>Reset Password</Button>
-                  <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(u.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                  <Button variant="ghost" size="icon" aria-label="Delete user" onClick={() => setDeleteTarget(u)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                 </div>
               </CardContent>
             </Card>
           ))}
           {users.length === 0 && <p className="py-8 text-center text-muted-foreground">No users found</p>}
         </div>
-      </BlurFade>
 
       <Dialog open={!!resetPasswordUser} onOpenChange={(o) => !o && setResetPasswordUser(null)}>
         <DialogContent>
@@ -166,9 +187,60 @@ export default function Users() {
             <p className="text-sm text-muted-foreground">Share this password with the user. They will be asked to change it on first login.</p>
             <div className="flex items-center gap-2 rounded-md bg-secondary p-3">
               <code className="flex-1 text-sm font-mono break-all">{createdPassword}</code>
-              <Button variant="ghost" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(createdPassword || ""); toast({ title: "Copied" }); }}>Copy</Button>
+              <Button variant="ghost" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(createdPassword || ""); toast({ title: "Copied", variant: "success" }); }}>Copy</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit User</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Display name" />
+            </div>
+            <div className="space-y-2">
+              <Label>Username</Label>
+              <Input value={editUsername} onChange={(e) => setEditUsername(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={editRole} onValueChange={setEditRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button onClick={handleEditUser}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-4 w-4" />
+              Delete User
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              Permanently delete user{" "}
+              <span className="font-medium text-foreground">{deleteTarget?.username}</span>? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete User"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -8,16 +8,16 @@ export type RepositoryConfig = {
   credential_id: string;
   branch: string;
   review_mode: string;
-  auto_review_enabled: number;
+  auto_review_enabled: boolean;
   poll_interval_minutes: number;
-  trigger_on_commit: number;
-  trigger_on_pr_update: number;
+  trigger_on_commit: boolean;
+  trigger_on_pr_update: boolean;
   strictness: string;
-  generate_email: number;
-  post_to_bitbucket: number;
+  generate_email: boolean;
+  post_to_bitbucket: boolean;
   excluded_paths: string | null;
   notification_recipients: string | null;
-  include_commit_author: number;
+  include_commit_author: boolean;
   llm_provider: string;
   llm_provider_id: string | null;
   llm_model: string;
@@ -26,9 +26,9 @@ export type RepositoryConfig = {
 };
 
 export async function getRepoById(id: string): Promise<RepositoryConfig | undefined> {
-  return get<RepositoryConfig>("SELECT * FROM repositories WHERE id = ?", [id]);
+  return get<RepositoryConfig>("SELECT * FROM repositories WHERE id = $1", [id]);
 }
 
 export async function getAutoReviewRepos(): Promise<RepositoryConfig[]> {
-  return all<RepositoryConfig>("SELECT * FROM repositories WHERE auto_review_enabled = 1");
+  return all<RepositoryConfig>("SELECT * FROM repositories WHERE auto_review_enabled = true");
 }

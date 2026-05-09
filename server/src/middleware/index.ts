@@ -10,7 +10,7 @@ function writeToFile(message: string): void {
     if (!fs.existsSync(LOG_DIR)) {
       fs.mkdirSync(LOG_DIR, { recursive: true });
     }
-    fs.appendFileSync(LOG_FILE, message + "\n");
+    fs.promises.appendFile(LOG_FILE, message + "\n").catch(() => {});
   } catch {
     // Silent fail — don't crash on log errors
   }

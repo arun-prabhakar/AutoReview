@@ -3,6 +3,7 @@ import { logger } from "../middleware/index.js";
 const BITBUCKET_API_BASE = "https://api.bitbucket.org/2.0";
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
+const MAX_DIFF_SIZE = 100_000;
 
 async function retryFetch(url: string, options: RequestInit, retries = MAX_RETRIES): Promise<Response> {
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -75,7 +76,6 @@ export async function fetchCommitDiff(
   let diff = await diffRes.text();
   let truncated = false;
 
-  const MAX_DIFF_SIZE = 100_000;
   if (diff.length > MAX_DIFF_SIZE) {
     diff = diff.substring(0, MAX_DIFF_SIZE);
     truncated = true;
@@ -233,7 +233,6 @@ export async function fetchPrDiff(
   let diff = await diffRes.text();
   let truncated = false;
 
-  const MAX_DIFF_SIZE = 100_000;
   if (diff.length > MAX_DIFF_SIZE) {
     diff = diff.substring(0, MAX_DIFF_SIZE);
     truncated = true;

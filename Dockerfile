@@ -19,12 +19,14 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 COPY --from=builder /app/server/dist ./dist
-COPY --from=builder /app/server/db ./db
 COPY --from=builder /app/server/node_modules ./node_modules
 COPY --from=builder /app/server/package.json ./
 COPY --from=builder /app/client/dist ./public
 
-RUN mkdir -p /app/data /app/logs
+RUN mkdir -p /app/logs
+
+ENV PORT=3001
+ENV NODE_ENV=production
 
 EXPOSE 3001
 

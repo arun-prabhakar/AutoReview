@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { type RootState, type AppDispatch } from "@/store";
@@ -12,10 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { BlurFade } from "@/components/ui/blur-fade";
-import { ShimmerButton } from "@/components/ui/shimmer-button";
-import { BorderBeam } from "@/components/ui/border-beam";
+import { cn } from "@/lib/utils";
 import { AlertTriangle, GitCommit, GitPullRequest, RefreshCw } from "lucide-react";
+import type { Repository } from "@/types";
 
 type ReviewResult = {
   cached?: boolean;
@@ -51,6 +50,19 @@ export default function ManualReview() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [openPrs, setOpenPrs] = useState<OpenPr[]>([]);
   const [loadingPrs, setLoadingPrs] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (submitting) {
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    } else if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [submitting]);
 
   useEffect(() => { dispatch(fetchRepositories()); }, [dispatch]);
 
@@ -139,29 +151,25 @@ export default function ManualReview() {
     : `PR #${prId}`;
 
   return (
-    <div className="mx-auto max-w-xl space-y-8">
-      <BlurFade delay={0.05} duration={0.35} inView>
-        <h2 className="text-3xl font-bold tracking-display">Manual Review</h2>
-      </BlurFade>
+    <div className="mx-auto max-w-xl space-y-6">
+      <h2 className="text-2xl font-bold tracking-tight">Manual Review</h2>
 
-      <BlurFade delay={0.1} duration={0.4} inView>
-        <Card className="border-border bg-card relative overflow-hidden">
-          <BorderBeam size={60} duration={10} colorFrom="#e5e5e5" colorTo="#e5e5e51a" borderWidth={1} />
+        <Card className="border-border bg-card">
           <CardHeader className="pb-4 border-b border-border">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg font-semibold tracking-headline">Start a Review</CardTitle>
-              <div className="flex rounded-md border border-border overflow-hidden text-xs font-medium">
+              <div className="flex rounded-lg bg-secondary p-1 text-xs font-medium">
                 <button
                   type="button"
                   onClick={() => handleModeChange("commit")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${mode === "commit" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors rounded-md ${mode === "commit" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"}`}
                 >
                   <GitCommit className="h-3.5 w-3.5" />Commit
                 </button>
                 <button
                   type="button"
                   onClick={() => handleModeChange("pr")}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${mode === "pr" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors rounded-md ${mode === "pr" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"}`}
                 >
                   <GitPullRequest className="h-3.5 w-3.5" />Pull Request
                 </button>
@@ -175,7 +183,7 @@ export default function ManualReview() {
                 <Select value={repoId} onValueChange={handleRepoChange}>
                   <SelectTrigger id="repo" className="bg-background border-border h-11"><SelectValue placeholder="Select repository" /></SelectTrigger>
                   <SelectContent>
-                    {(repos as Record<string, string>[]).map((repo) => (
+                    {(repos as Repository[]).map((repo) => (
                       <SelectItem key={repo.id} value={String(repo.id)}>{repo.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -248,29 +256,36 @@ export default function ManualReview() {
                 </div>
               )}
 
-              <ShimmerButton
+              <Button
                 type="submit"
                 disabled={isSubmitDisabled}
-                shimmerColor="rgba(115, 115, 115, 0.3)"
-                background="hsl(var(--primary))"
-                className="w-full h-11 rounded-lg font-bold"
+                className={cn("w-full h-11 rounded-lg font-bold", submitting && "animate-pulse")}
               >
-                {submitting ? "Reviewing with AI..." : mode === "pr" ? "Review Pull Request" : "Start Review"}
-              </ShimmerButton>
+                {submitting ? `Reviewing with AI... (${elapsed}s)` : mode === "pr" ? "Review Pull Request" : "Start Review"}
+              </Button>
             </form>
           </CardContent>
         </Card>
-      </BlurFade>
 
       {result && (
-        <BlurFade delay={0.1} duration={0.4} inView>
-          <Card className="border-border bg-secondary relative overflow-hidden">
-            <BorderBeam size={40} duration={6} colorFrom="#e5e5e5" colorTo="#e5e5e51a" borderWidth={1} />
+          <Card className="border-border bg-secondary border-success/30">
             <CardContent className="pt-6 space-y-4">
               <div className="flex items-center gap-3">
                 <Badge variant="default" className="capitalize">Completed</Badge>
                 <span className="text-sm font-medium text-foreground">AI analysis completed successfully</span>
               </div>
+              {result.findings && result.findings.length > 0 && (() => {
+                const mustFixCount = result.findings.filter((f) => f.risk_level === "must_fix").length;
+                const shouldFixCount = result.findings.filter((f) => f.risk_level === "should_fix_soon").length;
+                const ignoreCount = result.findings.filter((f) => f.risk_level === "ignore").length;
+                return (
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-destructive" />{mustFixCount}</span>
+                    <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-warning" />{shouldFixCount}</span>
+                    <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-muted-foreground" />{ignoreCount}</span>
+                  </div>
+                );
+              })()}
               {result.pr && (
                 <div className="text-xs text-muted-foreground space-y-0.5">
                   <p><span className="font-medium text-foreground">PR #{result.pr.id}:</span> {result.pr.title}</p>
@@ -291,14 +306,13 @@ export default function ManualReview() {
               )}
             </CardContent>
           </Card>
-        </BlurFade>
       )}
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              <AlertTriangle className="h-5 w-5 text-warning" />
               Already Reviewed
             </DialogTitle>
             <DialogDescription className="pt-1 space-y-1">
@@ -318,7 +332,7 @@ export default function ManualReview() {
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={handleViewExisting}>View Existing Review</Button>
             <Button onClick={handleReviewAgain} disabled={submitting}>
-              {submitting ? "Reviewing..." : "Review Again"}
+              {submitting ? `Reviewing... (${elapsed}s)` : "Review Again"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,46 +1,52 @@
-import initSqlJs, { type Database as SqlJsDatabase } from "sql.js";
-import path from "path";
-import fs from "fs";
+import { Pool } from "pg";
 import { ensureSchema } from "./schema.js";
 import { logger } from "../middleware/index.js";
 
-const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "data", "autoreview.db");
+function parseConnectionString(url: string) {
+  const parsed = new URL(url);
+  return {
+    host: parsed.hostname,
+    port: parseInt(parsed.port || "5432", 10),
+    database: parsed.pathname.slice(1),
+    user: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+  };
+}
 
-let db: SqlJsDatabase | null = null;
+let _pool: Pool | null = null;
 
-export async function getDb(): Promise<SqlJsDatabase> {
-  if (!db) {
-    throw new Error("Database not initialized. Call initDb() first.");
-  }
-  return db;
+export function getPool(): Pool {
+  if (_pool) return _pool;
+
+  const databaseUrl = process.env.DATABASE_URL || "";
+
+  const poolConfig = databaseUrl.includes("://")
+    ? parseConnectionString(databaseUrl)
+    : { host: "localhost", port: 5432, database: "autoreview", user: "postgres", password: "" };
+
+  const isSupabase = databaseUrl.includes("supabase");
+
+  _pool = new Pool({
+    ...poolConfig,
+    ...(isSupabase ? { ssl: { rejectUnauthorized: false } } : {}),
+  });
+
+  _pool.on("error", (err) => {
+    logger.error("Unexpected database pool error", { error: err.message });
+  });
+
+  return _pool;
 }
 
 export async function initDb(): Promise<void> {
-  if (db) return;
-
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  const SQL = await initSqlJs();
-
-  if (fs.existsSync(DB_PATH)) {
-    const buffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(buffer);
-  } else {
-    db = new SQL.Database();
-  }
-
-  ensureSchema(db);
-  persistDb();
-
-  logger.info(`Database initialized`, { path: DB_PATH });
+  const pool = getPool();
+  await ensureSchema(pool);
+  logger.info("Database initialized", { database: "postgresql" });
 }
 
-export function persistDb(): void {
-  if (!db) return;
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(DB_PATH, buffer);
+export async function closePool(): Promise<void> {
+  if (_pool) {
+    await _pool.end();
+    _pool = null;
+  }
 }

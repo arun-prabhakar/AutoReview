@@ -1,0 +1,30 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["build", "-t", "gcr.io/arun-prabhakar/autoreview", "."]
+
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/arun-prabhakar/autoreview"]
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - autoreview
+      - --image=gcr.io/arun-prabhakar/autoreview
+      - --region=us-central1
+      - --platform=managed
+      - --min-instances=0
+      - --max-instances=3
+      - --memory=256Mi
+      - --cpu=1
+      - --port=3001
+      - --allow-unauthenticated
+      - --set-env-vars=NODE_ENV=production
+      - --set-env-vars=DATABASE_URL=postgresql://postgres.zoslzzqwukdojohttubs:8OeLGNSQ8BQKtG3s@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres
+      - --set-env-vars=ENCRYPTION_KEY=61a1d5ef272821ff1e6d1969e6b84dea6aaccf6f217dbcfcfc53ac7c7a94fb2d
+      - --set-env-vars=JWT_SECRET=autoreview-jwt-secret-change-in-prod
+      - --set-env-vars=CRON_SECRET=bc02e71174fc99d1720e04984d12cb82e4e50af8b2fc17c0e7858390db2b03ee
+
+images:
+  - gcr.io/arun-prabhakar/autoreview

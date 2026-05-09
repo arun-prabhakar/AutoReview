@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import type { RawFinding } from "./review-engine.js";
 import { get } from "../db/queries.js";
 import { decrypt } from "./encryption-service.js";
@@ -82,7 +82,7 @@ export async function sendReviewEmail(
     smtp_password_encrypted: string; smtp_from_address: string;
     notification_recipients: string | null;
   }>(
-    "SELECT smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address, notification_recipients FROM repositories WHERE id = ?",
+    "SELECT smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address, notification_recipients FROM repositories WHERE id = $1",
     [repoId]
   );
 
@@ -90,11 +90,7 @@ export async function sendReviewEmail(
 
   const smtpPassword = repo.smtp_password_encrypted ? decrypt(repo.smtp_password_encrypted) : "";
 
-  const transporter = nodemailer.createTransport({
-    host: repo.smtp_host,
-    port: repo.smtp_port,
-    auth: { user: repo.smtp_user, pass: smtpPassword },
-  });
+  const transporter = getSmtpTransporter(repo.smtp_host, repo.smtp_port, repo.smtp_user, smtpPassword);
 
   const mustCount = findings.filter((f) => f.risk_level === "must_fix").length;
   const statusTag = mustCount > 0 ? `⚠ ${mustCount} Must Fix` : findings.length > 0 ? `${findings.length} Findings` : "Clean";
@@ -109,4 +105,20 @@ export async function sendReviewEmail(
     subject,
     text: body,
   });
+}
+
+const smtpTransportCache = new Map<string, Transporter>();
+
+function getSmtpTransporter(host: string, port: number, user: string, pass: string): Transporter {
+  const cacheKey = `${host}:${port}:${user}`;
+  let transporter = smtpTransportCache.get(cacheKey);
+  if (!transporter) {
+    transporter = nodemailer.createTransport({ host, port, auth: { user, pass } });
+    smtpTransportCache.set(cacheKey, transporter);
+    if (smtpTransportCache.size > 10) {
+      const firstKey = smtpTransportCache.keys().next().value;
+      if (firstKey) smtpTransportCache.delete(firstKey);
+    }
+  }
+  return transporter;
 }

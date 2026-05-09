@@ -1,184 +1,146 @@
-import type { Database as SqlJsDatabase } from "sql.js";
-import fs from "fs";
-import path from "path";
+import type { Pool } from "pg";
+import bcrypt from "bcryptjs";
+import { v4 as uuid } from "uuid";
+import { logger } from "../middleware/index.js";
 
-export function ensureSchema(db: SqlJsDatabase): void {
-  const initSqlPath = path.join(process.cwd(), "db", "init.sql");
-  if (fs.existsSync(initSqlPath)) {
-    const sql = fs.readFileSync(initSqlPath, "utf8");
-    db.run(sql);
-    try { db.run("ALTER TABLE reviews ADD COLUMN created_by TEXT"); } catch {}
-    try { db.run("ALTER TABLE reviews ADD COLUMN ai_overview TEXT"); } catch {}
-    try { db.run("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"); } catch {}
-    return;
-  }
-
-  // Schema version tracking
-  db.run(`
-    CREATE TABLE IF NOT EXISTS _schema_version (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      version INTEGER NOT NULL
+export async function ensureSchema(pool: Pool): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      name TEXT,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      must_change_password BOOLEAN NOT NULL DEFAULT false,
+      token_version INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT NOW(),
+      updated_at TEXT NOT NULL DEFAULT NOW()
     )
   `);
 
-  let version = 0;
-  const versionResult = db.exec("SELECT version FROM _schema_version WHERE id = 1");
-  if (versionResult[0]?.values?.length) {
-    version = versionResult[0].values[0][0] as number;
-  }
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT`);
 
-  if (version < 1) {
-    db.run(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user',
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS llm_providers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      api_base TEXT NOT NULL,
+      api_key_encrypted TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT NOW(),
+      updated_at TEXT NOT NULL DEFAULT NOW()
+    )
+  `);
 
-    db.run(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS credentials (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      app_password_encrypted TEXT NOT NULL,
+      workspace TEXT,
+      created_at TEXT NOT NULL DEFAULT NOW(),
+      updated_at TEXT NOT NULL DEFAULT NOW()
+    )
+  `);
 
-    db.run(`
-      CREATE TABLE IF NOT EXISTS llm_providers (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        api_base TEXT NOT NULL,
-        api_key_encrypted TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS repositories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      workspace TEXT NOT NULL,
+      credential_id TEXT NOT NULL,
+      branch TEXT DEFAULT 'main',
+      review_mode TEXT NOT NULL DEFAULT 'manual',
+      auto_review_enabled BOOLEAN NOT NULL DEFAULT false,
+      poll_interval_minutes INTEGER NOT NULL DEFAULT 5,
+      trigger_on_commit BOOLEAN NOT NULL DEFAULT true,
+      trigger_on_pr_update BOOLEAN NOT NULL DEFAULT true,
+      strictness TEXT NOT NULL DEFAULT 'balanced',
+      generate_email BOOLEAN NOT NULL DEFAULT true,
+      post_to_bitbucket BOOLEAN NOT NULL DEFAULT false,
+      excluded_paths TEXT,
+      notification_recipients TEXT,
+      include_commit_author BOOLEAN NOT NULL DEFAULT false,
+      llm_provider TEXT DEFAULT 'openai',
+      llm_provider_id TEXT,
+      llm_model TEXT DEFAULT 'gpt-4',
+      llm_max_tokens INTEGER DEFAULT 4096,
+      llm_temperature DOUBLE PRECISION DEFAULT 0.2,
+      smtp_host TEXT,
+      smtp_port INTEGER,
+      smtp_user TEXT,
+      smtp_password_encrypted TEXT,
+      smtp_from_address TEXT,
+      created_at TEXT NOT NULL DEFAULT NOW(),
+      updated_at TEXT NOT NULL DEFAULT NOW(),
+      FOREIGN KEY(credential_id) REFERENCES credentials(id)
+    )
+  `);
 
-    db.run(`
-      CREATE TABLE IF NOT EXISTS credentials (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL,
-        app_password_encrypted TEXT NOT NULL,
-        workspace TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS reviews (
+      id TEXT PRIMARY KEY,
+      repository_id TEXT NOT NULL,
+      commit_hash TEXT NOT NULL,
+      branch TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      strictness TEXT NOT NULL DEFAULT 'balanced',
+      review_mode TEXT NOT NULL DEFAULT 'manual',
+      error_message TEXT,
+      created_at TEXT NOT NULL DEFAULT NOW(),
+      completed_at TEXT,
+      created_by TEXT,
+      ai_overview TEXT,
+      UNIQUE(repository_id, commit_hash),
+      FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
+    )
+  `);
 
-    db.run(`
-      CREATE TABLE IF NOT EXISTS repositories (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        slug TEXT NOT NULL,
-        workspace TEXT NOT NULL,
-        credential_id TEXT NOT NULL,
-        branch TEXT DEFAULT 'main',
-        review_mode TEXT NOT NULL DEFAULT 'manual',
-        auto_review_enabled INTEGER NOT NULL DEFAULT 0,
-        poll_interval_minutes INTEGER NOT NULL DEFAULT 5,
-        trigger_on_commit INTEGER NOT NULL DEFAULT 1,
-        trigger_on_pr_update INTEGER NOT NULL DEFAULT 1,
-        strictness TEXT NOT NULL DEFAULT 'balanced',
-        generate_email INTEGER NOT NULL DEFAULT 1,
-        post_to_bitbucket INTEGER NOT NULL DEFAULT 0,
-        excluded_paths TEXT,
-        notification_recipients TEXT,
-        include_commit_author INTEGER NOT NULL DEFAULT 0,
-        llm_provider TEXT DEFAULT 'openai',
-        llm_provider_id TEXT,
-        llm_model TEXT DEFAULT 'gpt-4',
-        llm_max_tokens INTEGER DEFAULT 4096,
-        llm_temperature REAL DEFAULT 0.2,
-        smtp_host TEXT,
-        smtp_port INTEGER,
-        smtp_user TEXT,
-        smtp_password_encrypted TEXT,
-        smtp_from_address TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS findings (
+      id TEXT PRIMARY KEY,
+      review_id TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      line_number INTEGER,
+      summary TEXT NOT NULL,
+      explanation TEXT NOT NULL,
+      risk_level TEXT NOT NULL,
+      suggested_fix TEXT,
+      category TEXT,
+      FOREIGN KEY(review_id) REFERENCES reviews(id) ON DELETE CASCADE
+    )
+  `);
 
-    db.run(`
-      CREATE TABLE IF NOT EXISTS reviews (
-        id TEXT PRIMARY KEY,
-        repository_id TEXT NOT NULL,
-        commit_hash TEXT NOT NULL,
-        branch TEXT,
-        status TEXT NOT NULL DEFAULT 'pending',
-        strictness TEXT NOT NULL DEFAULT 'balanced',
-        review_mode TEXT NOT NULL DEFAULT 'manual',
-        error_message TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        completed_at TEXT,
-        created_by TEXT
-      )
-    `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS prompt_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      strictness TEXT NOT NULL DEFAULT 'all',
+      is_default BOOLEAN NOT NULL DEFAULT false,
+      created_at TEXT NOT NULL DEFAULT NOW(),
+      updated_at TEXT NOT NULL DEFAULT NOW()
+    )
+  `);
 
-    db.run(`
-      CREATE TABLE IF NOT EXISTS findings (
-        id TEXT PRIMARY KEY,
-        review_id TEXT NOT NULL,
-        file_path TEXT NOT NULL,
-        line_number INTEGER,
-        summary TEXT NOT NULL,
-        explanation TEXT NOT NULL,
-        risk_level TEXT NOT NULL,
-        suggested_fix TEXT,
-        category TEXT
-      )
-    `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_status ON reviews(repository_id, status)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
 
-    db.run(`
-      CREATE TABLE IF NOT EXISTS prompt_templates (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        content TEXT NOT NULL,
-        strictness TEXT NOT NULL DEFAULT 'all',
-        is_default INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-      )
-    `);
-
-    db.run(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_status ON reviews(repository_id, status)`);
-    db.run(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
-    db.run(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
-
-    version = 1;
-  }
-
-  if (version < 2) {
-    try { db.run("ALTER TABLE reviews ADD COLUMN created_by TEXT"); } catch {}
-    version = 2;
-  }
-
-  if (version < 3) {
-    try { db.run("ALTER TABLE reviews ADD COLUMN ai_overview TEXT"); } catch {}
-    try { db.run("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0"); } catch {}
-    version = 3;
-  }
-
-  // Persist the current version
-  db.run(
-    `INSERT INTO _schema_version (id, version) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET version = excluded.version`,
-    [version],
-  );
-
-  // Production: admin user must be created manually via CLI or env vars
   if (process.env.NODE_ENV !== "production") {
-    const { v4: uuid } = require("uuid") as { v4: () => string };
-    const bcrypt = require("bcryptjs") as { hashSync: (s: string, rounds: number) => string };
     const adminHash = bcrypt.hashSync("admin", 10);
-    db.run(
-      `INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)`,
+    await pool.query(
+      `INSERT INTO users (id, username, password_hash, role) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING`,
       [uuid(), "admin", adminHash, "admin"]
     );
   }
 
-  const result = db.exec("SELECT COUNT(*) as count FROM prompt_templates");
-  const count = (result[0]?.values?.[0]?.[0] as number) || 0;
+  const countResult = await pool.query("SELECT COUNT(*) as count FROM prompt_templates");
+  const count = Number(countResult.rows[0]?.count) || 0;
   if (count === 0) {
-    db.run(
-      `INSERT INTO prompt_templates (id, name, content, strictness, is_default) VALUES (?, ?, ?, ?, ?)`,
+    await pool.query(
+      `INSERT INTO prompt_templates (id, name, content, strictness, is_default) VALUES ($1, $2, $3, $4, $5)`,
       [
         "default",
         "Default Review Prompt",
@@ -215,8 +177,10 @@ For each finding, reason carefully before assigning a risk level:
 
 If the diff is clean with no findings, return an empty array \`[]\`.`,
         "all",
-        1,
+        true,
       ]
     );
   }
+
+  logger.info("Database schema ensured");
 }

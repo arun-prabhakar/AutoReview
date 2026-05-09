@@ -3,7 +3,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import path from "path";
 import rateLimit from "express-rate-limit";
-import { initDb } from "./db/index.js";
+import cookieParser from "cookie-parser";
+import { initDb, closePool } from "./db/index.js";
 import { reviewsRouter } from "./routes/reviews.js";
 import { repositoriesRouter } from "./routes/repositories.js";
 import { settingsRouter } from "./routes/settings.js";
@@ -11,9 +12,9 @@ import { credentialsRouter } from "./routes/credentials.js";
 import { promptTemplateRouter } from "./routes/prompt-templates.js";
 import { providersRouter } from "./routes/providers.js";
 import { authRouter, usersRouter } from "./routes/auth.js";
+import { cronRouter } from "./routes/cron.js";
 import { requestLogger, errorHandler, logger } from "./middleware/index.js";
 import { jwtAuth, requireRole } from "./middleware/jwt-auth.js";
-import { startAutoReviewPolling, stopAutoReviewPolling } from "./services/automatic-review-service.js";
 
 dotenv.config();
 
@@ -32,12 +33,17 @@ const apiLimiter = rateLimit({
   message: { error: "Too many requests. Please slow down." },
 });
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+  credentials: true,
+}));
+app.use(cookieParser());
 app.use(express.json());
 app.use(requestLogger);
 
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth", authRouter);
+app.use("/api/cron", cronRouter);
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
@@ -62,21 +68,21 @@ app.use(errorHandler);
 
 async function start() {
   await initDb();
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     logger.info(`AutoReview server running on port ${PORT}`);
-    startAutoReviewPolling();
   });
+
+  function shutdown() {
+    server.close(async () => {
+      try { await closePool(); } catch {}
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 5000);
+  }
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
 }
-
-process.on("SIGTERM", () => {
-  stopAutoReviewPolling();
-  process.exit(0);
-});
-
-process.on("SIGINT", () => {
-  stopAutoReviewPolling();
-  process.exit(0);
-});
 
 start();
 

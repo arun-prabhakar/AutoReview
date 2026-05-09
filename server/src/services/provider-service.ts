@@ -24,7 +24,7 @@ export async function getAllProviders(): Promise<ProviderPublic[]> {
 }
 
 export async function getProviderById(id: string): Promise<LlmProvider | undefined> {
-  return get<LlmProvider>("SELECT * FROM llm_providers WHERE id = ?", [id]);
+  return get<LlmProvider>("SELECT * FROM llm_providers WHERE id = $1", [id]);
 }
 
 export async function createProvider(name: string, apiBase: string, apiKey: string): Promise<ProviderPublic> {
@@ -33,7 +33,7 @@ export async function createProvider(name: string, apiBase: string, apiKey: stri
   const encrypted = encrypt(apiKey);
 
   await run(
-    "INSERT INTO llm_providers (id, name, api_base, api_key_encrypted) VALUES (?, ?, ?, ?)",
+    "INSERT INTO llm_providers (id, name, api_base, api_key_encrypted) VALUES ($1, $2, $3, $4)",
     [id, name, apiBase, encrypted]
   );
 
@@ -50,7 +50,7 @@ export async function updateProvider(id: string, name?: string, apiBase?: string
   const newKey = apiKey ? encrypt(apiKey) : existing.api_key_encrypted;
 
   await run(
-    "UPDATE llm_providers SET name = ?, api_base = ?, api_key_encrypted = ?, updated_at = datetime('now') WHERE id = ?",
+    "UPDATE llm_providers SET name = $1, api_base = $2, api_key_encrypted = $3, updated_at = NOW() WHERE id = $4",
     [newName, newBase, newKey, id]
   );
 
@@ -58,7 +58,15 @@ export async function updateProvider(id: string, name?: string, apiBase?: string
 }
 
 export async function deleteProvider(id: string): Promise<void> {
-  await run("DELETE FROM llm_providers WHERE id = ?", [id]);
+  const deps = await all<{ id: string; name: string }>(
+    "SELECT id, name FROM repositories WHERE llm_provider_id = $1", [id]
+  );
+  if (deps.length > 0) {
+    throw new Error(
+      `Cannot delete provider: still referenced by ${deps.length} repository(ies). Remove the provider assignment first.`
+    );
+  }
+  await run("DELETE FROM llm_providers WHERE id = $1", [id]);
   logger.audit("provider_deleted", { id });
 }
 

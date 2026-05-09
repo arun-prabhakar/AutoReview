@@ -3,7 +3,7 @@ import { encrypt, decrypt } from "../services/encryption-service.js";
 
 describe("encryption-service", () => {
   beforeAll(() => {
-    process.env.ENCRYPTION_KEY = "test-encryption-key-for-testing";
+    process.env.ENCRYPTION_KEY = "test-encryption-key-for-testing-32chars";
   });
 
   it("should encrypt and decrypt roundtrip", () => {

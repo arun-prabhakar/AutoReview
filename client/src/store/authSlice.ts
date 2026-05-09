@@ -10,43 +10,53 @@ export interface AuthUser {
 
 interface AuthState {
   user: AuthUser | null;
-  token: string | null;
   isAuthenticated: boolean;
   loading: boolean;
   error: string | null;
 }
 
-const TOKEN_KEY = "autoreview_token";
 const USER_KEY = "autoreview_user";
 
-function loadPersisted(): { token: string | null; user: AuthUser | null } {
+function loadPersistedUser(): AuthUser | null {
   try {
-    const token = localStorage.getItem(TOKEN_KEY);
-    const user = localStorage.getItem(USER_KEY);
-    if (token && user) return { token, user: JSON.parse(user) };
+    const raw = localStorage.getItem(USER_KEY);
+    if (raw) return JSON.parse(raw);
   } catch {}
-  return { token: null, user: null };
+  return null;
 }
 
-const persisted = loadPersisted();
-
 const initialState: AuthState = {
-  user: persisted.user,
-  token: persisted.token,
-  isAuthenticated: !!persisted.token,
-  loading: false,
+  user: loadPersistedUser(),
+  isAuthenticated: false,
+  loading: true,
   error: null,
 };
+
+export const validateSession = createAsyncThunk(
+  "auth/validateSession",
+  async () => {
+    return await api.get<AuthUser>("/api/auth/me");
+  }
+);
 
 export const loginUser = createAsyncThunk(
   "auth/login",
   async ({ username, password }: { username: string; password: string }, { rejectWithValue }) => {
     try {
-      return await api.post<{ token: string; user: AuthUser }>("/api/auth/login", { username, password });
+      return await api.post<{ user: AuthUser }>("/api/auth/login", { username, password });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
       return rejectWithValue(message);
     }
+  }
+);
+
+export const logoutUser = createAsyncThunk(
+  "auth/logout",
+  async () => {
+    try {
+      await api.post("/api/auth/logout", {});
+    } catch {}
   }
 );
 
@@ -66,35 +76,47 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
-    logout(state) {
-      state.user = null;
-      state.token = null;
-      state.isAuthenticated = false;
-      state.error = null;
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(USER_KEY);
-    },
     clearError(state) {
       state.error = null;
     },
   },
   extraReducers: (builder) => {
     builder
+      .addCase(validateSession.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(validateSession.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload;
+        state.isAuthenticated = true;
+        localStorage.setItem(USER_KEY, JSON.stringify(action.payload));
+      })
+      .addCase(validateSession.rejected, (state) => {
+        state.loading = false;
+        state.user = null;
+        state.isAuthenticated = false;
+        localStorage.removeItem(USER_KEY);
+      })
       .addCase(loginUser.pending, (state) => {
         state.loading = true;
         state.error = null;
       })
       .addCase(loginUser.fulfilled, (state, action) => {
         state.loading = false;
-        state.token = action.payload.token;
         state.user = action.payload.user;
         state.isAuthenticated = true;
-        localStorage.setItem(TOKEN_KEY, action.payload.token);
         localStorage.setItem(USER_KEY, JSON.stringify(action.payload.user));
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
+      })
+      .addCase(logoutUser.fulfilled, (state) => {
+        state.user = null;
+        state.isAuthenticated = false;
+        state.loading = false;
+        state.error = null;
+        localStorage.removeItem(USER_KEY);
       })
       .addCase(changePassword.fulfilled, (state) => {
         if (state.user) {
@@ -105,5 +127,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError } = authSlice.actions;
+export const { clearError } = authSlice.actions;
 export default authSlice.reducer;

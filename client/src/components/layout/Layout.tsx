@@ -6,14 +6,12 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, PanelLeft, PanelLeftClose, Users, KeyRound } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
-import { motion } from "framer-motion";
-import { BorderBeam } from "@/components/ui/border-beam";
+import { motion } from "motion/react";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
-import { logout, changePassword } from "../../store/authSlice";
+import { logoutUser, changePassword } from "../../store/authSlice";
 import type { RootState, AppDispatch } from "../../store";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { useToast } from "@/hooks/use-toast";
 
 const allNavItems: { to: string; label: string; icon: LucideIcon; roles: string[] }[] = [
@@ -42,8 +40,8 @@ function NavLinks({ onNavigate, collapsed }: { onNavigate?: () => void; collapse
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 group",
                 collapsed && "justify-center px-0 h-10 w-10 mx-auto",
                 isActive
-                  ? "bg-secondary text-foreground font-semibold"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  ? "bg-secondary text-foreground font-semibold border-l-2 border-foreground/20"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground border-l-2 border-transparent"
               )
             }
             title={collapsed ? item.label : undefined}
@@ -61,35 +59,17 @@ function ForcedPasswordChange() {
   const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { toast } = useToast();
-  
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const mustChange = user?.must_change_password === true;
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    
-    if (newPassword.length < 6) {
-      setError("New password must be at least 6 characters");
-      return;
-    }
-    
-    if (newPassword !== confirmPassword) {
-      setError("New passwords do not match");
-      return;
-    }
-    
+  async function handleSubmit(currentPassword: string, newPassword: string) {
     setLoading(true);
     const result = await dispatch(changePassword({ current_password: currentPassword, new_password: newPassword }));
     setLoading(false);
-    
     if (changePassword.fulfilled.match(result)) {
-      toast({ title: "Password changed" });
+      toast({ title: "Password changed", variant: "success" });
     } else {
       setError(result.payload as string || "Failed to change password");
     }
@@ -109,50 +89,7 @@ function ForcedPasswordChange() {
           </DialogDescription>
         </DialogHeader>
         
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-          {error && (
-            <div className="rounded-md bg-secondary px-3 py-2 text-sm text-destructive">{error}</div>
-          )}
-          
-          <div className="space-y-2">
-            <Label htmlFor="current_password">Current Password</Label>
-            <Input
-              id="current_password"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="new_password">New Password</Label>
-            <Input
-              id="new_password"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="confirm_password">Confirm New Password</Label>
-            <Input
-              id="confirm_password"
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-          </div>
-          
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Changing..." : "Change Password"}
-          </Button>
-        </form>
+        <ChangePasswordForm onSubmit={handleSubmit} loading={loading} error={error} showCurrentPassword />
       </DialogContent>
     </Dialog>
   );
@@ -161,23 +98,15 @@ function ForcedPasswordChange() {
 function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const dispatch = useDispatch<AppDispatch>();
   const { toast } = useToast();
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError("");
-    if (newPassword.length < 6) { setError("New password must be at least 6 characters"); return; }
-    if (newPassword !== confirmPassword) { setError("New passwords do not match"); return; }
+  async function handleSubmit(currentPassword: string, newPassword: string) {
     setLoading(true);
     const result = await dispatch(changePassword({ current_password: currentPassword, new_password: newPassword }));
     setLoading(false);
     if (changePassword.fulfilled.match(result)) {
-      toast({ title: "Password changed" });
-      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      toast({ title: "Password changed", variant: "success" });
       onOpenChange(false);
     } else {
       setError((result.payload as string) || "Failed to change password");
@@ -190,13 +119,7 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         <DialogHeader>
           <DialogTitle>Change Password</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          {error && <div className="rounded-md bg-secondary px-3 py-2 text-sm text-destructive">{error}</div>}
-          <div className="space-y-2"><Label>Current Password</Label><Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required /></div>
-          <div className="space-y-2"><Label>New Password</Label><Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} /></div>
-          <div className="space-y-2"><Label>Confirm New Password</Label><Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} /></div>
-          <Button type="submit" className="w-full" disabled={loading}>{loading ? "Changing..." : "Change Password"}</Button>
-        </form>
+        <ChangePasswordForm onSubmit={handleSubmit} loading={loading} error={error} showCurrentPassword />
       </DialogContent>
     </Dialog>
   );
@@ -223,12 +146,13 @@ export function Layout() {
   }, [collapsed]);
 
   function handleLogout() {
-    dispatch(logout());
+    dispatch(logoutUser());
     navigate("/login");
   }
 
   return (
     <div className="flex h-screen bg-background text-foreground antialiased font-sans">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-background focus:text-foreground">Skip to content</a>
       <ForcedPasswordChange />
       <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
       <motion.aside
@@ -237,7 +161,6 @@ export function Layout() {
         className="hidden flex-shrink-0 border-r border-border bg-card md:flex md:flex-col overflow-hidden z-20 shadow-card"
       >
         <div className={cn("relative overflow-hidden flex items-center gap-3 p-6 mb-2", collapsed && "flex-col gap-4")}>
-          <BorderBeam size={50} duration={10} colorFrom="#e5e5e5" colorTo="#e5e5e51a" borderWidth={1} />
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <img src="/favicon.svg" alt="" className="h-8 w-8 flex-shrink-0" />
             {!collapsed && (
@@ -246,7 +169,7 @@ export function Layout() {
               </span>
             )}
           </div>
-          <Button variant="ghost" size="icon" onClick={() => setCollapsed(!collapsed)} className="h-8 w-8 text-muted-foreground hover:text-ink transition-colors">
+          <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="h-8 w-8 text-muted-foreground hover:text-ink transition-colors">
             {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </Button>
         </div>
@@ -257,22 +180,22 @@ export function Layout() {
 
         <div className="mt-auto border-t border-border p-4">
           <div className="flex items-center gap-3 px-1 mb-3">
-            <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold text-foreground flex-shrink-0">
+            <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold text-foreground flex-shrink-0 hover:ring-2 hover:ring-foreground/10 transition-all duration-150 cursor-default">
               {user?.username?.substring(0, 2).toUpperCase()}
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate text-foreground">{user?.username}</p>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{user?.role}</p>
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">{user?.role}</p>
               </div>
             )}
           </div>
           <div className={cn("flex items-center gap-1", collapsed ? "flex-col" : "justify-center")}>
-            <Button variant="ghost" size="icon" onClick={() => setChangePasswordOpen(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Change Password">
+            <Button variant="ghost" size="icon" aria-label="Change password" onClick={() => setChangePasswordOpen(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Change Password">
               <KeyRound className="h-4 w-4" />
             </Button>
             <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-md flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
-            <Button variant="ghost" size="icon" onClick={handleLogout} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Sign out">
+            <Button variant="ghost" size="icon" aria-label="Sign out" onClick={handleLogout} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Sign out">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -285,14 +208,14 @@ export function Layout() {
           <div className="flex items-center gap-3">
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="hover:bg-accent/50">
+                <Button variant="ghost" size="icon" aria-label="Open menu" className="hover:bg-accent/50">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-[280px] p-0 bg-card border-r border-muted/20">
                  <div className="p-6 mb-2 flex items-center gap-3">
                     <img src="/favicon.svg" alt="" className="h-8 w-8" />
-                   <span className="text-xl font-bold tracking-display text-ink">Auto<span className="text-primary">Review</span></span>
+                   <span className="text-xl font-bold tracking-display text-ink">Auto<span className="text-foreground">Review</span></span>
                  </div>
                 <div className="px-3">
                   <NavLinks onNavigate={() => setOpen(false)} />
@@ -304,7 +227,7 @@ export function Layout() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-ink">{user?.username}</p>
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{user?.role}</p>
+                      <p className="text-xs uppercase tracking-widest text-muted-foreground">{user?.role}</p>
                     </div>
                   </div>
                   <Button variant="ghost" size="sm" className="w-full justify-start gap-3 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors px-3 h-10" onClick={() => { handleLogout(); setOpen(false); }}>
@@ -315,11 +238,11 @@ export function Layout() {
               </SheetContent>
             </Sheet>
             <img src="/favicon.svg" alt="" className="h-6 w-6" />
-            <span className="text-lg font-bold tracking-display text-ink">Auto<span className="text-primary">Review</span></span>
+            <span className="text-lg font-bold tracking-display text-ink">Auto<span className="text-foreground">Review</span></span>
            </div>
          </header>
 
-        <main className="flex-1 overflow-auto p-6 md:p-8 lg:p-12">
+        <main id="main-content" className="flex-1 overflow-auto p-6 md:p-8 lg:p-12">
           <Outlet />
         </main>
       </div>

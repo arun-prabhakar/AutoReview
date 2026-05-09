@@ -23,21 +23,31 @@ settingsRouter.get("/smtp", async (_req, res) => {
 
 settingsRouter.put("/smtp/:repo_id", async (req, res) => {
   const { smtp_host, smtp_port, smtp_user, smtp_password, smtp_from_address } = req.body;
-  const encryptedPassword = smtp_password ? encrypt(smtp_password) : null;
-  await run(
-    `UPDATE repositories SET smtp_host = ?, smtp_port = ?, smtp_user = ?, smtp_password_encrypted = ?, smtp_from_address = ?, updated_at = datetime('now') WHERE id = ?`,
-    [smtp_host, smtp_port, smtp_user, encryptedPassword, smtp_from_address, req.params.repo_id]
-  );
-  res.json({ updated: true });
+  try {
+    const encryptedPassword = smtp_password ? encrypt(smtp_password) : null;
+    await run(
+      `UPDATE repositories SET smtp_host = $1, smtp_port = $2, smtp_user = $3, smtp_password_encrypted = $4, smtp_from_address = $5, updated_at = NOW() WHERE id = $6`,
+      [smtp_host, smtp_port, smtp_user, encryptedPassword, smtp_from_address, req.params.repo_id]
+    );
+    res.json({ updated: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
+  }
 });
 
 settingsRouter.put("/llm/:repo_id", async (req, res) => {
   const { llm_provider, llm_provider_id, llm_model, llm_max_tokens, llm_temperature } = req.body;
-  await run(
-    `UPDATE repositories SET llm_provider = ?, llm_provider_id = ?, llm_model = ?, llm_max_tokens = ?, llm_temperature = ?, updated_at = datetime('now') WHERE id = ?`,
-    [llm_provider, llm_provider_id, llm_model, llm_max_tokens, llm_temperature, req.params.repo_id]
-  );
-  res.json({ updated: true });
+  try {
+    await run(
+      `UPDATE repositories SET llm_provider = $1, llm_provider_id = $2, llm_model = $3, llm_max_tokens = $4, llm_temperature = $5, updated_at = NOW() WHERE id = $6`,
+      [llm_provider, llm_provider_id, llm_model, llm_max_tokens, llm_temperature, req.params.repo_id]
+    );
+    res.json({ updated: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
+  }
 });
 
 settingsRouter.post("/llm/test", async (req, res) => {
@@ -50,7 +60,7 @@ settingsRouter.post("/llm/test", async (req, res) => {
   try {
     const apiKey = await getDecryptedApiKey(provider_id);
     const provider = await get<{ api_base: string; name: string }>(
-      "SELECT api_base, name FROM llm_providers WHERE id = ?", [provider_id]
+      "SELECT api_base, name FROM llm_providers WHERE id = $1", [provider_id]
     );
     if (!provider) {
       res.status(404).json({ error: "Provider not found" });

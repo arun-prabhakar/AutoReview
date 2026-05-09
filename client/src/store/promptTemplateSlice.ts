@@ -23,8 +23,6 @@ const promptTemplateSlice = createSlice({
   name: "promptTemplate",
   initialState: {
     current: null as PromptTemplate | null,
-    versions: [] as PromptTemplate[],
-    strictnessOverrides: {} as Record<string, string>,
     preview: "",
     loading: false,
     error: null as string | null,

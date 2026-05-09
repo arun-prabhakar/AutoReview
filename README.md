@@ -27,7 +27,7 @@ AutoReview is a self-hosted web application that automates code review for Bitbu
 | Backend | Node.js, Express, TypeScript |
 | Frontend | React 19, Vite 6, Redux Toolkit, Tailwind CSS |
 | UI | Radix UI primitives, Framer Motion |
-| Database | SQLite (sql.js / WASM) |
+| Database | PostgreSQL (Supabase) |
 | AI | OpenAI SDK (any OpenAI-compatible API) |
 | VCS | Bitbucket Cloud |
 | Deployment | Docker Compose |
@@ -45,7 +45,7 @@ AutoReview is a self-hosted web application that automates code review for Bitbu
 # Server
 cd server
 cp .env.example .env
-# Edit .env — set ENCRYPTION_KEY and JWT_SECRET
+# Edit .env — set ENCRYPTION_KEY, JWT_SECRET, and DATABASE_URL
 npm install
 npm run dev
 
@@ -70,7 +70,7 @@ The server runs on `http://localhost:3001` and the client on `http://localhost:5
 | Variable | Description | Default | Required |
 |---|---|---|---|
 | `PORT` | Server port | `3001` | No |
-| `DB_PATH` | SQLite database file path | `./data/autoreview.db` | No |
+| `DATABASE_URL` | PostgreSQL connection string (Supabase) | — | Yes |
 | `NODE_ENV` | `production` or `development` | — | No |
 | `STATIC_DIR` | React build output directory | `./public` | No |
 | `LOG_DIR` | Log file directory | `./logs` | No |
@@ -83,6 +83,7 @@ The server runs on `http://localhost:3001` and the client on `http://localhost:5
 # Set required environment variables
 export ENCRYPTION_KEY=your-64-char-hex-key
 export JWT_SECRET=your-jwt-secret
+export DATABASE_URL=postgresql://user:pass@host:5432/dbname
 
 # Build and run
 docker compose up -d
@@ -99,7 +100,7 @@ AutoReview/
 │   │   ├── routes/         # API endpoints (auth, reviews, repos, settings, etc.)
 │   │   ├── services/       # Business logic (review engine, Bitbucket client, etc.)
 │   │   ├── middleware/     # JWT auth, request logging, error handling
-│   │   ├── db/             # SQLite schema, queries, initialization
+│   │   ├── db/             # PostgreSQL schema, queries, initialization
 │   │   └── __tests__/      # Server tests (Vitest)
 │   └── package.json
 ├── client/                 # React frontend

@@ -30,6 +30,7 @@
     --destructive-foreground: 0 0% 100%;
 
     --success: 130 84% 42%;            /* Success Green #10c22b */
+    --warning: 45 93% 47%;             /* Warning Amber #eab308 */
 
     --border: 0 0% 90%;                /* Subtle Ash #e5e5e5 */
     --input: 0 0% 90%;
@@ -63,6 +64,7 @@
     --destructive-foreground: 0 0% 98%;
 
     --success: 142 71% 45%;
+    --warning: 48 96% 53%;
 
     --border: 0 0% 15%;
     --input: 0 0% 15%;
@@ -141,4 +143,12 @@
 ::view-transition-old(root), ::view-transition-new(root) {
     animation: none;
     mix-blend-mode: normal;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

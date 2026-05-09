@@ -1,19 +1,17 @@
-let _warned = false;
-
 export function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
-
-  if (process.env.NODE_ENV === "production") {
-    if (!secret) {
-      throw new Error("JWT_SECRET environment variable is required in production");
-    }
-    return secret;
+  if (!secret) {
+    throw new Error("JWT_SECRET environment variable is required");
   }
+  return secret;
+}
 
-  if (!secret && !_warned) {
-    console.warn("WARNING: Using dev-only JWT secret. Set JWT_SECRET for production.");
-    _warned = true;
-  }
+export function getDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL environment variable is required");
+  return url;
+}
 
-  return secret || "autoreview-dev-secret";
+export function getCronSecret(): string {
+  return process.env.CRON_SECRET || "";
 }
