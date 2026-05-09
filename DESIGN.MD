@@ -1,118 +1,434 @@
-## Overview
+# Ui — Style Reference
+> Monochromatic architectural blueprint – precise, functional forms on a stark, bright canvas.
 
-AutoReview adopts the **Linear marketing canvas** — a deep, dark aesthetic built on `{colors.canvas}` (#010102). This pure black with a faint blue tint serves as the foundation for a high-density, professional tool for developers. On top sits a four-step surface ladder (`{colors.surface-1}` through `{colors.surface-4}`) for cards, panels, and lifted tiles, with hairline borders running from `{colors.hairline}` (#23252a).
+**Theme:** light
 
-The single chromatic accent is **AutoReview Lavender** `{colors.primary}` (#5e6ad2) — used for the primary brand mark, focus rings, and the primary CTA button. The semantic system uses `{colors.semantic-error}` (#f87171) for critical "Must Fix" findings, `{colors.semantic-warning}` (#fbbf24) for "Should Fix Soon", and `{colors.semantic-success}` (#34d399) for completed reviews.
+This design system feels like a finely tuned machine, presenting a clean and precise interface with a stark black-and-white aesthetic. The visual mood is serious and functional, achieved through a dominant achromatic palette and very subtle elevation. Geometric balance is created by mixing hard 10-14px radii for cards and inputs with highly rounded (near-pill) buttons and badges, suggesting both structure and approachability. The use of a custom sans-serif font across all elements with meticulous letter-spacing creates a unified, crisp typographic voice.
 
-Display type uses **Inter** (weight 500–700) with negative letter-spacing scaling. Code snippets, file paths, and commit hashes use **JetBrains Mono** to maintain technical clarity.
+## Tokens — Colors
 
-The interface is designed for **high-density data review**. Findings are grouped by risk level and presented in compact, lifted panels that maximize vertical space.
+| Name | Value | Token | Role |
+|------|-------|-------|------|
+| Canvas White | `#ffffff` | `--color-canvas-white` | Page background, primary card surfaces, popovers. The foundational bright base. |
+| Ghost Gray | `#f2f2f2` | `--color-ghost-gray` | Secondary background for segmented sections or subtle card differentiation. Lighter than default background. |
+| Subtle Ash | `#e5e5e5` | `--color-subtle-ash` | Border colors for inputs, cards, and dividers. Provides definition without harshness. |
+| Midtone Gray | `#737373` | `--color-midtone-gray` | Muted text, placeholder text in inputs, secondary icons. Recedes into the background. |
+| Rich Black | `#0a0a0a` | `--color-rich-black` | Primary text color for body copy, standard icons, badges with white text. High contrast for readability. |
+| Deep Black | `#000000` | `--color-deep-black` | Headings, active state button backgrounds, highlighted text. The darkest tone for strong emphasis. |
+| Callout Red | `#c22b10` | `--color-callout-red` | Destructive actions, error states. A muted, serious red. |
+| Success Green | `#10c22b` | `--color-success-green` | Success states, positive confirmations. A muted, serious green. |
 
-**Key Characteristics:**
-- **Deep Dark Canvas** — `{colors.canvas}` (#010102) anchor.
-- **Lavender Brand Accent** (`{colors.primary}` #5e6ad2) — used for primary actions.
-- **Surface Ladder** — Hierarchy is carried by background shifts and hairline borders, never shadows.
-- **Technical Typography** — Negative-tracked Inter paired with high-legibility Mono.
-- **Risk-First Hierarchy** — Critical findings use semantic red highlights to grab attention.
+## Tokens — Typography
 
-## Colors
+### Geist — Primary brand font for all UI text, headings, and body. Its varied weights and precise tracking create a modern, technical feel. · `--font-geist`
+- **Substitute:** Inter
+- **Weights:** 400, 500, 600
+- **Sizes:** 12px, 13px, 14px, 16px, 18px, 48px
+- **Line height:** 1.00, 1.10, 1.20, 1.33, 1.38, 1.43, 1.50, 1.56, 1.63, 2.00
+- **Letter spacing:** -0.0500em at 48px, -0.0250em at 18px
+- **Role:** Primary brand font for all UI text, headings, and body. Its varied weights and precise tracking create a modern, technical feel.
 
-### Brand & Accent
-- **Lavender** ({colors.primary}): Primary CTA, brand mark, link emphasis (#5e6ad2).
-- **Lavender Hover** ({colors.primary-hover}): Lighter lavender (#828fff).
-- **Lavender Focus** ({colors.primary-focus}): Focus-ring tint (#5e69d1).
+### Geist Mono — Used for code snippets or specific input fields requiring monospaced characters. Reinforces a technical aesthetic. · `--font-geist-mono`
+- **Substitute:** IBM Plex Mono
+- **Weights:** 400
+- **Sizes:** 14px
+- **Line height:** 1.43
+- **Letter spacing:** normal
+- **Role:** Used for code snippets or specific input fields requiring monospaced characters. Reinforces a technical aesthetic.
 
-### Surface (Dark)
-- **Canvas** ({colors.canvas}): #010102.
-- **Surface 1** ({colors.surface-1}): #09090b.
-- **Surface 2** ({colors.surface-2}): #18181b.
-- **Hairline**: #23252a.
+### Type Scale
 
-### Surface (Light)
-- **Canvas** ({colors.canvas}): #fafafa (Warm white).
-- **Surface 1** ({colors.surface-1}): #ffffff (Pure white lift).
-- **Surface 2** ({colors.surface-2}): #f4f4f5 (Light gray lift).
-- **Hairline**: #e4e4e7 (Subtle gray).
+| Role | Size | Line Height | Letter Spacing | Token |
+|------|------|-------------|----------------|-------|
+| caption | 12px | 1.5 | — | `--text-caption` |
+| body | 14px | 1.43 | — | `--text-body` |
+| heading | 18px | 1.33 | -0.45px | `--text-heading` |
+| display | 48px | 1 | -2.4px | `--text-display` |
 
-### Text
-- **Ink (Dark)**: #f7f8f8 (Primary) / #8a8f98 (Subtle).
-- **Ink (Light)**: #09090b (Primary) / #71717a (Subtle).
+## Tokens — Spacing & Shapes
 
-### Semantic
-- **Must Fix (Error)**: #f87171 (Dark) / #ef4444 (Light).
-- **Should Fix (Warning)**: #fbbf24 (Dark) / #f59e0b (Light).
-- **Success**: #34d399 (Dark) / #10b981 (Light).
+**Density:** compact
 
-## Typography
+### Spacing Scale
 
-| Token | Size | Weight | Line Height | Letter Spacing | Use |
-|---|---|---|---|---|---|
-| `{typography.display}` | 32px | 600 | 1.20 | -1.2px | Page titles |
-| `{typography.headline}` | 20px | 600 | 1.25 | -0.6px | Section headings |
-| `{typography.body}` | 14px | 400 | 1.50 | -0.05px | Default text |
-| `{typography.body-sm}` | 13px | 400 | 1.50 | 0 | Card metadata |
-| `{typography.mono}` | 13px | 400 | 1.50 | 0 | Code, paths, hashes |
+| Name | Value | Token |
+|------|-------|-------|
+| 4 | 4px | `--spacing-4` |
+| 5 | 5px | `--spacing-5` |
+| 6 | 6px | `--spacing-6` |
+| 8 | 8px | `--spacing-8` |
+| 10 | 10px | `--spacing-10` |
+| 12 | 12px | `--spacing-12` |
+| 16 | 16px | `--spacing-16` |
+| 20 | 20px | `--spacing-20` |
+| 24 | 24px | `--spacing-24` |
+| 32 | 32px | `--spacing-32` |
+| 40 | 40px | `--spacing-40` |
+| 80 | 80px | `--spacing-80` |
+| 83 | 83px | `--spacing-83` |
+
+### Border Radius
+
+| Element | Value |
+|---------|-------|
+| pill | 9999px |
+| badge | 26px |
+| cards | 14px |
+| input | 10px |
+| buttons | 10px |
+| default | 10px |
+
+### Shadows
+
+| Name | Value | Token |
+|------|-------|-------|
+| subtle | `lab(100 0 0) 0px 0px 0px 2px` | `--shadow-subtle` |
+| subtle-2 | `oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0...` | `--shadow-subtle-2` |
+
+### Layout
+
+- **Section gap:** 83px
+- **Card padding:** 16px
+- **Element gap:** 8px
 
 ## Components
 
-### Finding Cards
-Used on the Review Detail page to display AI-generated findings.
-- **Container**: `{colors.surface-1}`, `{rounded.lg}`, 1px `{colors.hairline}`.
-- **Top Edge**: A subtle 1px white highlight at 5% opacity on the top border.
-- **Content**: Summary (bold), File Path (mono), Explanation (body).
-- **Fix Suggestion**: Nested `{colors.surface-2}` block with `Ink Mono` text.
+### Primary Action Button
+**Role:** Call to action.
 
-### Risk Badges
-- **Must Fix**: Border and text in `{colors.semantic-error}`, background at 10% opacity.
-- **Should Fix Soon**: Border and text in `{colors.semantic-warning}`, background at 10% opacity.
-- **Ignore**: Border and text in `{colors.semantic-muted}`, background at 10% opacity.
+Solid Deep Black (#000000) background with Canvas White (#ffffff) text. Features a 10px border-radius, 8px vertical padding, and 48px horizontal padding, making it a prominent rectangular element.
 
-### Stats Cards
-Used on the Dashboard for high-level summaries.
-- **Style**: Centered large number, small label above in `{colors.ink-muted}`.
-- **Lift**: Uses `{colors.surface-1}` to stand out from the canvas.
+### Ghost Button
+**Role:** Secondary or tertiary actions, often within groups.
 
-### Email Draft Preview
-- **Container**: `{colors.surface-1}` with a monospaced text block.
-- **Action**: Secondary button for "Copy to Clipboard".
+Transparent background with Rich Black (#0a0a0a) text. Uses a 9999px border-radius for a pill shape, with no explicit padding defined by variants, implying content-based sizing.
 
-## Layout & Spacing
+### Split Button Left
+**Role:** Left segment of a grouped button control.
 
-### Spacing System
-- **Base unit**: 4px.
-- **Tokens**: `{spacing.xs}` 8px · `{spacing.sm}` 12px · `{spacing.md}` 16px · `{spacing.lg}` 24px · `{spacing.xl}` 32px · `{spacing.section}` 64px.
-- **Card Padding**: `{spacing.lg}` (24px) for findings and dashboard cards.
-- **Page Margins**: `{spacing.xl}` (32px) on desktop, `{spacing.md}` (16px) on mobile.
+Canvas White (#ffffff) background with Deep Black (#000000) text. Features a 10px border-radius on the left, 0px on the right, and 10px horizontal padding. Borders in Subtle Ash (#e5e5e5).
 
-### Grid & Container
-- **Max Width**: 1200px for content area.
-- **Dashboard Grid**: 4-up stats on desktop → 2-up on tablet → 1-up on mobile.
+### Split Button Right
+**Role:** Right segment of a grouped button control.
 
-## Elevation & Depth
+Canvas White (#ffffff) background with Deep Black (#000000) text. Features a 10px border-radius on the right, 0px on the left. Borders in Subtle Ash (#e5e5e5).
 
-| Level | Treatment | Use |
-|---|---|---|
-| 0 (Canvas) | `{colors.canvas}` (#010102) | Default background |
-| 1 (Lift) | `{colors.surface-1}` (#09090b) + 1px `{colors.hairline}` | Default cards, sidebar |
-| 2 (High Lift) | `{colors.surface-2}` (#18181b) + 1px `{colors.hairline-strong}` | Hovered cards, nested blocks |
-| 3 (Overlay) | `{colors.surface-3}` (#27272a) | Dropdowns, dialogs |
+### Elevated Card
+**Role:** Containers for distinct content blocks, forms, or data.
 
-## Shapes
+Canvas White (#ffffff) background with a 14px border-radius. Features a subtle shadow: oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px, providing minimal elevation. Inner content padding is 16px.
 
-### Border Radius
-- **Small** (`{rounded.sm}`): 6px — Tags, badges, small buttons.
-- **Medium** (`{rounded.md}`): 8px — Primary buttons, form inputs.
-- **Large** (`{rounded.lg}`): 12px — Cards, finding containers.
-- **Full** (`{rounded.full}`): 9999px — Avatars, status pills.
+### Plain Input Field
+**Role:** Standard text input.
 
-## Micro-interactions
+Transparent background with Rich Black (#0a0a0a) text. Defined by a 1px Subtle Ash (#e5e5e5) border and a 10px border-radius. Inner padding is 4px vertical, 10px horizontal.
 
-- **Page Transitions**: 300ms cubic-bezier(0.23, 1, 0.32, 1) fade + 12px vertical slide.
-- **Hover Lift**: Cards should transition background and border color smoothly (200ms).
-- **Stagger**: Apply a 0.04s delay per item in lists for a "fluid" loading feel.
+### Segmented Input Left
+**Role:** Left segment of a grouped input control.
 
-## Known Gaps (Resolved)
+Transparent background with Rich Black (#0a0a0a) text. Features a 10px border-radius on the left and 0px on the right. Defined by a 1px Subtle Ash (#e5e5e5) border. Inner padding is 4px vertical, 10px horizontal.
 
-- **Error States**: Inline alerts use semantic colors with 1px border.
-- **Skeletons**: Pulse animation using surface-2.
-- **Dual Themes**: AutoReview supports both "Linear Dark" (default) and "Linear Light" themes.
+### Inverse Tag Badge
+**Role:** Highlighting status or category, with high contrast.
+
+Deep Black (#171717) background with Canvas White (#ffffff) text. Features a 26px border-radius, creating a pill shape. Padding is 2px vertical, 8px horizontal.
+
+### Neutral Tag Badge
+**Role:** Subtle categorization or status.
+
+Ghost Gray (#f2f2f2) background with Rich Black (#0a0a0a) text. Features a 26px border-radius, creating a pill shape. Padding is 2px vertical, 8px horizontal.
+
+### Outline Tag Badge
+**Role:** Very subtle categorization or option.
+
+Transparent background with Rich Black (#0a0a0a) text. Features a 26px border-radius and a Light Ash (#a1a1a1) border. Padding is 2px vertical, 8px horizontal.
+
+## Do's and Don'ts
+
+### Do
+- Use Deep Black (#000000) for primary headings and active states to command attention.
+- Apply Subtle Ash (#e5e5e5) for all primary borders and dividers to maintain a subtle visual separation.
+- Ensure input fields and cards consistently use a 10px or 14px border-radius, respectively, for geometric stability.
+- Employ Geist font universally, leveraging its 400, 500, and 600 weights to establish clear hierarchy without introducing new typefaces.
+- Maintain a default element gap of 8px, but use 16px for card inner padding to create adequate breathing room for content.
+- Utilize 9999px or 26px border-radius for all interactive buttons and badges to create a soft, approachable pill shape.
+
+### Don't
+- Avoid using highly saturated colors; stick to the achromatic scale and the two semantic reds and greens.
+- Do not introduce additional font families; the current choices are sufficient for all typographic needs.
+- Refrain from using strong, multi-directional shadows; rely on minimal 1px shadows or simple borders for elevation.
+- Do not deviate from the established border-radius values; the mix of sharp 0px (in split elements), 10px, 14px, and 9999px is intentional.
+- Don't add excessive padding or margin; the design favors a compact density with specific, calculated spacing.
+- Avoid decorative gradients; the brand's aesthetic is built on flat colors and subtle depth.
+
+## Surfaces
+
+### Light
+
+| Level | Name | Value | Purpose |
+|-------|------|-------|---------|
+| 0 | Canvas White | `#ffffff` | Primary page background and base surface for most content. |
+| 1 | Elevated Card | `#ffffff` | Content cards and distinct sections that require a subtle lift, defined by borders or minimal shadow. |
+| 2 | Search/Input Field | `#ffffff` | Interactive elements like search bars and inputs, often bordered. |
+| 3 | Popovers/Overlays | `#ffffff` | Transient UI elements that appear above other content. |
+| 4 | Ghost Gray Background | `#f2f2f2` | Used as a background color for secondary buttons or badges, indicating a slightly lower hierarchy. |
+
+### Dark (Inverted Monochromatic)
+
+| Level | Name | Value | Purpose |
+|-------|------|-------|---------|
+| 0 | Deep Canvas | `#0a0a0a` | Page background. Pure near-black with no color tint. |
+| 1 | Elevated Card | `#141414` | Cards and sections. Slightly lifted from canvas. |
+| 2 | Input Surface | `#1c1c1c` | Interactive elements — inputs, search bars. |
+| 3 | Overlay Surface | `#262626` | Popovers, dropdowns, transient elements. |
+| 4 | Subtle Fill | `#1c1c1c` | Secondary buttons, badges, muted backgrounds. |
+
+### Dark Theme Colors
+
+| Name | Value | Token | Role |
+|------|-------|-------|------|
+| Deep Canvas | `#0a0a0a` | `--color-deep-canvas` | Page background. |
+| Elevated Card | `#141414` | `--color-elevated-card` | Card surfaces. |
+| Input Surface | `#1c1c1c` | `--color-input-surface` | Input backgrounds. |
+| Subtle Border | `#262626` | `--color-subtle-border` | Borders and dividers. |
+| Muted Text | `#a3a3a3` | `--color-muted-text-dark` | Secondary text, placeholders. |
+| Primary Text | `#fafafa` | `--color-primary-text-dark` | Body text, headings. |
+| CTA Background | `#fafafa` | `--color-cta-dark` | Primary button background (inverted). |
+| CTA Text | `#0a0a0a` | `--color-cta-text-dark` | Text on primary buttons (inverted). |
+| Callout Red | `#ef4444` | `--color-callout-red-dark` | Destructive actions (brighter for dark bg). |
+| Success Green | `#22c55e` | `--color-success-green-dark` | Success states (brighter for dark bg). |
+
+### Dark Theme — CSS Custom Properties
+
+```css
+.dark {
+  --background: 0 0% 4%;             /* Deep Canvas #0a0a0a */
+  --foreground: 0 0% 98%;            /* Primary Text #fafafa */
+
+  --card: 0 0% 8%;                   /* Elevated Card #141414 */
+  --card-foreground: 0 0% 98%;
+
+  --popover: 0 0% 15%;               /* Overlay Surface #262626 */
+  --popover-foreground: 0 0% 98%;
+
+  --primary: 0 0% 98%;               /* CTA #fafafa (inverted) */
+  --primary-foreground: 0 0% 4%;     /* CTA text #0a0a0a (inverted) */
+
+  --secondary: 0 0% 11%;             /* Input Surface #1c1c1c */
+  --secondary-foreground: 0 0% 98%;
+
+  --muted: 0 0% 11%;                 /* Input Surface #1c1c1c */
+  --muted-foreground: 0 0% 64%;      /* Muted Text #a3a3a3 */
+
+  --accent: 0 0% 11%;
+  --accent-foreground: 0 0% 98%;
+
+  --destructive: 0 84% 60%;          /* Callout Red #ef4444 */
+  --destructive-foreground: 0 0% 98%;
+
+  --success: 142 71% 45%;            /* Success Green #22c55e */
+
+  --border: 0 0% 15%;                /* Subtle Border #262626 */
+  --input: 0 0% 15%;
+  --ring: 0 0% 98%;
+}
+```
+
+### Dark Theme Rules
+
+- **Invert the hierarchy**: light fills become dark surfaces, dark text becomes light text.
+- **CTA buttons invert**: white background with black text (instead of black bg with white text).
+- **Borders brighten**: from `#e5e5e5` (light) to `#262626` (dark) — still subtle against their respective canvases.
+- **Semantic colors brighten slightly**: red and green increase lightness to maintain visibility on dark backgrounds.
+- **No colored accents**: the same achromatic discipline applies — no purple, blue, or lavender in dark mode.
+- **Shadows become borders**: `box-shadow` is less visible on dark backgrounds; prefer `border: 1px solid` for card elevation.
+
+## Elevation
+
+### Light
+- **Elevated Card:** `oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px`
+- **Focus Ring:** `lab(100 0 0) 0px 0px 0px 2px`
+
+### Dark
+- **Elevated Card:** `border: 1px solid #262626` (shadows are invisible on dark backgrounds)
+- **Focus Ring:** `0px 0px 0px 2px rgba(255, 255, 255, 0.1)`
+
+## Imagery
+
+The visual language is purely utilitarian and functional. No photography or complex illustrations are present. Icons are monochromatic, typically black stroke or fill on white backgrounds, aligning with the stark aesthetic. Product components are presented directly, with an emphasis on UI elements rather than lifestyle or marketing visuals. Imagery's role is explanatory (via icons) or for showcasing UI components, maintaining a text-dominant layout. There are no decorative visuals.
+
+## Layout
+
+The page maintains a centered, contained layout with a maximum visible width, creating a focused content area. The hero section features a prominent, centered headline and subtext over the Canvas White background, followed by centrally aligned CTA buttons. Sections below are arranged in a multi-column grid, showcasing various UI components (forms, cards, controls). The rhythm is consistent vertical spacing, creating an organized, information-dense display. Navigation is a sticky top-bar with compact links and utility actions.
+
+## Agent Prompt Guide
+
+### Quick Color Reference
+- **Text Primary:** #0a0a0a
+- **Text Muted:** #737373
+- **Background:** #ffffff
+- **CTA Background:** #000000
+- **Border:** #e5e5e5
+- **Accent (Semantic Red):** #c22b10
+
+### Example Component Prompts
+1. **Create a Hero Section:** Canvas White (#ffffff) background. Headline 'The Foundation for your Design System' in Geist weight 600, 48px, line-height 1.0, letter-spacing -2.4px, color Deep Black (#000000). Subtext 'A set of beautifully designed components that you can customize...' in Geist weight 400, 18px, line-height 1.33, letter-spacing -0.45px, color Rich Black (#0a0a0a). Below this, a Primary Action Button labeled 'New Project' and a Ghost Button labeled 'View Components'. Section gap 83px.
+2. **Generate an Elevated Card:** Canvas White (#ffffff) background, 14px border-radius, with shadow 'oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px'. Inside, use 16px internal padding. Title 'Payment Method' in Geist weight 500, 16px, Rich Black (#0a0a0a). Body text 'All transactions are secure...' in Geist weight 400, 14px, Midtone Gray (#737373). Include a Plain Input Field with label 'Name on Card'.
+3. **Design a Form Input Group:** Two segmented input fields. The first is a Segmented Input Left for 'Card Number', with placeholder '1234 5678 9012 3456'. The second is a Plain Input Field for 'CVV', placeholder '123'. Both bordered with Subtle Ash (#e5e5e5).
+4. **Create a Navigation Bar:** Canvas White (#ffffff) background. Left aligned: 'Docs', 'Components', 'Blocks', 'Charts', 'Directory', 'Create' as text links in Geist weight 400, 14px, Rich Black (#0a0a0a). Right aligned: a Plain Input Field 'Search documentation...' and a Primary Action Button labeled '+ New'. Elements within the nav should have 8px element gap between them.
+
+## Similar Brands
+
+- **Vercel** — Dominant use of a stark black-and-white achromatic palette, clean typography, and focus on developer tools and component showcasing.
+- **Linear** — Systematic grid-based UI, minimal use of color, and high-fidelity, component-driven interaction patterns.
+- **Figma** — Functional, dark-mode leaning interfaces with strong typography and precise spacing, emphasizing tool-like utility.
+- **Revolut (early UI)** — Modern, crisp UI with strong geometric shapes, restrained use of color for status, and emphasis on clear data presentation.
+
+## Quick Start
+
+### CSS Custom Properties
+
+```css
+:root {
+  /* Colors */
+  --color-canvas-white: #ffffff;
+  --color-ghost-gray: #f2f2f2;
+  --color-subtle-ash: #e5e5e5;
+  --color-midtone-gray: #737373;
+  --color-rich-black: #0a0a0a;
+  --color-deep-black: #000000;
+  --color-callout-red: #c22b10;
+  --color-success-green: #10c22b;
+
+  /* Typography — Font Families */
+  --font-geist: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Typography — Scale */
+  --text-caption: 12px;
+  --leading-caption: 1.5;
+  --text-body: 14px;
+  --leading-body: 1.43;
+  --text-heading: 18px;
+  --leading-heading: 1.33;
+  --tracking-heading: -0.45px;
+  --text-display: 48px;
+  --leading-display: 1;
+  --tracking-display: -2.4px;
+
+  /* Typography — Weights */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Spacing */
+  --spacing-4: 4px;
+  --spacing-5: 5px;
+  --spacing-6: 6px;
+  --spacing-8: 8px;
+  --spacing-10: 10px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-20: 20px;
+  --spacing-24: 24px;
+  --spacing-32: 32px;
+  --spacing-40: 40px;
+  --spacing-80: 80px;
+  --spacing-83: 83px;
+
+  /* Layout */
+  --section-gap: 83px;
+  --card-padding: 16px;
+  --element-gap: 8px;
+
+  /* Border Radius */
+  --radius-md: 4px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-3xl: 26px;
+  --radius-full: 9996px;
+  --radius-full-2: 9999px;
+  --radius-full-3: 159981px;
+  --radius-full-4: 159984px;
+
+  /* Named Radii */
+  --radius-pill: 9999px;
+  --radius-badge: 26px;
+  --radius-cards: 14px;
+  --radius-input: 10px;
+  --radius-buttons: 10px;
+  --radius-default: 10px;
+
+  /* Shadows */
+  --shadow-subtle: lab(100 0 0) 0px 0px 0px 2px;
+  --shadow-subtle-2: oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px;
+
+  /* Surfaces */
+  --surface-canvas-white: #ffffff;
+  --surface-elevated-card: #ffffff;
+  --surface-searchinput-field: #ffffff;
+  --surface-popoversoverlays: #ffffff;
+  --surface-ghost-gray-background: #f2f2f2;
+}
+```
+
+### Tailwind v4
+
+```css
+@theme {
+  /* Colors */
+  --color-canvas-white: #ffffff;
+  --color-ghost-gray: #f2f2f2;
+  --color-subtle-ash: #e5e5e5;
+  --color-midtone-gray: #737373;
+  --color-rich-black: #0a0a0a;
+  --color-deep-black: #000000;
+  --color-callout-red: #c22b10;
+  --color-success-green: #10c22b;
+
+  /* Typography */
+  --font-geist: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Typography — Scale */
+  --text-caption: 12px;
+  --leading-caption: 1.5;
+  --text-body: 14px;
+  --leading-body: 1.43;
+  --text-heading: 18px;
+  --leading-heading: 1.33;
+  --tracking-heading: -0.45px;
+  --text-display: 48px;
+  --leading-display: 1;
+  --tracking-display: -2.4px;
+
+  /* Spacing */
+  --spacing-4: 4px;
+  --spacing-5: 5px;
+  --spacing-6: 6px;
+  --spacing-8: 8px;
+  --spacing-10: 10px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-20: 20px;
+  --spacing-24: 24px;
+  --spacing-32: 32px;
+  --spacing-40: 40px;
+  --spacing-80: 80px;
+  --spacing-83: 83px;
+
+  /* Border Radius */
+  --radius-md: 4px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-3xl: 26px;
+  --radius-full: 9996px;
+  --radius-full-2: 9999px;
+  --radius-full-3: 159981px;
+  --radius-full-4: 159984px;
+
+  /* Shadows */
+  --shadow-subtle: lab(100 0 0) 0px 0px 0px 2px;
+  --shadow-subtle-2: oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px;
+}
+```
