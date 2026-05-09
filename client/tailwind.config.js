@@ -12,12 +12,12 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Inter", "sans-serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        sans: ["Geist", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["Geist Mono", "IBM Plex Mono", "ui-monospace", "monospace"],
       },
       letterSpacing: {
-        display: "-0.04em",
-        headline: "-0.02em",
+        display: "-0.05em",
+        heading: "-0.025em",
       },
       colors: {
         border: "hsl(var(--border))",
@@ -58,6 +58,10 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        card: "oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px",
+        "focus-ring": "lab(100 0 0) 0px 0px 0px 2px",
       },
     },
   },
