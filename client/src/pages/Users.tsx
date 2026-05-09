@@ -15,6 +15,7 @@ type User = { id: string; username: string; name: string | null; role: string; m
 export default function Users() {
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [autoGenPassword, setAutoGenPassword] = useState(true);
   const [manualPassword, setManualPassword] = useState("");
@@ -30,11 +31,14 @@ export default function Users() {
   useEffect(() => { loadUsers(); }, []);
 
   const loadUsers = async () => {
+    setLoadingUsers(true);
     try {
       const data = await api.get<User[]>("/api/auth/users");
       setUsers(data);
     } catch (err) {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to load users", variant: "destructive" });
+    } finally {
+      setLoadingUsers(false);
     }
   };
 
@@ -167,7 +171,8 @@ export default function Users() {
               </CardContent>
             </Card>
           ))}
-          {users.length === 0 && <p className="py-8 text-center text-muted-foreground">No users found</p>}
+          {loadingUsers && <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-20 rounded-lg bg-secondary animate-pulse" />)}</div>}
+{!loadingUsers && users.length === 0 && <p className="py-8 text-center text-muted-foreground">No users found</p>}
         </div>
 
       <Dialog open={!!resetPasswordUser} onOpenChange={(o) => !o && setResetPasswordUser(null)}>
