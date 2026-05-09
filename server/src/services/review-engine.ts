@@ -3,6 +3,29 @@ import type { CommitInfo } from "./bitbucket-client.js";
 import type { RepositoryConfig } from "./repository-service.js";
 import { logger } from "../middleware/index.js";
 
+export const FIXED_OUTPUT_FORMAT = `
+---
+
+## Output Format
+
+Respond with a single valid JSON array of findings only. Do NOT include any other text, markdown, or explanation outside the JSON array. Sort findings by risk: \`must_fix\` first, then \`should_fix_soon\`, then \`ignore\`.
+
+\`\`\`json
+[
+  {
+    "id": "F001",
+    "file": "<file path>",
+    "line_start": <integer or null>,
+    "line_end": <integer or null>,
+    "category": "<security | performance | correctness | maintainability | style>",
+    "risk": "<must_fix | should_fix_soon | ignore>",
+    "title": "<concise one-line summary>",
+    "explanation": "<detailed explanation of why this is a problem, including potential impact>",
+    "suggested_fix": "<concrete fix — code snippet preferred where applicable, or null if not applicable>"
+  }
+]
+\`\`\``;
+
 export type RawFinding = {
   file_path: string;
   line_number: number | null;
@@ -35,6 +58,8 @@ export async function analyzeDiff(
     .replace("{{commit_message}}", commit.message)
     .replace("{{branch}}", repo.branch)
     .replace("{{repository}}", repo.name);
+
+  prompt += FIXED_OUTPUT_FORMAT;
 
   if (truncated) {
     prompt += "\n\nNOTE: The diff was truncated due to size. Your review may be incomplete. Focus on the available changes.";
@@ -98,17 +123,71 @@ function matchesAnyPattern(filePath: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(filePath));
 }
 
+export async function generateDiffOverview(
+  diff: string,
+  commit: CommitInfo,
+  repo: RepositoryConfig,
+  provider: ProviderConfig
+): Promise<string> {
+  const truncated = diff.length > 12000;
+  const snippet = truncated ? diff.slice(0, 12000) : diff;
+
+  const prompt = `You are a senior engineer writing a brief summary for a code review email.
+Given the following git diff, write a concise 3-6 sentence overview of what this changeset does.
+Focus on: what was added/changed/removed, the purpose/intent, and which areas of the codebase are affected.
+Do NOT list findings or issues — only describe what the code changes accomplish.
+Reply with plain text only, no markdown, no bullet points, no headers.
+
+Commit: ${commit.hash.substring(0, 12)}
+Message: ${commit.message}
+Repository: ${repo.name}
+Branch: ${repo.branch}
+
+Diff:
+${snippet}`;
+
+  const client = new OpenAI({
+    apiKey: provider.apiKey,
+    baseURL: provider.apiBase,
+  });
+
+  const response = await client.chat.completions.create({
+    model: repo.llm_model,
+    messages: [{ role: "user", content: prompt }],
+    max_tokens: 300,
+    temperature: 0.3,
+  });
+
+  return response.choices?.[0]?.message?.content?.trim() || "Unable to generate overview.";
+}
+
 export function extractFilePaths(diff: string): string {
   const matches = diff.match(/^diff --git a\/(.+?) b\/(.+?)$/gm) || [];
   return matches.map((m) => m.replace("diff --git a/", "").split(" b/")[0]).join("\n");
 }
+
+const RISK_ORDER: Record<string, number> = { must_fix: 0, should_fix_soon: 1, ignore: 2 };
 
 export function parseFindings(content: string): RawFinding[] {
   try {
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return [];
     const parsed = JSON.parse(jsonMatch[0]);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+
+    const mapped: RawFinding[] = parsed.map((item: Record<string, unknown>) => ({
+      file_path: String(item.file ?? item.file_path ?? ""),
+      line_number: (item.line_start ?? item.line_number ?? null) as number | null,
+      summary: String(item.title ?? item.summary ?? ""),
+      explanation: String(item.explanation ?? ""),
+      risk_level: String(item.risk ?? item.risk_level ?? "ignore"),
+      suggested_fix: (item.suggested_fix as string | null) ?? null,
+      category: (item.category as string | null) ?? null,
+    }));
+
+    return mapped.sort(
+      (a, b) => (RISK_ORDER[a.risk_level] ?? 3) - (RISK_ORDER[b.risk_level] ?? 3)
+    );
   } catch {
     return [];
   }

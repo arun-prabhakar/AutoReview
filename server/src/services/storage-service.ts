@@ -11,6 +11,8 @@ export type ReviewRow = {
   error_message: string | null;
   created_at: string;
   completed_at: string | null;
+  created_by: string | null;
+  ai_overview: string | null;
 };
 
 export type FindingRow = {
@@ -30,23 +32,23 @@ export async function findExistingReview(repositoryId: string, commitHash: strin
 }
 
 export async function findFindingsByReviewId(reviewId: string): Promise<FindingRow[]> {
-  return all<FindingRow>("SELECT * FROM findings WHERE review_id = ? ORDER BY risk_level", [reviewId]);
+  return all<FindingRow>("SELECT * FROM findings WHERE review_id = ? ORDER BY CASE risk_level WHEN 'must_fix' THEN 0 WHEN 'should_fix_soon' THEN 1 ELSE 2 END", [reviewId]);
 }
 
-export async function createReview(review: Omit<ReviewRow, "created_at">): Promise<string> {
+export async function createReview(review: Omit<ReviewRow, "created_at" | "ai_overview">): Promise<string> {
   await run(
-    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at]
+    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by]
   );
   return review.id;
 }
 
-export async function updateReviewStatus(id: string, status: string, errorMessage?: string): Promise<void> {
+export async function updateReviewStatus(id: string, status: string, errorMessage?: string, aiOverview?: string): Promise<void> {
   const completedAt = status === "completed" || status === "failed" ? new Date().toISOString() : null;
   await run(
-    "UPDATE reviews SET status = ?, error_message = ?, completed_at = COALESCE(?, completed_at) WHERE id = ?",
-    [status, errorMessage || null, completedAt, id]
+    "UPDATE reviews SET status = ?, error_message = ?, completed_at = COALESCE(?, completed_at), ai_overview = COALESCE(?, ai_overview) WHERE id = ?",
+    [status, errorMessage || null, completedAt, aiOverview || null, id]
   );
 }
 

@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'user',
+  must_change_password INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -69,7 +70,9 @@ CREATE TABLE IF NOT EXISTS reviews (
   review_mode TEXT NOT NULL DEFAULT 'manual',
   error_message TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  completed_at TEXT
+  completed_at TEXT,
+  created_by TEXT,
+  ai_overview TEXT
 );
 
 CREATE TABLE IF NOT EXISTS findings (
@@ -102,36 +105,42 @@ VALUES (
   'admin'
 );
 
-INSERT OR IGNORE INTO prompt_templates (id, name, content, strictness, is_default)
+INSERT OR REPLACE INTO prompt_templates (id, name, content, strictness, is_default)
 VALUES (
   'default',
   'Default Review Prompt',
-  'You are a senior code reviewer. Analyze the following code diff and provide findings.
+  'You are a senior software engineer and security-conscious code reviewer with expertise across multiple languages and frameworks. Your goal is to produce a thorough, actionable code review that helps the team ship safer, more maintainable code.
 
-Repository: {{repository}}
-Branch: {{branch}}
-Commit: {{commit_hash}}
-Strictness Level: {{strictness_level}}
+## Review Context
 
-Changed files:
-{{file_paths}}
+- **Repository:** {{repository}}
+- **Branch:** {{branch}}
+- **Commit:** {{commit_hash}}
+- **Strictness Level:** {{strictness_level}}
+  - `strict` → flag style, minor issues, and all risks
+  - `standard` → flag correctness, security, performance, and significant maintainability issues
+  - `lenient` → flag only must_fix security and correctness issues
+- **Changed Files:** {{file_paths}}
+- **Excluded Paths (ignore entirely):** {{excluded_paths}}
 
-Excluded paths (skip these):
-{{excluded_paths}}
+## Diff
 
-Diff:
+```diff
 {{diff}}
+```
 
-For each finding, provide:
-1. File path
-2. Line number (if applicable)
-3. Issue summary (concise)
-4. Detailed explanation
-5. Risk level: must_fix, should_fix_soon, or ignore
-6. Suggested fix (if applicable)
-7. Category (security, performance, correctness, maintainability, style)
+---
 
-Respond in JSON format as an array of findings.',
+## Instructions
+
+Analyze only the changed lines and their surrounding context. Do not flag issues in excluded paths.
+
+For each finding, reason carefully before assigning a risk level:
+- `must_fix` — Blocks merge. Security vulnerability, data loss risk, crash, or broken logic.
+- `should_fix_soon` — Does not block merge but introduces meaningful technical debt, performance risk, or subtle bugs.
+- `ignore` — Informational only. Low-priority style or nitpick, included only at `strict` level.
+
+If the diff is clean with no findings, return an empty array `[]`.',
   'all',
   1
 );

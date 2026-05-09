@@ -49,6 +49,9 @@ export function requestLogger(req: Request, _res: Response, next: NextFunction):
 }
 
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
-  logger.error(err.message);
-  res.status(500).json({ error: "Internal server error", message: err.message });
+  logger.error(err.message, { stack: err.stack });
+  const message = process.env.NODE_ENV === 'production'
+    ? 'Internal server error'
+    : err.message;
+  res.status(500).json({ error: message });
 }

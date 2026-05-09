@@ -2,22 +2,25 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { v4 as uuid } from "uuid";
-import { getDb } from "../db/index.js";
+import { get, all, run } from "../db/queries.js";
 import { logger } from "../middleware/index.js";
+import { getJwtSecret } from "../config.js";
+import { jwtAuth } from "../middleware/jwt-auth.js";
 
 export const authRouter = Router();
+export const usersRouter = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || "autoreview-jwt-secret-change-in-prod";
 const JWT_EXPIRES_IN = "24h";
 
 function generateToken(user: { id: string; username: string; role: string }): string {
-  return jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, {
+  return jwt.sign({ id: user.id, username: user.username, role: user.role }, getJwtSecret(), {
     expiresIn: JWT_EXPIRES_IN,
   });
 }
 
+// --- Public routes (authRouter) ---
+
 authRouter.post("/login", async (req, res) => {
-  const db = await getDb();
   const { username, password } = req.body;
 
   if (!username || !password) {
@@ -25,14 +28,14 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
-  const result = db.exec("SELECT id, username, password_hash, role FROM users WHERE username = ?", [username]);
-  const row = result[0]?.values?.[0];
-  if (!row) {
+  const user = await get<{ id: string; username: string; password_hash: string; role: string; must_change_password: number }>(
+    "SELECT id, username, password_hash, role, must_change_password FROM users WHERE username = ?",
+    [username],
+  );
+  if (!user) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
-
-  const user = { id: row[0] as string, username: row[1] as string, password_hash: row[2] as string, role: row[3] as string };
 
   if (!bcrypt.compareSync(password, user.password_hash)) {
     res.status(401).json({ error: "Invalid credentials" });
@@ -44,7 +47,12 @@ authRouter.post("/login", async (req, res) => {
 
   res.json({
     token,
-    user: { id: user.id, username: user.username, role: user.role },
+    user: {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      must_change_password: !!user.must_change_password,
+    },
   });
 });
 
@@ -56,35 +64,81 @@ authRouter.get("/me", async (req, res) => {
   }
 
   try {
-    const payload = jwt.verify(authHeader.split(" ")[1], JWT_SECRET) as {
+    const payload = jwt.verify(authHeader.split(" ")[1], getJwtSecret()) as {
       id: string;
       username: string;
       role: string;
     };
-    res.json({ id: payload.id, username: payload.username, role: payload.role });
+
+    const user = await get<{ id: string; username: string; role: string; must_change_password: number }>(
+      "SELECT id, username, role, must_change_password FROM users WHERE id = ?",
+      [payload.id],
+    );
+    if (!user) {
+      res.status(401).json({ error: "User not found" });
+      return;
+    }
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      must_change_password: !!user.must_change_password,
+    });
   } catch {
     res.status(401).json({ error: "Token expired or invalid" });
   }
 });
 
-authRouter.get("/users", async (req, res) => {
-  const db = await getDb();
-  const result = db.exec("SELECT id, username, role, created_at FROM users ORDER BY created_at");
-  const columns = result[0]?.columns || [];
-  const rows = result[0]?.values || [];
+// --- Change own password (any authenticated user) ---
 
-  const users = rows.map((row) => ({
-    id: row[0],
-    username: row[1],
-    role: row[2],
-    created_at: row[3],
-  }));
+authRouter.post("/change-password", jwtAuth, async (req, res) => {
+  const { current_password, new_password } = req.body;
 
+  if (!current_password || !new_password) {
+    res.status(400).json({ error: "Current password and new password are required" });
+    return;
+  }
+
+  if (new_password.length < 6) {
+    res.status(400).json({ error: "New password must be at least 6 characters" });
+    return;
+  }
+
+  const user = await get<{ id: string; password_hash: string; must_change_password: number }>(
+    "SELECT id, password_hash, must_change_password FROM users WHERE id = ?",
+    [req.user!.id],
+  );
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  if (!bcrypt.compareSync(current_password, user.password_hash)) {
+    res.status(401).json({ error: "Current password is incorrect" });
+    return;
+  }
+
+  const hash = bcrypt.hashSync(new_password, 10);
+  await run(
+    "UPDATE users SET password_hash = ?, must_change_password = 0, updated_at = datetime('now') WHERE id = ?",
+    [hash, user.id],
+  );
+
+  logger.audit("password_changed", { userId: user.id });
+  res.json({ message: "Password changed successfully" });
+});
+
+// --- Admin routes (usersRouter) ---
+
+usersRouter.get("/", async (_req, res) => {
+  const users = await all<{ id: string; username: string; role: string; must_change_password: number; created_at: string }>(
+    "SELECT id, username, role, must_change_password, created_at FROM users ORDER BY created_at",
+  );
   res.json(users);
 });
 
-authRouter.post("/users", async (req, res) => {
-  const db = await getDb();
+usersRouter.post("/", async (req, res) => {
   const { username, password, role } = req.body;
 
   if (!username || !password) {
@@ -97,8 +151,8 @@ authRouter.post("/users", async (req, res) => {
     return;
   }
 
-  const existing = db.exec("SELECT id FROM users WHERE username = ?", [username]);
-  if (existing[0]?.values?.length) {
+  const existing = await get("SELECT id FROM users WHERE username = ?", [username]);
+  if (existing) {
     res.status(409).json({ error: "Username already exists" });
     return;
   }
@@ -106,14 +160,16 @@ authRouter.post("/users", async (req, res) => {
   const id = uuid();
   const hash = bcrypt.hashSync(password, 10);
 
-  db.run("INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)", [id, username, hash, role]);
+  await run(
+    "INSERT INTO users (id, username, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, 1)",
+    [id, username, hash, role],
+  );
 
   logger.audit("user_created", { id, username, role });
-  res.status(201).json({ id, username, role });
+  res.status(201).json({ id, username, role, must_change_password: true });
 });
 
-authRouter.put("/users/:id/password", async (req, res) => {
-  const db = await getDb();
+usersRouter.put("/:id/password", async (req, res) => {
   const { password } = req.body;
   const { id } = req.params;
 
@@ -122,30 +178,40 @@ authRouter.put("/users/:id/password", async (req, res) => {
     return;
   }
 
-  const existing = db.exec("SELECT id FROM users WHERE id = ?", [id]);
-  if (!existing[0]?.values?.length) {
+  const existing = await get("SELECT id FROM users WHERE id = ?", [id]);
+  if (!existing) {
     res.status(404).json({ error: "User not found" });
     return;
   }
 
   const hash = bcrypt.hashSync(password, 10);
-  db.run("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?", [hash, id]);
+  await run(
+    "UPDATE users SET password_hash = ?, must_change_password = 1, updated_at = datetime('now') WHERE id = ?",
+    [hash, id],
+  );
 
-  logger.audit("password_changed", { userId: id });
-  res.json({ message: "Password updated" });
+  logger.audit("password_reset_by_admin", { targetUserId: id, adminUserId: req.user?.id });
+  res.json({ message: "Password reset. User must change it on next login." });
 });
 
-authRouter.delete("/users/:id", async (req, res) => {
-  const db = await getDb();
+usersRouter.delete("/:id", async (req, res) => {
   const { id } = req.params;
 
-  const existing = db.exec("SELECT id, role FROM users WHERE id = ?", [id]);
-  if (!existing[0]?.values?.length) {
+  const existing = await get("SELECT id, role FROM users WHERE id = ?", [id]);
+  if (!existing) {
     res.status(404).json({ error: "User not found" });
     return;
   }
 
-  db.run("DELETE FROM users WHERE id = ?", [id]);
+  if (existing.role === "admin") {
+    const adminCount = await get<{ count: number }>("SELECT COUNT(*) as count FROM users WHERE role = 'admin'");
+    if (adminCount && adminCount.count <= 1) {
+      res.status(400).json({ error: "Cannot delete the last admin user" });
+      return;
+    }
+  }
+
+  await run("DELETE FROM users WHERE id = ?", [id]);
   logger.audit("user_deleted", { userId: id });
   res.json({ message: "User deleted" });
 });

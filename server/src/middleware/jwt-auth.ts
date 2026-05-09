@@ -1,7 +1,6 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
-
-const JWT_SECRET = process.env.JWT_SECRET || "autoreview-jwt-secret-change-in-prod";
+import { getJwtSecret } from "../config.js";
 
 export interface AuthUser {
   id: string;
@@ -26,7 +25,7 @@ export function jwtAuth(req: Request, res: Response, next: NextFunction): void {
   }
 
   try {
-    const payload = jwt.verify(authHeader.split(" ")[1], JWT_SECRET) as AuthUser;
+    const payload = jwt.verify(authHeader.split(" ")[1], getJwtSecret()) as AuthUser;
     req.user = { id: payload.id, username: payload.username, role: payload.role };
     next();
   } catch {
