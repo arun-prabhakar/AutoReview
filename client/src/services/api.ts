@@ -10,6 +10,10 @@ async function handleResponse<T>(response: Response): Promise<T> {
     onUnauthorized?.();
     throw new Error("Session expired");
   }
+  if (response.status === 429) {
+    const data = await response.json().catch(() => ({ error: "Too many requests. Please try again later." }));
+    throw new Error(data.error || "Too many requests. Please try again later.");
+  }
   if (!response.ok) {
     const data = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(data.error || `Request failed: ${response.status}`);
