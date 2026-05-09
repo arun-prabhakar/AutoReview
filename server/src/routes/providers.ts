@@ -1,5 +1,7 @@
 import { Router } from "express";
-import { getAllProviders, createProvider, updateProvider, deleteProvider } from "../services/provider-service.js";
+import OpenAI from "openai";
+import { getAllProviders, createProvider, updateProvider, deleteProvider, getDecryptedApiKey } from "../services/provider-service.js";
+import { get } from "../db/queries.js";
 import { logger } from "../middleware/index.js";
 
 export const providersRouter = Router();
@@ -53,5 +55,32 @@ providersRouter.delete("/:id", async (req, res) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
+  }
+});
+
+providersRouter.get("/:id/models", async (req, res) => {
+  try {
+    const provider = await get<{ api_base: string; name: string }>(
+      "SELECT api_base, name FROM llm_providers WHERE id = ?", [req.params.id]
+    );
+    if (!provider) {
+      res.status(404).json({ error: "Provider not found" });
+      return;
+    }
+
+    const apiKey = await getDecryptedApiKey(req.params.id);
+    const client = new OpenAI({ apiKey, baseURL: provider.api_base });
+
+    const response = await client.models.list();
+    const models = (response.data || [])
+      .map((m) => m.id)
+      .sort();
+
+    logger.info("Fetched models from provider", { provider: provider.name, count: models.length });
+    res.json({ models });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    logger.warn("Failed to fetch models", { error: message });
+    res.status(502).json({ error: message });
   }
 });

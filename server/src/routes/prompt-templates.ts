@@ -4,9 +4,14 @@ import type { SqlValue } from "sql.js";
 import OpenAI from "openai";
 import { all, get, run } from "../db/queries.js";
 import { getDecryptedApiKey } from "../services/provider-service.js";
+import { FIXED_OUTPUT_FORMAT } from "../services/review-engine.js";
 import { logger } from "../middleware/index.js";
 
 export const promptTemplateRouter = Router();
+
+promptTemplateRouter.get("/fixed-output-format", (_req, res) => {
+  res.json({ content: FIXED_OUTPUT_FORMAT });
+});
 
 promptTemplateRouter.get("/", async (_req, res) => {
   const templates = await all("SELECT * FROM prompt_templates ORDER BY created_at DESC");
@@ -110,12 +115,11 @@ promptTemplateRouter.post("/enhance", async (req, res) => {
 
 Rules:
 - Preserve all {{variable}} placeholders exactly as they are ({{diff}}, {{file_paths}}, {{strictness_level}}, {{excluded_paths}}, {{commit_hash}}, {{commit_message}}, {{branch}}, {{repository}})
-- The template must instruct the LLM to respond in JSON format as an array of findings
-- Each finding must have: file_path, line_number, summary, explanation, risk_level (must_fix | should_fix_soon | ignore), suggested_fix, category (security | performance | correctness | maintainability | style)
+- The template contains ONLY the instruction section — do NOT add any output format instructions, JSON schema, or field definitions. The output format is fixed and appended automatically by the server.
 - Make the prompt more specific, structured, and effective at catching real issues
 - Reduce false positives by being explicit about what constitutes a real finding
 - Keep the prompt concise but thorough
-- Return ONLY the improved prompt text, no explanations or markdown formatting`;
+- Return ONLY the improved instruction text, no explanations or markdown formatting`;
 
     const userMessage = custom_prompt
       ? `Improve this code review prompt template with these specific instructions:\n\n${custom_prompt}\n\nTemplate to improve:\n\n${content}`
@@ -169,5 +173,5 @@ promptTemplateRouter.post("/test", async (req, res) => {
 +  return jwt.verify(token, SECRET);
  }`);
 
-  res.json({ rendered });
+  res.json({ rendered: rendered + FIXED_OUTPUT_FORMAT });
 });

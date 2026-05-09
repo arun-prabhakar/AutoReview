@@ -155,7 +155,7 @@ export async function fetchOpenPullRequests(
   const headers = makeAuthHeader(appPassword, username);
 
   const res = await retryFetch(
-    `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/pullrequests?state=OPEN&fields=values.id,values.title,values.source.commit.hash,values.updated_on`,
+    `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/pullrequests?state=OPEN&fields=values.id,values.title,values.source.commit.hash,values.source.branch.name,values.destination.branch.name,values.author.display_name,values.updated_on`,
     { headers }
   );
 
@@ -169,6 +169,9 @@ export async function fetchOpenPullRequests(
     id: String(pr.id),
     title: String(pr.title || ""),
     commitHash: (pr.source as Record<string, Record<string, string>>)?.commit?.hash || "",
+    sourceBranch: (pr.source as Record<string, Record<string, string>>)?.branch?.name || "",
+    destinationBranch: (pr.destination as Record<string, Record<string, string>>)?.branch?.name || "",
+    author: (pr.author as Record<string, string>)?.display_name || "",
     updatedOn: String(pr.updated_on || ""),
   }));
 }
@@ -177,8 +180,68 @@ export type PullRequestInfo = {
   id: string;
   title: string;
   commitHash: string;
+  sourceBranch: string;
+  destinationBranch: string;
+  author: string;
   updatedOn: string;
 };
+
+export async function fetchPrInfo(
+  workspace: string,
+  repoSlug: string,
+  prId: string,
+  appPassword: string,
+  username: string
+): Promise<PullRequestInfo> {
+  const headers = makeAuthHeader(appPassword, username);
+  const res = await retryFetch(
+    `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/pullrequests/${prId}`,
+    { headers }
+  );
+  if (!res.ok) throw new Error(`Bitbucket PR API error: ${res.status}`);
+  const pr = await res.json() as Record<string, unknown>;
+  return {
+    id: String(pr.id),
+    title: String(pr.title || ""),
+    commitHash: ((pr.source as Record<string, Record<string, string>>)?.commit?.hash) || "",
+    sourceBranch: ((pr.source as Record<string, Record<string, string>>)?.branch?.name) || "",
+    destinationBranch: ((pr.destination as Record<string, Record<string, string>>)?.branch?.name) || "",
+    author: ((pr.author as Record<string, string>)?.display_name) || "",
+    updatedOn: String(pr.updated_on || ""),
+  };
+}
+
+export async function fetchPrDiff(
+  workspace: string,
+  repoSlug: string,
+  prId: string,
+  appPassword: string,
+  username: string
+): Promise<{ diff: string; pr: PullRequestInfo; truncated: boolean }> {
+  const headers = makeAuthHeader(appPassword, username);
+
+  const [pr, diffRes] = await Promise.all([
+    fetchPrInfo(workspace, repoSlug, prId, appPassword, username),
+    retryFetch(
+      `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/pullrequests/${prId}/diff`,
+      { headers }
+    ),
+  ]);
+
+  if (!diffRes.ok) throw new Error(`Bitbucket PR diff API error: ${diffRes.status}`);
+
+  let diff = await diffRes.text();
+  let truncated = false;
+
+  const MAX_DIFF_SIZE = 100_000;
+  if (diff.length > MAX_DIFF_SIZE) {
+    diff = diff.substring(0, MAX_DIFF_SIZE);
+    truncated = true;
+    logger.warn(`PR diff truncated`, { prId, maxSize: MAX_DIFF_SIZE });
+  }
+
+  return { diff, pr, truncated };
+}
 
 export type CommitInfo = {
   hash: string;

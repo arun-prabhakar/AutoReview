@@ -7,6 +7,7 @@ import { runManualReview } from "./manual-review-service.js";
 import { logger } from "../middleware/index.js";
 
 let pollingTimer: ReturnType<typeof setInterval> | null = null;
+const lastSeenCommits = new Map<string, string>();
 
 export function startAutoReviewPolling(): void {
   (async () => {
@@ -29,6 +30,7 @@ export function stopAutoReviewPolling(): void {
     clearInterval(pollingTimer);
     pollingTimer = null;
   }
+  lastSeenCommits.clear();
 }
 
 async function pollAllRepos(): Promise<void> {
@@ -61,14 +63,39 @@ async function pollRepo(repo: RepositoryConfig): Promise<void> {
 }
 
 async function pollCommits(repo: RepositoryConfig, password: string, username: string): Promise<void> {
-  const commits = await fetchRecentCommits(repo.workspace, repo.slug, repo.branch, password, username);
+  const commits = await fetchRecentCommits(repo.workspace, repo.slug, repo.branch || "main", password, username);
+  if (commits.length === 0) return;
 
-  for (const commit of commits) {
-    const existing = await findExistingReview(repo.id, commit.hash);
-    if (!existing || existing.status === "failed") {
-      await runManualReview(repo.id, commit.hash);
+  const cursor = lastSeenCommits.get(repo.id);
+  let newCommits = commits;
+
+  if (cursor) {
+    const cursorIndex = commits.findIndex(c => c.hash === cursor);
+    if (cursorIndex === -1) {
+      // Cursor not found — commits may have been force-pushed or very many new commits
+      // Process only the most recent commit as a safe fallback
+      newCommits = [commits[0]];
+    } else if (cursorIndex === 0) {
+      // No new commits
+      return;
+    } else {
+      // Process only commits newer than cursor
+      newCommits = commits.slice(0, cursorIndex);
     }
   }
+
+  for (const commit of newCommits) {
+    const existing = await findExistingReview(repo.id, commit.hash);
+    if (!existing || existing.status === "failed") {
+      try {
+        await runManualReview(repo.id, commit.hash);
+      } catch (error) {
+        // Log but continue processing other commits
+      }
+    }
+  }
+
+  lastSeenCommits.set(repo.id, commits[0].hash);
 }
 
 async function pollPullRequests(repo: RepositoryConfig, password: string, username: string): Promise<void> {
