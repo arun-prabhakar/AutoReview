@@ -1,14 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import express from "express";
 import request from "supertest";
-import { authRouter } from "../routes/auth.js";
+import { authRouter, usersRouter } from "../routes/auth.js";
 import { initDb, getDb } from "../db/index.js";
+import { getJwtSecret } from "../config.js";
 import jwt from "jsonwebtoken";
 import fs from "fs";
 import path from "path";
 import os from "os";
-
-const JWT_SECRET = process.env.JWT_SECRET || "autoreview-jwt-secret-change-in-prod";
 let adminToken: string;
 let adminUserId: string;
 let testDbPath: string;
@@ -29,11 +28,12 @@ describe("auth routes", () => {
     const result = db.exec("SELECT id FROM users WHERE username = 'admin'");
     adminUserId = result[0]?.values?.[0]?.[0] as string;
 
-    adminToken = jwt.sign({ id: adminUserId, username: "admin", role: "admin" }, JWT_SECRET, { expiresIn: "1h" });
+    adminToken = jwt.sign({ id: adminUserId, username: "admin", role: "admin" }, getJwtSecret(), { expiresIn: "1h" });
 
     app = express();
     app.use(express.json());
     app.use("/api/auth", authRouter);
+    app.use("/api/auth/users", usersRouter);
   });
 
   afterAll(() => {

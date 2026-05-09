@@ -1,9 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll } from "vitest";
 import jwt from "jsonwebtoken";
 import { jwtAuth, requireRole } from "../middleware/jwt-auth.js";
+import { getJwtSecret } from "../config.js";
 import type { Request, Response, NextFunction } from "express";
-
-const JWT_SECRET = process.env.JWT_SECRET || "autoreview-jwt-secret-change-in-prod";
 
 function mockRes(): Response {
   const res = {
@@ -18,8 +17,12 @@ function mockNext(): NextFunction {
 }
 
 describe("jwtAuth", () => {
+  beforeAll(() => {
+    process.env.JWT_SECRET = "test-jwt-secret-for-tests";
+  });
+
   it("should set req.user for valid token", () => {
-    const token = jwt.sign({ id: "1", username: "admin", role: "admin" }, JWT_SECRET);
+    const token = jwt.sign({ id: "1", username: "admin", role: "admin" }, getJwtSecret());
     const req = { headers: { authorization: `Bearer ${token}` } } as Partial<Request> as Request;
     const res = mockRes();
     const next = mockNext();
@@ -54,7 +57,7 @@ describe("jwtAuth", () => {
   });
 
   it("should return 401 for expired token", () => {
-    const token = jwt.sign({ id: "1", username: "admin", role: "admin" }, JWT_SECRET, { expiresIn: "-1s" });
+    const token = jwt.sign({ id: "1", username: "admin", role: "admin" }, getJwtSecret(), { expiresIn: "-1s" });
     const req = { headers: { authorization: `Bearer ${token}` } } as Partial<Request> as Request;
     const res = mockRes();
     const next = mockNext();
