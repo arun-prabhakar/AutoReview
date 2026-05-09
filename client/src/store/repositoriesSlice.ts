@@ -1,15 +1,15 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { api } from "../services/api";
+import type { Repository } from "../types";
 
 export const fetchRepositories = createAsyncThunk("repositories/fetchAll", async () => {
-  const response = await api.get("/api/repositories");
-  return response.json();
+  return api.get<Repository[]>("/api/repositories");
 });
 
 const repositoriesSlice = createSlice({
   name: "repositories",
   initialState: {
-    items: [] as Record<string, unknown>[],
+    items: [] as Repository[],
     loading: false,
     error: null as string | null,
   },

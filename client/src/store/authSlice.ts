@@ -5,6 +5,7 @@ export interface AuthUser {
   id: string;
   username: string;
   role: "admin" | "user";
+  must_change_password?: boolean;
 }
 
 interface AuthState {
@@ -40,12 +41,24 @@ const initialState: AuthState = {
 export const loginUser = createAsyncThunk(
   "auth/login",
   async ({ username, password }: { username: string; password: string }, { rejectWithValue }) => {
-    const res = await api.post("/api/auth/login", { username, password });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({ error: "Login failed" }));
-      return rejectWithValue(data.error || "Login failed");
+    try {
+      return await api.post<{ token: string; user: AuthUser }>("/api/auth/login", { username, password });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Login failed";
+      return rejectWithValue(message);
     }
-    return res.json() as Promise<{ token: string; user: AuthUser }>;
+  }
+);
+
+export const changePassword = createAsyncThunk(
+  "auth/changePassword",
+  async ({ current_password, new_password }: { current_password: string; new_password: string }, { rejectWithValue }) => {
+    try {
+      return await api.post<{ message: string }>("/api/auth/change-password", { current_password, new_password });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to change password";
+      return rejectWithValue(message);
+    }
   }
 );
 
@@ -82,6 +95,12 @@ const authSlice = createSlice({
       .addCase(loginUser.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
+      })
+      .addCase(changePassword.fulfilled, (state) => {
+        if (state.user) {
+          state.user.must_change_password = false;
+          localStorage.setItem(USER_KEY, JSON.stringify(state.user));
+        }
       });
   },
 });
