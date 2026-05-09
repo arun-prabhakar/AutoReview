@@ -145,7 +145,7 @@ authRouter.post("/change-password", jwtAuth, async (req, res) => {
     return;
   }
 
-  const hash = await bcrypt.hash(new_password, 10);
+  const hash = await bcrypt.hash(new_password, 8);
   await run(
     "UPDATE users SET password_hash = $1, must_change_password = false, token_version = token_version + 1, updated_at = NOW() WHERE id = $2",
     [hash, user.id],
@@ -187,7 +187,7 @@ usersRouter.post("/", async (req, res) => {
   }
 
   const id = uuid();
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(password, 8);
 
   await run(
     "INSERT INTO users (id, username, name, password_hash, role, must_change_password) VALUES ($1, $2, $3, $4, $5, true)",
@@ -276,7 +276,7 @@ usersRouter.put("/:id/password", async (req, res) => {
     return;
   }
 
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(password, 8);
   await run(
     "UPDATE users SET password_hash = $1, must_change_password = true, token_version = token_version + 1, updated_at = NOW() WHERE id = $2",
     [hash, id],

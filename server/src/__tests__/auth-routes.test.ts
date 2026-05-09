@@ -1,16 +1,17 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import cookieParser from "cookie-parser";
 import { authRouter, usersRouter } from "../routes/auth.js";
 import { getJwtSecret } from "../config.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { v4 as uuid } from "uuid";
 
+const mockQuery = vi.fn();
+
 vi.mock("../db/index.js", () => ({
-  getPool: () => ({
-    query: vi.fn(),
-  }),
+  getPool: () => ({ query: mockQuery }),
   initDb: vi.fn(),
   closePool: vi.fn(),
 }));
@@ -20,20 +21,17 @@ const ADMIN_PASSWORD = "adminpassword";
 
 let adminToken: string;
 let adminUserId: string;
-let mockUsers: Array<{ id: string; username: string; password_hash: string; role: string; must_change_password: boolean; token_version: number; created_at: string }>;
+let mockUsers: Array<{ id: string; username: string; name: string | null; password_hash: string; role: string; must_change_password: boolean; token_version: number; created_at: string }>;
 
 function resetMockData() {
   adminUserId = uuid();
   const adminHash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
   mockUsers = [
-    { id: adminUserId, username: "admin", password_hash: adminHash, role: "admin", must_change_password: false, token_version: 0, created_at: new Date().toISOString() },
+    { id: adminUserId, username: "admin", name: "Admin", password_hash: adminHash, role: "admin", must_change_password: false, token_version: 0, created_at: new Date().toISOString() },
   ];
 
   adminToken = jwt.sign({ id: adminUserId, username: "admin", role: "admin", tokenVersion: 0 }, getJwtSecret(), { expiresIn: "1h" });
 }
-
-import { getPool } from "../db/index.js";
-const mockedPool = getPool() as unknown as { query: ReturnType<typeof vi.fn> };
 
 function mockQueryImpl(sql: string, params: unknown[]) {
   const sqlLower = sql.trim().toLowerCase();
@@ -41,18 +39,20 @@ function mockQueryImpl(sql: string, params: unknown[]) {
   if (sqlLower.startsWith("select")) {
     if (sqlLower.includes("from users") && sqlLower.includes("where username")) {
       const user = mockUsers.find(u => u.username === params[0]);
-      const cols = sqlLower.includes("password_hash") ? ["id", "username", "password_hash", "role", "must_change_password", "token_version"] : ["id"];
+      const cols = sqlLower.includes("password_hash")
+        ? ["id", "username", "name", "password_hash", "role", "must_change_password", "token_version"]
+        : ["id"];
       return { rows: user ? [cols.reduce((obj, col) => ({ ...obj, [col]: (user as Record<string, unknown>)[col] }), {})] : [] };
     }
     if (sqlLower.includes("from users") && sqlLower.includes("where id")) {
       const uid = params[0] as string;
       const user = mockUsers.find(u => u.id === uid);
       if (sqlLower.includes("password_hash")) {
-        const cols = ["id", "username", "password_hash", "role", "must_change_password", "token_version"];
+        const cols = ["id", "username", "name", "password_hash", "role", "must_change_password", "token_version"];
         return { rows: user ? [cols.reduce((obj, col) => ({ ...obj, [col]: (user as Record<string, unknown>)[col] }), {})] : [] };
       }
       if (sqlLower.includes("must_change_password")) {
-        return { rows: user ? [{ id: user.id, username: user.username, role: user.role, must_change_password: user.must_change_password, created_at: user.created_at }] : [] };
+        return { rows: user ? [{ id: user.id, username: user.username, name: user.name, role: user.role, must_change_password: user.must_change_password, token_version: user.token_version, created_at: user.created_at }] : [] };
       }
       if (sqlLower.includes("role")) {
         return { rows: user ? [{ id: user.id, role: user.role }] : [] };
@@ -73,9 +73,10 @@ function mockQueryImpl(sql: string, params: unknown[]) {
   if (sqlLower.startsWith("insert into users")) {
     const newId = params[0] as string;
     const newUsername = params[1] as string;
-    const newHash = params[2] as string;
-    const newRole = params[3] as string;
-    mockUsers.push({ id: newId, username: newUsername, password_hash: newHash, role: newRole, must_change_password: true, token_version: 0, created_at: new Date().toISOString() });
+    const newName = params[2] as string | null;
+    const newHash = params[3] as string;
+    const newRole = params[4] as string;
+    mockUsers.push({ id: newId, username: newUsername, name: newName, password_hash: newHash, role: newRole, must_change_password: true, token_version: 0, created_at: new Date().toISOString() });
     return { rows: [] };
   }
 
@@ -122,9 +123,10 @@ describe("auth routes", () => {
 
     resetMockData();
 
-    mockedPool.query.mockImplementation(mockQueryImpl);
+    mockQuery.mockImplementation(mockQueryImpl);
 
     app = express();
+    app.use(cookieParser());
     app.use(express.json());
     app.use("/api/auth", authRouter);
     app.use("/api/auth/users", usersRouter);

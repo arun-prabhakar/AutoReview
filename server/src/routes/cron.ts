@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "crypto";
 import { getAutoReviewRepos, type RepositoryConfig } from "../services/repository-service.js";
 import { findExistingReview } from "../services/storage-service.js";
 import { fetchRecentCommits, fetchOpenPullRequests } from "../services/bitbucket-client.js";
@@ -12,10 +13,17 @@ export const cronRouter = Router();
 
 const lastSeenCommits = new Map<string, string>();
 
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf-8");
+  const bufB = Buffer.from(b, "utf-8");
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 cronRouter.post("/auto-review", async (req, res) => {
   const secret = getCronSecret();
   const cronSecret = req.headers.authorization?.replace("Bearer ", "");
-  if (!secret || !cronSecret || cronSecret !== secret) {
+  if (!secret || !cronSecret || !safeEqual(cronSecret, secret)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }

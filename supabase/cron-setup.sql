@@ -5,38 +5,17 @@
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
 
--- 2. Grant permissions to the postgres role
-GRANT USAGE ON SCHEMA cron TO postgres;
-GRANT USAGE ON SCHEMA net TO postgres;
-
--- 3. Schedule auto-review to run every 5 minutes
--- Replace <YOUR_APP_URL> with your Cloud Run URL
--- Replace <YOUR_CRON_SECRET> with a secure random string (same as CRON_SECRET env var)
---
--- Example:
---   SELECT cron.schedule(
---     'autoreview-poll',
---     '*/5 * * * *',
---     $$
---     SELECT net.http_post(
---       url := 'https://autoreview-xxxxx-uc.a.run.app/api/cron/auto-review',
---       headers := '{"Authorization": "Bearer your-cron-secret-here"}'::jsonb
---     );
---     $$
---   );
-
--- Uncomment and fill in your values below:
-
--- SELECT cron.schedule(
---   'autoreview-poll',
---   '*/5 * * * *',
---   $$
---   SELECT net.http_post(
---     url := '<YOUR_APP_URL>/api/cron/auto-review',
---     headers := jsonb_build_object('Authorization', 'Bearer ' || '<YOUR_CRON_SECRET>')
---   );
---   $$
--- );
+-- 2. Schedule auto-review to run every 5 minutes
+SELECT cron.schedule(
+  'autoreview-poll',
+  '*/5 * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://autoreview-951159321728.us-central1.run.app/api/cron/auto-review',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || 'bc02e71174fc99d1720e04984d12cb82e4e50af8b2fc17c0e7858390db2b03ee')
+  );
+  $$
+);
 
 -- To verify the scheduled job:
 -- SELECT * FROM cron.job;
