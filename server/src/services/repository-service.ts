@@ -23,6 +23,7 @@ export type RepositoryConfig = {
   llm_model: string;
   llm_max_tokens: number;
   llm_temperature: number;
+  multi_pass_review: boolean;
 };
 
 export async function getRepoById(id: string): Promise<RepositoryConfig | undefined> {

@@ -57,14 +57,21 @@ function getOpenAIClient(provider: ProviderConfig): OpenAI {
   return client;
 }
 
+export type TokenUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+};
+
 export async function analyzeDiff(
   diff: string,
   commit: CommitInfo,
   repo: RepositoryConfig,
   promptTemplate: string,
   provider: ProviderConfig,
-  truncated = false
-): Promise<{ findings: RawFinding[]; incomplete: boolean }> {
+  truncated = false,
+  projectContext?: string
+): Promise<{ findings: RawFinding[]; incomplete: boolean; tokenUsage: TokenUsage }> {
   let prompt = promptTemplate
     .replace("{{diff}}", diff)
     .replace("{{file_paths}}", extractFilePaths(diff))
@@ -74,6 +81,10 @@ export async function analyzeDiff(
     .replace("{{commit_message}}", commit.message)
     .replace("{{branch}}", repo.branch)
     .replace("{{repository}}", repo.name);
+
+  if (projectContext) {
+    prompt += `\n\n## Project-Specific Context\n\nThe team has provided the following context about their codebase and coding standards. Use this to tailor your review:\n\n${projectContext}`;
+  }
 
   prompt += FIXED_OUTPUT_FORMAT;
 
@@ -92,8 +103,14 @@ export async function analyzeDiff(
 
   const content = response.choices?.[0]?.message?.content || "[]";
 
+  const tokenUsage: TokenUsage = {
+    prompt_tokens: response.usage?.prompt_tokens ?? 0,
+    completion_tokens: response.usage?.completion_tokens ?? 0,
+    total_tokens: response.usage?.total_tokens ?? 0,
+  };
+
   const findings = filterExcludedPaths(parseFindings(content), repo.excluded_paths);
-  return { findings, incomplete: truncated };
+  return { findings, incomplete: truncated, tokenUsage };
 }
 
 const DEFAULT_EXCLUSIONS = [
@@ -205,4 +222,73 @@ export function parseFindings(content: string): RawFinding[] {
     });
     return [];
   }
+}
+
+const SPECIALIZED_PROMPTS: Record<string, string> = {
+  security: `You are a senior security engineer performing a focused security audit. Identify ONLY security vulnerabilities: injection attacks, authentication issues, authorization bypasses, data exposure, insecure cryptography, SSRF, XSS, CSRF, path traversal, deserialization flaws, and similar. Do NOT flag style or maintainability issues.`,
+  performance: `You are a performance engineering specialist. Identify ONLY performance problems: N+1 queries, memory leaks, unnecessary allocations, missing indexes, inefficient algorithms, unbounded growth, blocking operations in async code, and similar. Do NOT flag style or security issues.`,
+  maintainability: `You are a code quality specialist focused on long-term maintainability. Identify issues like: dead code, overly complex functions, duplicated logic, poor naming, missing error handling, hardcoded values, tight coupling, and similar. Do NOT flag security or performance unless severe.`,
+};
+
+export type MultiPassResult = {
+  findings: RawFinding[];
+  tokenUsage: TokenUsage;
+  passes: { focus: string; findings: number }[];
+};
+
+export async function multiPassReview(
+  diff: string,
+  commit: CommitInfo,
+  repo: RepositoryConfig,
+  baseTemplate: string,
+  provider: ProviderConfig,
+  truncated: boolean,
+  projectContext?: string
+): Promise<MultiPassResult> {
+  const passes: { focus: string; findings: number }[] = [];
+  const allFindings: RawFinding[] = [];
+  let totalUsage: TokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
+  const focuses = Object.keys(SPECIALIZED_PROMPTS);
+
+  for (const focus of focuses) {
+    const specializedSuffix = `\n\n## Specialized Focus\n\n${SPECIALIZED_PROMPTS[focus]}\n\nOnly report findings relevant to this focus area. If no ${focus}-related issues exist, return an empty array [].`;
+    const template = baseTemplate + specializedSuffix;
+
+    try {
+      const { findings, tokenUsage } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext);
+      allFindings.push(...findings);
+      totalUsage = {
+        prompt_tokens: totalUsage.prompt_tokens + tokenUsage.prompt_tokens,
+        completion_tokens: totalUsage.completion_tokens + tokenUsage.completion_tokens,
+        total_tokens: totalUsage.total_tokens + tokenUsage.total_tokens,
+      };
+      passes.push({ focus, findings: findings.length });
+    } catch (err) {
+      logger.warn(`Multi-pass ${focus} review failed`, { error: String(err) });
+      passes.push({ focus, findings: 0 });
+    }
+  }
+
+  const deduplicated = deduplicateFindings(allFindings);
+
+  return { findings: deduplicated, tokenUsage: totalUsage, passes };
+}
+
+function deduplicateFindings(findings: RawFinding[]): RawFinding[] {
+  const seen = new Map<string, RawFinding>();
+  for (const f of findings) {
+    const key = `${f.file_path}:${f.line_number}:${f.summary.substring(0, 60).toLowerCase()}`;
+    if (!seen.has(key)) {
+      seen.set(key, f);
+    } else {
+      const existing = seen.get(key)!;
+      if (RISK_ORDER[f.risk_level] < RISK_ORDER[existing.risk_level]) {
+        seen.set(key, f);
+      }
+    }
+  }
+  return Array.from(seen.values()).sort(
+    (a, b) => (RISK_ORDER[a.risk_level] ?? 3) - (RISK_ORDER[b.risk_level] ?? 3)
+  );
 }
