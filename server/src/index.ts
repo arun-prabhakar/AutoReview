@@ -14,6 +14,10 @@ import { promptTemplateRouter } from "./routes/prompt-templates.js";
 import { providersRouter } from "./routes/providers.js";
 import { authRouter, usersRouter } from "./routes/auth.js";
 import { cronRouter } from "./routes/cron.js";
+import { findingsRouter } from "./routes/findings.js";
+import { notificationsRouter } from "./routes/notifications.js";
+import { suppressionsRouter } from "./routes/suppressions.js";
+import { analyticsRouter } from "./routes/analytics.js";
 import { requestLogger, errorHandler, logger } from "./middleware/index.js";
 import { jwtAuth, requireRole } from "./middleware/jwt-auth.js";
 
@@ -68,6 +72,10 @@ app.get("/api/health", publicLimiter, (_req, res) => {
 app.use("/api", apiLimiter, jwtAuth);
 
 app.use("/api/reviews", reviewsRouter);
+app.use("/api/findings", findingsRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api/analytics", analyticsRouter);
+app.use("/api/suppressions", suppressionsRouter);
 app.use("/api/repositories", repositoriesRouter);
 app.use("/api/settings", requireRole("admin"), settingsRouter);
 app.use("/api/credentials", requireRole("admin"), credentialsRouter);

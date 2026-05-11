@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { all, get } from "../db/queries.js";
-import { runManualReview, runPrReview } from "../services/manual-review-service.js";
+import { runManualReview, runPrReview, rerunReview } from "../services/manual-review-service.js";
 import { getRepoById } from "../services/repository-service.js";
 import { getDecryptedPassword } from "../services/credential-service.js";
 import { fetchOpenPullRequests } from "../services/bitbucket-client.js";
 import { requireRole } from "../middleware/jwt-auth.js";
-import { deleteReview } from "../services/storage-service.js";
+import { deleteReview, getReviewChain } from "../services/storage-service.js";
 
 export const reviewsRouter = Router();
 
@@ -143,4 +143,20 @@ reviewsRouter.post("/pr", async (req, res) => {
     const status = message.includes("not found") ? 404 : 500;
     res.status(status).json({ error: message });
   }
+});
+
+reviewsRouter.post("/:id/rereview", async (req, res) => {
+  try {
+    const result = await rerunReview(req.params.id, req.user?.username);
+    res.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    const status = message.includes("not found") ? 404 : 500;
+    res.status(status).json({ error: message });
+  }
+});
+
+reviewsRouter.get("/:id/chain", async (req, res) => {
+  const chain = await getReviewChain(req.params.id);
+  res.json(chain);
 });

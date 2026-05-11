@@ -155,6 +155,7 @@ describe("analyzeDiff", () => {
       auto_review_enabled: true, poll_interval_minutes: 5, trigger_on_commit: true,
       generate_email: true, post_to_bitbucket: false, notification_recipients: null,
       include_commit_author: false, llm_provider: "google", llm_provider_id: "prov-1",
+      multi_pass_review: false,
     };
 
     const provider = { apiBase: "https://api.example.com/v1", apiKey: "test-key" };

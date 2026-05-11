@@ -61,7 +61,7 @@ const ALLOWED_UPDATE_FIELDS: readonly string[] = [
   "poll_interval_minutes", "trigger_on_commit", "trigger_on_pr_update", "strictness",
   "generate_email", "post_to_bitbucket", "excluded_paths", "notification_recipients",
   "include_commit_author", "llm_provider", "llm_provider_id", "llm_model", "llm_max_tokens",
-  "llm_temperature", "smtp_host", "smtp_port", "smtp_user", "smtp_from_address",
+  "llm_temperature", "smtp_host", "smtp_port", "smtp_user", "smtp_from_address", "multi_pass_review",
 ] as const;
 
 repositoriesRouter.put("/:id", requireRole("admin"), async (req, res) => {
