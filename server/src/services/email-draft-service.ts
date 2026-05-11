@@ -3,11 +3,38 @@ import type { RawFinding } from "./review-engine.js";
 import { get } from "../db/queries.js";
 import { decrypt } from "./encryption-service.js";
 
+export type ReviewMetadata = {
+  repoName: string;
+  commitHash?: string;
+  prId?: string;
+  branch?: string;
+  strictness?: string;
+  reviewMode?: string;
+  reviewedBy?: string;
+  model?: string;
+  tokensUsed?: number;
+  estimatedCost?: number;
+  duration?: string;
+};
+
+function countDiffStats(diff: string): { filesChanged: number; linesAdded: number; linesRemoved: number } {
+  const fileMatches = diff.match(/^diff --git /gm);
+  const addMatches = diff.match(/^\+(?!\+\+|\+)/gm);
+  const removeMatches = diff.match(/^-(?!--|-)/gm);
+  return {
+    filesChanged: fileMatches?.length ?? 0,
+    linesAdded: addMatches?.length ?? 0,
+    linesRemoved: removeMatches?.length ?? 0,
+  };
+}
+
 export function generateEmailDraft(
   repoName: string,
   findings: RawFinding[],
   aiOverview: string,
-  changedFiles?: string[]
+  changedFiles?: string[],
+  diff?: string,
+  metadata?: ReviewMetadata
 ): string {
   const grouped = {
     must_fix: findings.filter((f) => f.risk_level === "must_fix"),
@@ -15,56 +42,122 @@ export function generateEmailDraft(
     ignore: findings.filter((f) => f.risk_level === "ignore"),
   };
 
+  const diffStats = diff ? countDiffStats(diff) : null;
+  const totalLines = (diffStats?.linesAdded ?? 0) + (diffStats?.linesRemoved ?? 0);
+
   const formatFinding = (f: RawFinding, index: number) => {
     const location = f.file_path + (f.line_number ? `:${f.line_number}` : "");
     const category = f.category ? ` [${f.category}]` : "";
-    const fix = f.suggested_fix ? `\n     Suggested Fix:\n       ${f.suggested_fix.replace(/\n/g, "\n       ")}` : "";
-    return `  ${index + 1}. ${f.summary}${category}\n     File: ${location}\n     ${f.explanation}${fix}`;
+    const severity = f.risk_level === "must_fix" ? "🔴" : f.risk_level === "should_fix_soon" ? "🟡" : "⚪";
+    const fix = f.suggested_fix
+      ? `\n\n     Suggested Fix:\n       ${f.suggested_fix.replace(/\n/g, "\n       ")}`
+      : "";
+    return `  ${index + 1}. ${severity} ${f.summary}${category}\n     Location: ${location}\n     ${f.explanation}${fix}`;
   };
 
-  const sectionBlock = (label: string, items: RawFinding[]) => {
+  const sectionBlock = (label: string, icon: string, items: RawFinding[]) => {
     if (items.length === 0) return "";
-    return `${label} (${items.length}):\n\n${items.map(formatFinding).join("\n\n")}\n\n`;
+    return `${icon} ${label} (${items.length})\n${"─".repeat(50)}\n\n${items.map((f, i) => formatFinding(f, i)).join("\n\n")}\n\n`;
   };
 
   const filesList = changedFiles && changedFiles.length > 0
-    ? changedFiles.map((f) => `  • ${f}`).join("\n")
-    : "  (none)";
+    ? changedFiles.map((f, i) => `  ${i + 1}. ${f}`).join("\n")
+    : "  (none detected)";
 
-  const overviewSection = [
-    aiOverview,
-    "",
-    `Files Reviewed (${changedFiles?.length ?? 0}):`,
-    filesList,
-  ].join("\n");
+  const identifier = metadata?.prId
+    ? `Pull Request #${metadata.prId}`
+    : metadata?.commitHash
+      ? `Commit ${metadata.commitHash.substring(0, 12)}`
+      : "Code changes";
+
+  const riskAssessment = grouped.must_fix.length > 0
+    ? "⛔ HIGH RISK — Action required before merge"
+    : grouped.should_fix_soon.length > 0
+      ? "⚠️  MODERATE RISK — Review recommended"
+      : findings.length > 0
+        ? "✅ LOW RISK — Informational findings only"
+        : "✅ CLEAN — No issues detected";
+
+  const overviewSection = aiOverview && aiOverview !== "Review completed."
+    ? aiOverview
+    : "See findings below for details.";
 
   const findingsBody = findings.length === 0
-    ? "No issues found. The diff looks clean.\n"
-    : `${sectionBlock("MUST FIX", grouped.must_fix)}${sectionBlock("SHOULD FIX SOON", grouped.should_fix_soon)}${sectionBlock("CAN IGNORE", grouped.ignore)}`;
+    ? "✅ The diff looks clean. No issues were found during this review.\n"
+    : `${sectionBlock("MUST FIX", "🔴", grouped.must_fix)}${sectionBlock("SHOULD FIX SOON", "🟡", grouped.should_fix_soon)}${sectionBlock("INFORMATIONAL", "⚪", grouped.ignore)}`;
+
+  const categoryBreakdown = findings.length > 0
+    ? findings.reduce<Record<string, number>>((acc, f) => {
+        const cat = f.category || "other";
+        acc[cat] = (acc[cat] || 0) + 1;
+        return acc;
+      }, {})
+    : null;
+
+  const categoryLines = categoryBreakdown
+    ? Object.entries(categoryBreakdown)
+        .sort(([, a], [, b]) => b - a)
+        .map(([cat, count]) => `     ${cat.padEnd(20)} ${count}`)
+        .join("\n")
+    : "     (none)";
 
   return `Hi Team,
 
-AutoReview completed a code review for ${repoName}.
+AutoReview has completed an automated code review for ${repoName}.
 
-─────────────────────────────────────────────
-OVERVIEW
-─────────────────────────────────────────────
+══════════════════════════════════════════════════
+  RISK ASSESSMENT: ${riskAssessment}
+══════════════════════════════════════════════════
+
+┌──────────────────────────────────────────────┐
+│  REVIEW DETAILS                               │
+└──────────────────────────────────────────────┘
+
+  Repository    : ${repoName}
+  Target        : ${identifier}
+  Branch        : ${metadata?.branch || "N/A"}
+  Review Mode   : ${metadata?.reviewMode === "pr" ? "Pull Request" : "Manual Commit"}
+  Strictness    : ${metadata?.strictness || "balanced"}
+  Reviewed By   : ${metadata?.reviewedBy || "AutoReview AI"}
+${metadata?.model ? `  AI Model      : ${metadata.model}` : ""}
+${diffStats ? `  Files Changed : ${diffStats.filesChanged}` : ""}
+${diffStats ? `  Lines Reviewed: ~${totalLines} (${diffStats.linesAdded} added, ${diffStats.linesRemoved} removed)` : ""}
+${metadata?.tokensUsed ? `  Tokens Used   : ${metadata.tokensUsed.toLocaleString()}` : ""}
+${metadata?.estimatedCost ? `  Est. Cost     : $${metadata.estimatedCost.toFixed(4)}` : ""}
+
+┌──────────────────────────────────────────────┐
+│  AI OVERVIEW                                  │
+└──────────────────────────────────────────────┘
 
 ${overviewSection}
 
-─────────────────────────────────────────────
-SUMMARY
-─────────────────────────────────────────────
-  Must Fix        : ${grouped.must_fix.length}
-  Should Fix Soon : ${grouped.should_fix_soon.length}
-  Can Ignore      : ${grouped.ignore.length}
-  Total Findings  : ${findings.length}
+┌──────────────────────────────────────────────┐
+│  FILES REVIEWED (${changedFiles?.length ?? 0})                              │
+└──────────────────────────────────────────────┘
 
-─────────────────────────────────────────────
-FINDINGS
-─────────────────────────────────────────────
+${filesList}
 
-${findingsBody}─────────────────────────────────────────────
+┌──────────────────────────────────────────────┐
+│  FINDINGS SUMMARY                             │
+└──────────────────────────────────────────────┘
+
+  🔴 Must Fix         : ${grouped.must_fix.length}
+  🟡 Should Fix Soon  : ${grouped.should_fix_soon.length}
+  ⚪ Informational     : ${grouped.ignore.length}
+  ─────────────────────────────────
+  Total               : ${findings.length}
+
+  By Category:
+${categoryLines}
+
+┌──────────────────────────────────────────────┐
+│  DETAILED FINDINGS                             │
+└──────────────────────────────────────────────┘
+
+${findingsBody}══════════════════════════════════════════════════
+
+This review was generated automatically by AutoReview.
+Review findings are AI-generated and should be validated by a human reviewer.
 
 Regards,
 AutoReview`;
@@ -75,7 +168,9 @@ export async function sendReviewEmail(
   repoName: string,
   findings: RawFinding[],
   aiOverview: string,
-  changedFiles?: string[]
+  changedFiles?: string[],
+  diff?: string,
+  metadata?: ReviewMetadata
 ): Promise<void> {
   const repo = await get<{
     smtp_host: string; smtp_port: number; smtp_user: string;
@@ -95,9 +190,15 @@ export async function sendReviewEmail(
   const mustCount = findings.filter((f) => f.risk_level === "must_fix").length;
   const statusTag = mustCount > 0 ? `⚠ ${mustCount} Must Fix` : findings.length > 0 ? `${findings.length} Findings` : "Clean";
 
-  const subject = `[AutoReview] ${repoName} — ${statusTag}`;
+  const identifier = metadata?.prId
+    ? `PR #${metadata.prId}`
+    : metadata?.commitHash
+      ? metadata.commitHash.substring(0, 8)
+      : "";
 
-  const body = generateEmailDraft(repoName, findings, aiOverview, changedFiles);
+  const subject = `[AutoReview] ${repoName}${identifier ? ` (${identifier})` : ""} — ${statusTag}`;
+
+  const body = generateEmailDraft(repoName, findings, aiOverview, changedFiles, diff, metadata);
 
   await transporter.sendMail({
     from: repo.smtp_from_address,

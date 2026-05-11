@@ -248,3 +248,91 @@ export type CommitInfo = {
   date: string;
   author: { raw: string };
 };
+
+export async function fetchFileFromRepo(
+  workspace: string,
+  repoSlug: string,
+  filePath: string,
+  branch: string,
+  appPassword: string,
+  username: string
+): Promise<string | null> {
+  const headers = makeAuthHeader(appPassword, username);
+  try {
+    const res = await retryFetch(
+      `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/src/${branch}/${filePath}`,
+      { headers }
+    );
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+export async function postBuildStatus(
+  workspace: string,
+  repoSlug: string,
+  commitHash: string,
+  state: "SUCCESSFUL" | "FAILED" | "INPROGRESS",
+  name: string,
+  description: string,
+  appPassword: string,
+  username: string
+): Promise<void> {
+  const headers = { ...makeAuthHeader(appPassword, username), "Content-Type": "application/json" };
+  try {
+    const res = await retryFetch(
+      `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/commit/${commitHash}/statuses/build`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          state,
+          key: name,
+          name,
+          description,
+          url: process.env.BASE_URL ? `${process.env.BASE_URL}/reviews` : "https://autoreview.app",
+        }),
+      }
+    );
+    if (!res.ok) {
+      logger.warn(`Failed to post build status`, { status: res.status, commitHash });
+    }
+  } catch (err) {
+    logger.warn(`Failed to post build status`, { error: String(err) });
+  }
+}
+
+export async function postInlinePrComment(
+  workspace: string,
+  repoSlug: string,
+  pullRequestId: string,
+  filePath: string,
+  lineNumber: number | null,
+  content: string,
+  appPassword: string,
+  username: string
+): Promise<void> {
+  const headers = { ...makeAuthHeader(appPassword, username), "Content-Type": "application/json" };
+  const body: Record<string, unknown> = {
+    content: { raw: content },
+  };
+  if (lineNumber && filePath) {
+    body.inline = {
+      path: filePath,
+      to: lineNumber,
+    };
+  }
+  try {
+    const res = await retryFetch(
+      `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/pullrequests/${pullRequestId}/comments`,
+      { method: "POST", headers, body: JSON.stringify(body) }
+    );
+    if (!res.ok) {
+      logger.warn(`Failed to post inline PR comment`, { status: res.status, filePath, lineNumber });
+    }
+  } catch (err) {
+    logger.warn(`Failed to post inline PR comment`, { error: String(err) });
+  }
+}

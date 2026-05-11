@@ -1,11 +1,11 @@
-import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview } from "./storage-service.js";
-import { fetchCommitDiff, fetchPrDiff, findPullRequestForCommit, postPrComment, type CommitInfo } from "./bitbucket-client.js";
+import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, updateFindingDisposition, applySuppressionRules, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, getBreachedSlaFindings, type RawFindingInput } from "./storage-service.js";
+import { fetchCommitDiff, fetchPrDiff, findPullRequestForCommit, postPrComment, postBuildStatus, postInlinePrComment, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
-import { analyzeDiff, extractFilePaths, generateDiffOverview, type RawFinding, type ProviderConfig } from "./review-engine.js";
-import { sendReviewEmail } from "./email-draft-service.js";
-import { get } from "../db/queries.js";
+import { analyzeDiff, extractFilePaths, generateDiffOverview, multiPassReview, type RawFinding, type ProviderConfig } from "./review-engine.js";
+import { sendReviewEmail, type ReviewMetadata } from "./email-draft-service.js";
+import { all, get } from "../db/queries.js";
 import { v4 as uuid } from "uuid";
 import { logger } from "../middleware/index.js";
 
@@ -49,7 +49,9 @@ async function getPromptTemplate(strictness: string): Promise<string> {
   return template?.content || "Review the following code diff and provide findings.";
 }
 
-async function performDedup(repositoryId: string, dedupKey: string, force: boolean) {
+async function performDedup(repositoryId: string, dedupKey: string, force: boolean, parentReviewId?: string) {
+  if (parentReviewId) return { action: "proceed" as const, parentReviewId };
+
   const existing = await findExistingReview(repositoryId, dedupKey);
   if (!existing) return { action: "proceed" as const };
 
@@ -58,7 +60,7 @@ async function performDedup(repositoryId: string, dedupKey: string, force: boole
       const findings = await findFindingsByReviewId(existing.id);
       return { action: "cached" as const, review: existing, findings };
     }
-    await deleteReview(existing.id);
+    return { action: "proceed" as const, parentReviewId: existing.id };
   } else if (existing.status === "pending") {
     return { action: "in_progress" as const, review: existing };
   } else if (existing.status === "failed") {
@@ -67,8 +69,19 @@ async function performDedup(repositoryId: string, dedupKey: string, force: boole
   return { action: "proceed" as const };
 }
 
-async function executeReview(ctx: ReviewContext, createdBy?: string) {
+async function executeReview(ctx: ReviewContext, createdBy?: string, parentReviewId?: string) {
   const reviewId = uuid();
+
+  let projectContext: string | undefined;
+  try {
+    const { password, username } = await resolveCredentials(ctx.repo);
+    projectContext = await fetchFileFromRepo(
+      ctx.repo.workspace, ctx.repo.slug, ".autoreview.md", ctx.repo.branch, password, username
+    ) ?? undefined;
+  } catch (err) {
+    logger.warn(`Failed to fetch .autoreview.md`, { error: String(err) });
+  }
+
   const { created } = await createReview({
     id: reviewId,
     repository_id: ctx.repo.id,
@@ -80,6 +93,12 @@ async function executeReview(ctx: ReviewContext, createdBy?: string) {
     error_message: null,
     completed_at: null,
     created_by: createdBy ?? null,
+    parent_review_id: parentReviewId ?? null,
+    tokens_prompt: null,
+    tokens_completion: null,
+    tokens_total: null,
+    estimated_cost: null,
+    project_context: projectContext ?? null,
   });
 
   if (!created) {
@@ -93,7 +112,35 @@ async function executeReview(ctx: ReviewContext, createdBy?: string) {
   try {
     const template = await getPromptTemplate(ctx.repo.strictness);
     const provider = await resolveProvider(ctx.repo);
-    const { findings, incomplete } = await analyzeDiff(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated);
+
+    let rawFindings: RawFinding[];
+    let incomplete: boolean;
+    let tokenUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+
+    if (ctx.repo.multi_pass_review) {
+      const multiResult = await multiPassReview(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext);
+      rawFindings = multiResult.findings;
+      incomplete = ctx.truncated;
+      tokenUsage = multiResult.tokenUsage;
+    } else {
+      const singleResult = await analyzeDiff(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext);
+      rawFindings = singleResult.findings;
+      incomplete = singleResult.incomplete;
+      tokenUsage = singleResult.tokenUsage;
+    }
+
+    const { filtered: findings, suppressed } = await applySuppressionRules(ctx.repo.id, rawFindings.map((f) => ({
+      file_path: f.file_path,
+      line_number: f.line_number,
+      summary: f.summary,
+      explanation: f.explanation,
+      risk_level: f.risk_level,
+      suggested_fix: f.suggested_fix,
+      category: f.category,
+    })));
+    if (suppressed.length > 0) {
+      logger.info(`Suppressed ${suppressed.length} findings for repo ${ctx.repo.name}`);
+    }
 
     let aiOverview = "";
     try {
@@ -106,14 +153,27 @@ async function executeReview(ctx: ReviewContext, createdBy?: string) {
     }
 
     await insertFindings(reviewId, findings);
+
+    const newFindingIds = await linkDuplicateFindings(ctx.repo.id, findings);
+    if (newFindingIds.length > 0) {
+      logger.info(`Linked ${newFindingIds.length} findings to existing persistent issues for ${ctx.repo.name}`);
+    }
+
+    const modelCostPerToken = estimateCost(ctx.repo.llm_model, tokenUsage);
     await updateReviewStatus(
       reviewId,
       "completed",
       incomplete ? "Review incomplete: diff was truncated due to size" : undefined,
-      aiOverview
+      aiOverview,
+      {
+        tokens_prompt: tokenUsage.prompt_tokens,
+        tokens_completion: tokenUsage.completion_tokens,
+        tokens_total: tokenUsage.total_tokens,
+        estimated_cost: modelCostPerToken,
+      }
     );
 
-    return { reviewId, findings, cached: false, incomplete, aiOverview };
+    return { reviewId, findings, cached: false, incomplete, aiOverview, tokenUsage, suppressedCount: suppressed.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     await updateReviewStatus(reviewId, "failed", message);
@@ -124,20 +184,45 @@ async function executeReview(ctx: ReviewContext, createdBy?: string) {
   }
 }
 
+function estimateCost(model: string, usage: { prompt_tokens: number; completion_tokens: number }): number {
+  const prompt = usage.prompt_tokens;
+  const completion = usage.completion_tokens;
+  if (model.includes("gpt-4o")) return (prompt * 2.5 + completion * 10) / 1_000_000;
+  if (model.includes("gpt-4")) return (prompt * 30 + completion * 60) / 1_000_000;
+  if (model.includes("gpt-3.5")) return (prompt * 0.5 + completion * 1.5) / 1_000_000;
+  if (model.includes("claude-3")) return (prompt * 3 + completion * 15) / 1_000_000;
+  if (model.includes("gemini")) return (prompt * 1.25 + completion * 5) / 1_000_000;
+  return (prompt * 3 + completion * 10) / 1_000_000;
+}
+
 async function sendNotifications(
   ctx: ReviewContext,
   reviewId: string,
   findings: RawFinding[],
   aiOverview: string,
   password: string,
-  username: string
+  username: string,
+  tokenUsage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
 ) {
   const tasks: Promise<void>[] = [];
   const changedFiles = extractFilePaths(ctx.diff).split("\n").filter(Boolean);
+  const mustFixCount = findings.filter((f) => f.risk_level === "must_fix").length;
 
   if (ctx.repo.generate_email) {
+    const emailMetadata: ReviewMetadata = {
+      repoName: ctx.repo.name,
+      commitHash: ctx.dedupKey.startsWith("pr:") ? undefined : ctx.dedupKey,
+      prId: ctx.prId,
+      branch: ctx.repo.branch,
+      strictness: ctx.repo.strictness,
+      reviewMode: ctx.reviewMode,
+      reviewedBy: ctx.repo.llm_model,
+      model: ctx.repo.llm_model,
+      tokensUsed: tokenUsage?.total_tokens,
+      estimatedCost: tokenUsage ? estimateCost(ctx.repo.llm_model, tokenUsage) : undefined,
+    };
     tasks.push(
-      sendReviewEmail(ctx.repo.id, ctx.repo.name, findings, aiOverview, changedFiles).catch((err) => {
+      sendReviewEmail(ctx.repo.id, ctx.repo.name, findings, aiOverview, changedFiles, ctx.diff, emailMetadata).catch((err) => {
         logger.error(`Failed to send review email`, { reviewId, error: err.message });
       })
     );
@@ -149,6 +234,18 @@ async function sendNotifications(
         logger.error(`Failed to post PR comment`, { prId: ctx.prId, error: String(err) });
       })
     );
+    for (const f of findings) {
+      if (f.line_number && (f.risk_level === "must_fix" || f.risk_level === "should_fix_soon")) {
+        tasks.push(
+          postInlinePrComment(
+            ctx.repo.workspace, ctx.repo.slug, ctx.prId!,
+            f.file_path, f.line_number,
+            `**${f.risk_level === "must_fix" ? "🔴 Must Fix" : "🟡 Should Fix"}**: ${f.summary}\n\n${f.explanation}${f.suggested_fix ? `\n\n**Suggested fix:** ${f.suggested_fix}` : ""}`,
+            password, username
+          ).catch(() => {})
+        );
+      }
+    }
   } else if (ctx.repo.post_to_bitbucket && ctx.reviewMode === "manual") {
     tasks.push(
       (async () => {
@@ -156,11 +253,38 @@ async function sendNotifications(
           const prId = await findPullRequestForCommit(ctx.repo.workspace, ctx.repo.slug, ctx.dedupKey, password, username);
           if (prId) {
             await postPrComment(ctx.repo.workspace, ctx.repo.slug, prId, formatPrComment(findings), password, username);
+            for (const f of findings) {
+              if (f.line_number && (f.risk_level === "must_fix" || f.risk_level === "should_fix_soon")) {
+                await postInlinePrComment(
+                  ctx.repo.workspace, ctx.repo.slug, prId,
+                  f.file_path, f.line_number,
+                  `**${f.risk_level === "must_fix" ? "🔴 Must Fix" : "🟡 Should Fix"}**: ${f.summary}\n\n${f.explanation}${f.suggested_fix ? `\n\n**Suggested fix:** ${f.suggested_fix}` : ""}`,
+                  password, username
+                ).catch(() => {});
+              }
+            }
           }
         } catch (err) {
           logger.error(`Failed to post PR comment`, { commitHash: ctx.dedupKey, error: String(err) });
         }
       })()
+    );
+  }
+
+  const commitHash = ctx.reviewMode === "pr" && ctx.prId
+    ? ctx.commit.hash
+    : ctx.dedupKey;
+  if (commitHash && !commitHash.startsWith("pr:")) {
+    tasks.push(
+      postBuildStatus(
+        ctx.repo.workspace, ctx.repo.slug, commitHash,
+        mustFixCount > 0 ? "FAILED" : "SUCCESSFUL",
+        "autoreview",
+        mustFixCount > 0
+          ? `Found ${mustFixCount} must-fix and ${findings.filter((f) => f.risk_level === "should_fix_soon").length} should-fix findings`
+          : `Clean review — ${findings.length} informational finding${findings.length !== 1 ? "s" : ""}`,
+        password, username
+      ).catch(() => {})
     );
   }
 
@@ -191,6 +315,19 @@ function formatPrComment(findings: RawFinding[]): string {
   return body;
 }
 
+async function linkDuplicateFindings(repositoryId: string, findings: RawFindingInput[]): Promise<string[]> {
+  const linked: string[] = [];
+  for (const f of findings) {
+    try {
+      const similar = await findSimilarOpenFindings(repositoryId, f.file_path, f.category, f.summary);
+      if (similar.length > 0) {
+        linked.push(f.file_path);
+      }
+    } catch { /* ignore dedup failures */ }
+  }
+  return linked;
+}
+
 export async function runManualReview(repositoryId: string, commitHash: string, force = false, createdBy?: string) {
   const repo = await getRepoById(repositoryId);
   if (!repo) throw new Error(`Repository ${repositoryId} not found`);
@@ -207,9 +344,11 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
   if (dedupResult.action === "in_progress") return { review: dedupResult.review, findings: [], cached: false, message: "Review already in progress" };
 
   const ctx: ReviewContext = { repo, diff, commit, truncated, dedupKey, reviewMode: "manual" };
-  const result = await executeReview(ctx, createdBy);
+  const result = await executeReview(ctx, createdBy, dedupResult.parentReviewId);
 
-  await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username);
+  await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);
+  await notifyReviewComplete(repo.id, result.reviewId, repo.name, result.findings, createdBy);
+  await checkSlaBreaches();
 
   return result;
 }
@@ -236,9 +375,65 @@ export async function runPrReview(repositoryId: string, prId: string, force = fa
   };
 
   const ctx: ReviewContext = { repo, diff, commit: syntheticCommit, truncated, dedupKey, reviewMode: "pr", prId };
-  const result = await executeReview(ctx, createdBy);
+  const result = await executeReview(ctx, createdBy, dedupResult.parentReviewId);
 
-  await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username);
+  await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);
+  await notifyReviewComplete(repo.id, result.reviewId, repo.name, result.findings, createdBy);
+  await checkSlaBreaches();
 
   return { ...result, pr };
+}
+
+async function notifyReviewComplete(
+  repoId: string,
+  reviewId: string,
+  repoName: string,
+  findings: RawFinding[],
+  createdBy?: string
+) {
+  const mustFix = findings.filter((f) => f.risk_level === "must_fix").length;
+  const total = findings.length;
+  const title = mustFix > 0
+    ? `Review completed: ${mustFix} must-fix finding${mustFix > 1 ? "s" : ""} in ${repoName}`
+    : `Review completed for ${repoName} — ${total} finding${total !== 1 ? "s" : ""}`;
+  const message = `Found ${total} finding${total !== 1 ? "s" : ""} (${mustFix} must-fix, ${findings.filter((f) => f.risk_level === "should_fix_soon").length} should-fix)${createdBy ? ` by ${createdBy}` : ""}`;
+
+  try {
+    const users = await all<{ id: string }>("SELECT id FROM users");
+    for (const user of users) {
+      await createNotification(user.id, "review_completed", title, message, "review", reviewId);
+    }
+  } catch (err) {
+    logger.warn(`Failed to create review notifications`, { error: String(err) });
+  }
+}
+
+async function checkSlaBreaches() {
+  try {
+    const breached = await getBreachedSlaFindings();
+    if (breached.length === 0) return;
+    const users = await all<{ id: string }>("SELECT id FROM users");
+    const title = `⚠️ SLA Breach: ${breached.length} finding${breached.length > 1 ? "s" : ""} exceeded resolution deadline`;
+    const message = breached.slice(0, 5).map((f) =>
+      `${f.risk_level === "must_fix" ? "Must-fix" : "Should-fix"} in ${f.repository_name}: "${f.summary}" — open for ${Math.round(Number(f.hours_open))}h`
+    ).join("\n");
+    for (const user of users) {
+      await createNotification(user.id, "sla_breach", title, message, "review", breached[0]?.review_id);
+    }
+  } catch (err) {
+    logger.warn(`Failed to check SLA breaches`, { error: String(err) });
+  }
+}
+
+export async function rerunReview(reviewId: string, createdBy?: string) {
+  const review = await get<{ id: string; repository_id: string; commit_hash: string; review_mode: string }>(
+    "SELECT id, repository_id, commit_hash, review_mode FROM reviews WHERE id = $1", [reviewId]
+  );
+  if (!review) throw new Error("Review not found");
+
+  if (review.review_mode === "pr") {
+    const prId = review.commit_hash.replace("pr:", "");
+    return runPrReview(review.repository_id, prId, true, createdBy);
+  }
+  return runManualReview(review.repository_id, review.commit_hash, true, createdBy);
 }
