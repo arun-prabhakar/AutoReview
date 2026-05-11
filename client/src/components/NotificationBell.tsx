@@ -16,8 +16,6 @@ export function NotificationBell() {
 
   useEffect(() => {
     dispatch(fetchUnreadCount());
-    const interval = setInterval(() => dispatch(fetchUnreadCount()), 60000);
-    return () => clearInterval(interval);
   }, [dispatch]);
 
   useEffect(() => {
@@ -32,7 +30,7 @@ export function NotificationBell() {
 
   const toggleOpen = async () => {
     if (!open) {
-      await dispatch(fetchNotifications());
+      await Promise.all([dispatch(fetchUnreadCount()), dispatch(fetchNotifications())]);
     }
     setOpen(!open);
   };
