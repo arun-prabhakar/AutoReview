@@ -21,6 +21,24 @@ import { analyticsRouter } from "./routes/analytics.js";
 import { requestLogger, errorHandler, logger } from "./middleware/index.js";
 import { jwtAuth, requireRole } from "./middleware/jwt-auth.js";
 
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function getDeployVersion(deployedAt: string): string {
+  if (!deployedAt) return "dev";
+  try {
+    const d = new Date(deployedAt);
+    const yy = String(d.getFullYear()).slice(2);
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${yy}.${mm}.${dd}-${hh}${mi}`;
+  } catch { return "dev"; }
+}
+
 dotenv.config();
 
 const app = express();
@@ -65,8 +83,11 @@ app.use(requestLogger);
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth", publicLimiter, authRouter);
 app.use("/api/cron", cronLimiter, cronRouter);
+const DEPLOYED_AT = process.env.DEPLOYED_AT || new Date().toISOString();
+const APP_VERSION = getDeployVersion(DEPLOYED_AT);
+
 app.get("/api/health", publicLimiter, (_req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({ status: "ok", version: APP_VERSION, deployedAt: DEPLOYED_AT, timestamp: new Date().toISOString() });
 });
 
 app.use("/api", apiLimiter, jwtAuth);

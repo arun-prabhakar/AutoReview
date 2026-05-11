@@ -34,7 +34,7 @@ export function getPool(): Pool {
     ...(isSupabase ? { ssl: { rejectUnauthorized: false } } : {}),
   });
 
-  _pool.on("error", (err) => {
+  _pool.on("error", (err: Error) => {
     logger.error("Unexpected database pool error", { error: err.message });
   });
 

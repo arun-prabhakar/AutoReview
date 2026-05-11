@@ -16,6 +16,8 @@ RUN cd client && npm run build
 
 FROM node:20-alpine AS runner
 
+ARG DEPLOYED_AT=""
+
 WORKDIR /app
 
 COPY --from=builder /app/server/dist ./dist
@@ -27,6 +29,7 @@ RUN mkdir -p /app/logs
 
 ENV PORT=3001
 ENV NODE_ENV=production
+ENV DEPLOYED_AT=${DEPLOYED_AT}
 
 EXPOSE 3001
 

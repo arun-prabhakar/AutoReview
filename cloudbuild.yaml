@@ -1,6 +1,12 @@
 steps:
   - name: "gcr.io/cloud-builders/docker"
-    args: ["build", "-t", "gcr.io/arun-prabhakar/autoreview", "."]
+    args:
+      - build
+      - -t
+      - gcr.io/arun-prabhakar/autoreview
+      - --build-arg
+      - DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      - .
 
   - name: "gcr.io/cloud-builders/docker"
     args: ["push", "gcr.io/arun-prabhakar/autoreview"]

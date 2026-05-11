@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AboutIcon } from "@/components/AboutIcon";
 
 const allNavItems: { to: string; label: string; icon: LucideIcon; roles: string[] }[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "user"] },
@@ -194,6 +195,7 @@ export function Layout() {
             )}
           </div>
           <div className={cn("flex items-center gap-1", collapsed ? "flex-col" : "justify-center")}>
+            <AboutIcon />
             <NotificationBell />
             <Button variant="ghost" size="icon" aria-label="Change password" onClick={() => setChangePasswordOpen(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Change Password">
               <KeyRound className="h-4 w-4" />
@@ -251,8 +253,11 @@ export function Layout() {
             <img src="/favicon.svg" alt="" className="h-6 w-6" />
             <span className="text-lg font-bold tracking-display text-ink">Auto<span className="text-foreground">Review</span></span>
            </div>
-           <NotificationBell />
-         </header>
+           <div className="flex items-center gap-1">
+             <AboutIcon />
+             <NotificationBell />
+           </div>
+          </header>
 
         <main id="main-content" className="flex-1 overflow-auto p-6 md:p-8 lg:p-12">
           <Outlet />
