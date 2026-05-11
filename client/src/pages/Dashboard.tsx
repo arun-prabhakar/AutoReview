@@ -36,6 +36,7 @@ export default function Dashboard() {
   const [deleteTarget, setDeleteTarget] = useState<Review | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [healthScores, setHealthScores] = useState<Array<{ repository_id: string; repository_name: string; score: number; trend: string; total_findings: number; must_fix: number; should_fix: number; fix_rate: number }>>([]);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const filterUserTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const PAGE_SIZE = 20;
@@ -54,6 +55,7 @@ export default function Dashboard() {
     dispatch(fetchReviews({ limit: PAGE_SIZE, offset: 0 }));
     dispatch(fetchRepositories());
     api.get("/api/analytics/health-scores").then((d: unknown) => setHealthScores(d as typeof healthScores)).catch(() => {});
+    setHasLoaded(true);
   }, [dispatch]); // eslint-disable-line
 
   useEffect(() => {
@@ -252,8 +254,8 @@ export default function Dashboard() {
               )}
             </div>
           </CardHeader>
-          <CardContent className="p-0">
-            {loading ? (
+          <CardContent className="p-0 relative">
+            {loading && !hasLoaded ? (
               <div className="space-y-px">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="flex items-center gap-4 px-4 py-3 border-b border-border">
@@ -368,6 +370,11 @@ export default function Dashboard() {
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
+              </div>
+            )}
+            {loading && hasLoaded && (
+              <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] flex items-center justify-center z-10 rounded-b-lg">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-foreground" />
               </div>
             )}
           </CardContent>
