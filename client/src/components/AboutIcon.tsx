@@ -48,7 +48,7 @@ export function AboutIcon() {
       </Button>
 
       {show && health && (
-        <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 w-60 rounded-lg border border-border bg-card shadow-lg z-50 p-4 text-xs">
+        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-60 rounded-lg border border-border bg-card shadow-lg z-[60] p-4 text-xs">
           <div className="flex items-center justify-between mb-2">
             <span className="font-bold text-sm text-foreground tracking-tight">AutoReview</span>
             <span className="text-muted-foreground font-mono">v{health.version}</span>
@@ -56,7 +56,7 @@ export function AboutIcon() {
           <div className="text-muted-foreground">
             Deployed: {formatDeployDate(health.deployedAt)}
           </div>
-          <div className="absolute left-0 top-1/2 -translate-x-full -translate-y-1/2">
+          <div className="absolute left-1/2 top-full -translate-x-1/2">
             <div className="w-2 h-2 rotate-45 border-l border-b border-border bg-card" />
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useNavigation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import type { LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { logoutUser, changePassword } from "../../store/authSlice";
+import { preloadPage } from "../../App";
 import type { RootState, AppDispatch } from "../../store";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
@@ -16,12 +17,12 @@ import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AboutIcon } from "@/components/AboutIcon";
 
-const allNavItems: { to: string; label: string; icon: LucideIcon; roles: string[] }[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "user"] },
-  { to: "/reviews/manual", label: "Manual Review", icon: FileSearch, roles: ["admin", "user"] },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, roles: ["admin", "user"] },
-  { to: "/users", label: "Users", icon: Users, roles: ["admin"] },
-  { to: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },
+const allNavItems: { to: string; label: string; icon: LucideIcon; roles: string[]; preload: string }[] = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "user"], preload: "Dashboard" },
+  { to: "/reviews/manual", label: "Manual Review", icon: FileSearch, roles: ["admin", "user"], preload: "ManualReview" },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, roles: ["admin", "user"], preload: "Analytics" },
+  { to: "/users", label: "Users", icon: Users, roles: ["admin"], preload: "Users" },
+  { to: "/settings", label: "Settings", icon: Settings, roles: ["admin"], preload: "Settings" },
 ];
 
 function NavLinks({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
@@ -38,6 +39,7 @@ function NavLinks({ onNavigate, collapsed }: { onNavigate?: () => void; collapse
             to={item.to}
             end={item.to === "/"}
             onClick={onNavigate}
+            onMouseEnter={() => preloadPage(item.preload as Parameters<typeof preloadPage>[0])}
             className={({ isActive }) =>
               cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 group",
@@ -138,6 +140,8 @@ export function Layout() {
   });
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
+  const navigation = useNavigation();
+  const isNavigating = navigation.state === "loading";
 
   useEffect(() => {
     const stored = window.localStorage.getItem("theme");
@@ -162,7 +166,7 @@ export function Layout() {
       <motion.aside
         animate={{ width: collapsed ? 64 : 260 }}
         transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-        className="hidden flex-shrink-0 border-r border-border bg-card md:flex md:flex-col overflow-hidden z-20 shadow-card"
+        className="hidden flex-shrink-0 border-r border-border bg-card md:flex md:flex-col z-20 shadow-card"
       >
         <div className={cn("relative overflow-hidden flex items-center gap-3 p-6 mb-2", collapsed && "flex-col gap-4")}>
           <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -178,7 +182,7 @@ export function Layout() {
           </Button>
         </div>
 
-        <div className="flex-1 px-3 space-y-1">
+        <div className="flex-1 px-3 space-y-1 overflow-hidden">
           <NavLinks collapsed={collapsed} />
         </div>
 
@@ -209,6 +213,11 @@ export function Layout() {
       </motion.aside>
 
       <div className="flex flex-1 flex-col overflow-hidden bg-background relative">
+        {isNavigating && (
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary/20 z-50 overflow-hidden">
+            <div className="h-full bg-primary animate-[loading-bar_1.5s_ease-in-out_infinite]" style={{ width: "40%", animation: "loading-bar 1.5s ease-in-out infinite" }} />
+          </div>
+        )}
         
         <header className="flex items-center justify-between border-b border-muted/20 p-4 md:px-8 h-16 bg-background/50 backdrop-blur-md z-10 md:hidden">
           <div className="flex items-center gap-3">
