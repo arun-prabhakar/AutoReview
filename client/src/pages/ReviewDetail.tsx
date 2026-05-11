@@ -277,26 +277,28 @@ AutoReview`;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Review Detail</h2>
-            <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-              <button onClick={() => navigate("/")} className="hover:text-foreground transition-colors">Dashboard</button>
-              <span>/</span>
-              <span className="text-foreground font-medium">Review</span>
-            </nav>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setRereviewOpen(true)} disabled={rereviewing}>
-                <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-                {rereviewing ? "Re-reviewing..." : "Re-review"}
-              </Button>
-              {user?.role === "admin" && (
-                <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
-                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                  Delete
-                </Button>
-              )}
-            </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-bold tracking-tight">Review Detail</h2>
+          <nav className="flex items-center gap-2 text-sm text-muted-foreground">
+            <button onClick={() => navigate("/")} className="hover:text-foreground transition-colors">Dashboard</button>
+            <span>/</span>
+            <span className="text-foreground font-medium">Review</span>
+          </nav>
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setRereviewOpen(true)} disabled={rereviewing}>
+            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+            {rereviewing ? "Re-reviewing..." : "Re-review"}
+          </Button>
+          {user?.role === "admin" && (
+            <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete
+            </Button>
+          )}
+        </div>
+      </div>
 
       {chain.length > 1 && (
         <Card className="border-border bg-card">
