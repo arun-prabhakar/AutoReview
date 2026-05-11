@@ -137,6 +137,17 @@ export async function ensureSchema(pool: Pool): Promise<void> {
     )
   `);
 
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS ai_overview TEXT`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS parent_review_id TEXT`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS tokens_prompt INTEGER`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS tokens_completion INTEGER`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS tokens_total INTEGER`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS estimated_cost REAL`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS project_context TEXT`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS error_message TEXT`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS completed_at TEXT`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS created_by TEXT`);
+
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_status ON reviews(repository_id, status)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
