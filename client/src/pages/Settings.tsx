@@ -6,7 +6,7 @@ import { fetchRepositories } from "@/store/repositoriesSlice";
 import { api } from "@/services/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Cpu, KeyRound, FolderGit2, Settings2, Brain, FileText, Bell } from "lucide-react";
+import { Cpu, KeyRound, FolderGit2, Settings2, Brain, FileText, Bell, ShieldOff } from "lucide-react";
 import type { Credential, Provider } from "@/components/settings/types";
 import { ProvidersTab } from "@/components/settings/ProvidersTab";
 import { CredentialsTab } from "@/components/settings/CredentialsTab";
@@ -15,6 +15,7 @@ import { ReviewConfigTab } from "@/components/settings/ReviewConfigTab";
 import { LlmTab } from "@/components/settings/LlmTab";
 import { PromptTemplateTab } from "@/components/settings/PromptTemplateTab";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
+import { SuppressionsTab } from "@/components/settings/SuppressionsTab";
 
 export default function Settings() {
   const dispatch = useDispatch<AppDispatch>();
@@ -57,6 +58,7 @@ export default function Settings() {
           <TabsTrigger value="llm"><Brain className="h-3.5 w-3.5 mr-1.5" />LLM</TabsTrigger>
           <TabsTrigger value="prompt"><FileText className="h-3.5 w-3.5 mr-1.5" />Prompt Template</TabsTrigger>
           <TabsTrigger value="notifications"><Bell className="h-3.5 w-3.5 mr-1.5" />Notifications</TabsTrigger>
+          <TabsTrigger value="suppressions"><ShieldOff className="h-3.5 w-3.5 mr-1.5" />Suppressions</TabsTrigger>
         </TabsList>
 
         <TabsContent value="providers" className="space-y-4 mt-4">
@@ -85,6 +87,10 @@ export default function Settings() {
 
         <TabsContent value="notifications" className="space-y-4 mt-4">
           <NotificationsTab />
+        </TabsContent>
+
+        <TabsContent value="suppressions" className="space-y-4 mt-4">
+          <SuppressionsTab />
         </TabsContent>
        </Tabs>
     </div>

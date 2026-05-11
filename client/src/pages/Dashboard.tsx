@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { BarChart3, CheckCircle2, ChevronLeft, ChevronRight, Clock, FileSearch, GitCommit, GitPullRequest, Trash2, User, XCircle } from "lucide-react";
+import { BarChart3, CheckCircle2, ChevronLeft, ChevronRight, Clock, FileSearch, GitCommit, GitPullRequest, Trash2, User, XCircle, Heart, TrendingUp, TrendingDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Review } from "@/types";
 
@@ -35,6 +35,7 @@ export default function Dashboard() {
   const [page, setPage] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<Review | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [healthScores, setHealthScores] = useState<Array<{ repository_id: string; repository_name: string; score: number; trend: string; total_findings: number; must_fix: number; should_fix: number; fix_rate: number }>>([]);
   const filterUserTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const PAGE_SIZE = 20;
@@ -52,6 +53,7 @@ export default function Dashboard() {
   useEffect(() => {
     dispatch(fetchReviews({ limit: PAGE_SIZE, offset: 0 }));
     dispatch(fetchRepositories());
+    api.get("/api/analytics/health-scores").then((d: unknown) => setHealthScores(d as typeof healthScores)).catch(() => {});
   }, [dispatch]); // eslint-disable-line
 
   useEffect(() => {
@@ -160,6 +162,34 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+
+      {healthScores.length > 0 && (
+        <div>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Repository Health</h3>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {healthScores.map((hs) => {
+              const scoreColor = hs.score >= 80 ? "text-emerald-400" : hs.score >= 50 ? "text-amber-400" : "text-red-400";
+              const TrendIcon = hs.trend === "improving" ? TrendingUp : hs.trend === "declining" ? TrendingDown : Heart;
+              return (
+                <Card key={hs.repository_id} className="border-border">
+                  <CardContent className="pt-4 pb-3 px-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-foreground truncate pr-2">{hs.repository_name}</span>
+                      <TrendIcon className={cn("h-3.5 w-3.5 flex-shrink-0", hs.trend === "improving" ? "text-emerald-400" : hs.trend === "declining" ? "text-red-400" : "text-muted-foreground")} />
+                    </div>
+                    <span className={cn("text-2xl font-bold tabular-nums", scoreColor)}>{hs.score}</span>
+                    <div className="flex items-center gap-2 mt-1.5 text-[10px] text-muted-foreground">
+                      <span>{hs.total_findings} findings</span>
+                      <span>·</span>
+                      <span>{Math.round(hs.fix_rate * 100)}% fixed</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2.5 items-center bg-secondary/50 rounded-lg px-3 py-2">
           <Select value={filterRepo} onValueChange={setFilterRepo}>
