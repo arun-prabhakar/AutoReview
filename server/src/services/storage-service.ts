@@ -469,7 +469,7 @@ export async function getAllRepoHealthScores(): Promise<{ repository_id: string;
 export async function getBreachedSlaFindings(): Promise<{ id: string; file_path: string; summary: string; risk_level: string; review_id: string; repository_name: string; created_at: string; hours_open: string }[]> {
   return all(
     `SELECT f.id, f.file_path, f.summary, f.risk_level, f.review_id,
-       repo.name as repository_name, f.created_at as created_at,
+       repo.name as repository_name, r.created_at as created_at,
        EXTRACT(EPOCH FROM (NOW() - r.created_at)) / 3600 as hours_open
      FROM findings f
      JOIN reviews r ON f.review_id = r.id
