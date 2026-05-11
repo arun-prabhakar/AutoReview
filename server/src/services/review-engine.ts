@@ -109,7 +109,26 @@ export async function analyzeDiff(
     total_tokens: response.usage?.total_tokens ?? 0,
   };
 
+  logger.info("LLM response received", {
+    model: repo.llm_model,
+    contentLength: content.length,
+    tokens: tokenUsage.total_tokens,
+    finishReason: response.choices?.[0]?.finish_reason,
+    contentPreview: content.substring(0, 300),
+  });
+
   const findings = filterExcludedPaths(parseFindings(content), repo.excluded_paths);
+
+  logger.info("Findings parsed", {
+    total: findings.length,
+    riskBreakdown: {
+      must_fix: findings.filter(f => f.risk_level === "must_fix").length,
+      should_fix_soon: findings.filter(f => f.risk_level === "should_fix_soon").length,
+      ignore: findings.filter(f => f.risk_level === "ignore").length,
+    },
+    excludedPaths: repo.excluded_paths,
+  });
+
   return { findings, incomplete: truncated, tokenUsage };
 }
 
@@ -196,12 +215,36 @@ export function extractFilePaths(diff: string): string {
 const RISK_ORDER: Record<string, number> = { must_fix: 0, should_fix_soon: 1, ignore: 2 };
 
 export function parseFindings(content: string): RawFinding[] {
-  try {
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-    const parsed = JSON.parse(jsonMatch[0]);
-    if (!Array.isArray(parsed)) return [];
+  const jsonMatch = content.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) {
+    logger.warn("parseFindings: no JSON array found in LLM response", {
+      contentPreview: content.substring(0, 500),
+    });
+    return [];
+  }
 
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch (err) {
+    logger.warn("parseFindings: JSON.parse failed", {
+      error: err instanceof Error ? err.message : String(err),
+      matchedJson: jsonMatch[0].substring(0, 300),
+    });
+    return [];
+  }
+
+  if (!Array.isArray(parsed)) {
+    logger.warn("parseFindings: parsed result is not an array", { type: typeof parsed });
+    return [];
+  }
+
+  if (parsed.length === 0) {
+    logger.info("parseFindings: LLM returned empty array (clean diff)");
+    return [];
+  }
+
+  try {
     const mapped: RawFinding[] = parsed.map((item: Record<string, unknown>) => ({
       file_path: String(item.file ?? item.file_path ?? ""),
       line_number: (item.line_start ?? item.line_number ?? null) as number | null,
@@ -216,9 +259,9 @@ export function parseFindings(content: string): RawFinding[] {
       (a, b) => (RISK_ORDER[a.risk_level] ?? 3) - (RISK_ORDER[b.risk_level] ?? 3)
     );
   } catch (err) {
-    logger.warn("Failed to parse LLM findings", {
+    logger.warn("parseFindings: field mapping failed", {
       error: err instanceof Error ? err.message : String(err),
-      rawContent: content.substring(0, 200),
+      firstItem: JSON.stringify(parsed[0]).substring(0, 300),
     });
     return [];
   }

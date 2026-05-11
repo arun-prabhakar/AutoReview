@@ -17,33 +17,19 @@ export type ReviewMetadata = {
   duration?: string;
 };
 
-function countDiffStats(diff: string): { filesChanged: number; linesAdded: number; linesRemoved: number } {
-  const fileMatches = diff.match(/^diff --git /gm);
-  const addMatches = diff.match(/^\+(?!\+\+|\+)/gm);
-  const removeMatches = diff.match(/^-(?!--|-)/gm);
-  return {
-    filesChanged: fileMatches?.length ?? 0,
-    linesAdded: addMatches?.length ?? 0,
-    linesRemoved: removeMatches?.length ?? 0,
-  };
-}
-
 export function generateEmailDraft(
   repoName: string,
   findings: RawFinding[],
   aiOverview: string,
-  changedFiles?: string[],
-  diff?: string,
-  metadata?: ReviewMetadata
+  _changedFiles?: string[],
+  _diff?: string,
+  _metadata?: ReviewMetadata
 ): string {
   const grouped = {
     must_fix: findings.filter((f) => f.risk_level === "must_fix"),
     should_fix_soon: findings.filter((f) => f.risk_level === "should_fix_soon"),
     ignore: findings.filter((f) => f.risk_level === "ignore"),
   };
-
-  const diffStats = diff ? countDiffStats(diff) : null;
-  const totalLines = (diffStats?.linesAdded ?? 0) + (diffStats?.linesRemoved ?? 0);
 
   const formatFinding = (f: RawFinding, index: number) => {
     const location = f.file_path + (f.line_number ? `:${f.line_number}` : "");
@@ -59,16 +45,6 @@ export function generateEmailDraft(
     if (items.length === 0) return "";
     return `${icon} ${label} (${items.length})\n${"─".repeat(50)}\n\n${items.map((f, i) => formatFinding(f, i)).join("\n\n")}\n\n`;
   };
-
-  const filesList = changedFiles && changedFiles.length > 0
-    ? changedFiles.map((f, i) => `  ${i + 1}. ${f}`).join("\n")
-    : "  (none detected)";
-
-  const identifier = metadata?.prId
-    ? `Pull Request #${metadata.prId}`
-    : metadata?.commitHash
-      ? `Commit ${metadata.commitHash.substring(0, 12)}`
-      : "Code changes";
 
   const riskAssessment = grouped.must_fix.length > 0
     ? "⛔ HIGH RISK — Action required before merge"
@@ -103,43 +79,15 @@ export function generateEmailDraft(
 
   return `Hi Team,
 
-AutoReview has completed an automated code review for ${repoName}.
-
 ══════════════════════════════════════════════════
   RISK ASSESSMENT: ${riskAssessment}
 ══════════════════════════════════════════════════
 
-┌──────────────────────────────────────────────┐
-│  REVIEW DETAILS                               │
-└──────────────────────────────────────────────┘
-
-  Repository    : ${repoName}
-  Target        : ${identifier}
-  Branch        : ${metadata?.branch || "N/A"}
-  Review Mode   : ${metadata?.reviewMode === "pr" ? "Pull Request" : "Manual Commit"}
-  Strictness    : ${metadata?.strictness || "balanced"}
-  Reviewed By   : ${metadata?.reviewedBy || "AutoReview AI"}
-${metadata?.model ? `  AI Model      : ${metadata.model}` : ""}
-${diffStats ? `  Files Changed : ${diffStats.filesChanged}` : ""}
-${diffStats ? `  Lines Reviewed: ~${totalLines} (${diffStats.linesAdded} added, ${diffStats.linesRemoved} removed)` : ""}
-${metadata?.tokensUsed ? `  Tokens Used   : ${metadata.tokensUsed.toLocaleString()}` : ""}
-${metadata?.estimatedCost ? `  Est. Cost     : $${metadata.estimatedCost.toFixed(4)}` : ""}
-
-┌──────────────────────────────────────────────┐
-│  AI OVERVIEW                                  │
-└──────────────────────────────────────────────┘
+**OVERVIEW**
 
 ${overviewSection}
 
-┌──────────────────────────────────────────────┐
-│  FILES REVIEWED (${changedFiles?.length ?? 0})                              │
-└──────────────────────────────────────────────┘
-
-${filesList}
-
-┌──────────────────────────────────────────────┐
-│  FINDINGS SUMMARY                             │
-└──────────────────────────────────────────────┘
+**FINDINGS SUMMARY**
 
   🔴 Must Fix         : ${grouped.must_fix.length}
   🟡 Should Fix Soon  : ${grouped.should_fix_soon.length}
@@ -150,14 +98,9 @@ ${filesList}
   By Category:
 ${categoryLines}
 
-┌──────────────────────────────────────────────┐
-│  DETAILED FINDINGS                             │
-└──────────────────────────────────────────────┘
+**DETAILED FINDINGS**
 
 ${findingsBody}══════════════════════════════════════════════════
-
-This review was generated automatically by AutoReview.
-Review findings are AI-generated and should be validated by a human reviewer.
 
 Regards,
 AutoReview`;
