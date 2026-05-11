@@ -284,7 +284,7 @@ export async function getFindingsByCategoryOverTime(days = 30): Promise<{ date: 
   return all(
     `SELECT DATE(r.created_at) as date, f.category, COUNT(*) as count
      FROM findings f JOIN reviews r ON f.review_id = r.id
-     WHERE r.created_at >= NOW() - INTERVAL '1 day' * $1 AND r.status = 'completed'
+     WHERE r.created_at >= NOW() - ($1 || ' days')::interval AND r.status = 'completed'
      GROUP BY DATE(r.created_at), f.category
      ORDER BY date DESC, count DESC`,
     [days]
@@ -331,7 +331,7 @@ export async function getCostSummary(days = 30): Promise<{ total_reviews: string
        COALESCE(SUM(estimated_cost), 0) as total_cost,
        COALESCE(SUM(estimated_cost), 0) as by_model
      FROM reviews
-     WHERE status = 'completed' AND created_at >= NOW() - INTERVAL '1 day' * $1`,
+     WHERE status = 'completed' AND created_at >= NOW() - ($1 || ' days')::interval`,
     [days]
   );
 }
