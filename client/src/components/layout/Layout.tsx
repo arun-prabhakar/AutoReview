@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate, useNavigation } from "react-router-dom";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -140,8 +140,6 @@ export function Layout() {
   });
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
-  const navigation = useNavigation();
-  const isNavigating = navigation.state === "loading";
 
   useEffect(() => {
     const stored = window.localStorage.getItem("theme");
@@ -213,11 +211,6 @@ export function Layout() {
       </motion.aside>
 
       <div className="flex flex-1 flex-col overflow-hidden bg-background relative">
-        {isNavigating && (
-          <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary/20 z-50 overflow-hidden">
-            <div className="h-full bg-primary animate-[loading-bar_1.5s_ease-in-out_infinite]" style={{ width: "40%", animation: "loading-bar 1.5s ease-in-out infinite" }} />
-          </div>
-        )}
         
         <header className="flex items-center justify-between border-b border-muted/20 p-4 md:px-8 h-16 bg-background/50 backdrop-blur-md z-10 md:hidden">
           <div className="flex items-center gap-3">
