@@ -5,6 +5,7 @@ import path from "path";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import compression from "compression";
 import { initDb, closePool } from "./db/index.js";
 import { reviewsRouter } from "./routes/reviews.js";
 import { repositoriesRouter } from "./routes/repositories.js";
@@ -78,6 +79,7 @@ app.use(cors({
 }));
 app.use(cookieParser());
 app.use(express.json({ limit: "100kb" }));
+app.use(compression());
 app.use(requestLogger);
 
 app.use("/api/auth/login", authLimiter);
@@ -105,8 +107,17 @@ app.use("/api/settings/prompt-template", requireRole("admin"), promptTemplateRou
 app.use("/api/auth/users", requireRole("admin"), usersRouter);
 
 const staticPath = STATIC_DIR;
-app.use(express.static(staticPath));
+app.use(express.static(staticPath, {
+  setHeaders: (res, filePath) => {
+    if (filePath.includes("/assets/") && /\.[a-f0-9]{8,}\./.test(filePath)) {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    } else if (filePath.endsWith(".html")) {
+      res.setHeader("Cache-Control", "no-cache");
+    }
+  },
+}));
 app.get("*", (_req, res) => {
+  res.set("Cache-Control", "no-cache");
   res.sendFile(path.join(staticPath, "index.html"));
 });
 
