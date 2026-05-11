@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, PanelLeft, PanelLeftClose, Users, KeyRound } from "lucide-react";
+import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, PanelLeft, PanelLeftClose, Users, KeyRound, BarChart3 } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
@@ -13,10 +13,12 @@ import type { RootState, AppDispatch } from "../../store";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { useToast } from "@/hooks/use-toast";
+import { NotificationBell } from "@/components/NotificationBell";
 
 const allNavItems: { to: string; label: string; icon: LucideIcon; roles: string[] }[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "user"] },
   { to: "/reviews/manual", label: "Manual Review", icon: FileSearch, roles: ["admin", "user"] },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, roles: ["admin", "user"] },
   { to: "/users", label: "Users", icon: Users, roles: ["admin"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["admin"] },
 ];
@@ -192,6 +194,7 @@ export function Layout() {
             )}
           </div>
           <div className={cn("flex items-center gap-1", collapsed ? "flex-col" : "justify-center")}>
+            <NotificationBell />
             <Button variant="ghost" size="icon" aria-label="Change password" onClick={() => setChangePasswordOpen(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Change Password">
               <KeyRound className="h-4 w-4" />
             </Button>
@@ -248,6 +251,7 @@ export function Layout() {
             <img src="/favicon.svg" alt="" className="h-6 w-6" />
             <span className="text-lg font-bold tracking-display text-ink">Auto<span className="text-foreground">Review</span></span>
            </div>
+           <NotificationBell />
          </header>
 
         <main id="main-content" className="flex-1 overflow-auto p-6 md:p-8 lg:p-12">

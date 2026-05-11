@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, FolderGit2, Loader2, Pencil } from "lucide-react";
+import { Plus, Trash2, FolderGit2, Loader2, Pencil, Layers } from "lucide-react";
 import type { Credential } from "@/types";
 
 function parseBitbucketUrl(url: string): { workspace: string; slug: string } | null {
@@ -42,9 +42,10 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
-  const [editTarget, setEditTarget] = useState<{ id: string; name: string; credential_id: string } | null>(null);
+  const [editTarget, setEditTarget] = useState<{ id: string; name: string; credential_id: string; multi_pass_review: boolean } | null>(null);
   const [editName, setEditName] = useState("");
   const [editCredentialId, setEditCredentialId] = useState("");
+  const [editMultiPass, setEditMultiPass] = useState(false);
 
   const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -94,7 +95,7 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
     if (!editTarget) return;
     setSaving(true);
     try {
-      await api.put(`/api/repositories/${editTarget.id}`, { name: editName, credential_id: editCredentialId });
+      await api.put(`/api/repositories/${editTarget.id}`, { name: editName, credential_id: editCredentialId, multi_pass_review: editMultiPass });
       toast({ title: "Repository updated", variant: "success" });
       setEditTarget(null);
       dispatch(fetchRepositories());
@@ -150,7 +151,12 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="outline">{String(repo.review_mode)}</Badge>
-              <Button variant="ghost" size="icon" aria-label="Edit repository" onClick={() => { setEditTarget({ id: String(repo.id), name: String(repo.name), credential_id: String(repo.credential_id) }); setEditName(String(repo.name)); setEditCredentialId(String(repo.credential_id)); }}><Pencil className="h-4 w-4" /></Button>
+              {repo.multi_pass_review ? (
+                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 flex items-center gap-1">
+                  <Layers className="h-3 w-3" />Multi-Pass
+                </Badge>
+              ) : null}
+              <Button variant="ghost" size="icon" aria-label="Edit repository" onClick={() => { setEditTarget({ id: String(repo.id), name: String(repo.name), credential_id: String(repo.credential_id), multi_pass_review: !!repo.multi_pass_review }); setEditName(String(repo.name)); setEditCredentialId(String(repo.credential_id)); setEditMultiPass(!!repo.multi_pass_review); }}><Pencil className="h-4 w-4" /></Button>
               <Button variant="ghost" size="icon" aria-label="Delete repository" onClick={() => setDeleteTarget({ id: String(repo.id), name: String(repo.name) })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
             </div>
           </CardContent>
@@ -179,6 +185,18 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
                 <SelectTrigger><SelectValue placeholder="Select credential" /></SelectTrigger>
                 <SelectContent>{credentials.map((c) => <SelectItem key={c.id} value={c.id}>{c.username}</SelectItem>)}</SelectContent>
               </Select>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Multi-Pass Review</Label>
+                <p className="text-xs text-muted-foreground">Run specialized security, performance &amp; maintainability passes</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={editMultiPass}
+                onChange={(e) => setEditMultiPass(e.target.checked)}
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
             </div>
           </div>
           <DialogFooter>
