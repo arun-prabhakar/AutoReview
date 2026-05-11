@@ -16,6 +16,7 @@ const ManualReview = lazy(() => import("./pages/ManualReview"));
 const ReviewDetail = lazy(() => import("./pages/ReviewDetail"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Users = lazy(() => import("./pages/Users"));
+const Analytics = lazy(() => import("./pages/Analytics"));
 
 setOnUnauthorized(() => store.dispatch(logoutUser()));
 
@@ -83,6 +84,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/reviews/manual" element={<ManualReview />} />
             <Route path="/reviews/:id" element={<ReviewDetail />} />
+            <Route path="/analytics" element={<Analytics />} />
             <Route
               path="/users"
               element={
