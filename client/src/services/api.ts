@@ -48,6 +48,16 @@ export const api = {
     return handleResponse<T>(response);
   },
 
+  async patch<T = unknown>(path: string, body?: unknown): Promise<T> {
+    const response = await fetch(path, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return handleResponse<T>(response);
+  },
+
   async del<T = unknown>(path: string): Promise<T> {
     const response = await fetch(path, {
       method: "DELETE",

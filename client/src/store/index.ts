@@ -5,6 +5,7 @@ import reviewsReducer from "./reviewsSlice";
 import reviewDetailReducer from "./reviewDetailSlice";
 import settingsReducer from "./settingsSlice";
 import promptTemplateReducer from "./promptTemplateSlice";
+import notificationsReducer from "./notificationsSlice";
 
 export const store = configureStore({
   reducer: {
@@ -14,6 +15,7 @@ export const store = configureStore({
     reviewDetail: reviewDetailReducer,
     settings: settingsReducer,
     promptTemplate: promptTemplateReducer,
+    notifications: notificationsReducer,
   },
 });
 
