@@ -4,6 +4,14 @@ export function setOnUnauthorized(callback: () => void): void {
   onUnauthorized = callback;
 }
 
+const TIMEOUT_MS = 30_000;
+
+function fetchWithTimeout(path: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  return fetch(path, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (response.status === 401) {
     localStorage.removeItem("autoreview_user");
@@ -24,12 +32,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export const api = {
   async get<T = unknown>(path: string): Promise<T> {
-    const response = await fetch(path, { credentials: "include" });
+    const response = await fetchWithTimeout(path, { credentials: "include" });
     return handleResponse<T>(response);
   },
 
   async post<T = unknown>(path: string, body: unknown): Promise<T> {
-    const response = await fetch(path, {
+    const response = await fetchWithTimeout(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -39,7 +47,7 @@ export const api = {
   },
 
   async put<T = unknown>(path: string, body: unknown): Promise<T> {
-    const response = await fetch(path, {
+    const response = await fetchWithTimeout(path, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -49,7 +57,7 @@ export const api = {
   },
 
   async patch<T = unknown>(path: string, body?: unknown): Promise<T> {
-    const response = await fetch(path, {
+    const response = await fetchWithTimeout(path, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -59,7 +67,7 @@ export const api = {
   },
 
   async del<T = unknown>(path: string): Promise<T> {
-    const response = await fetch(path, {
+    const response = await fetchWithTimeout(path, {
       method: "DELETE",
       credentials: "include",
     });
