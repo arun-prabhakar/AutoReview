@@ -72,6 +72,7 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       smtp_user TEXT,
       smtp_password_encrypted TEXT,
       smtp_from_address TEXT,
+      multi_pass_review BOOLEAN NOT NULL DEFAULT false,
       created_at TEXT NOT NULL DEFAULT NOW(),
       updated_at TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY(credential_id) REFERENCES credentials(id)
@@ -92,7 +93,12 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       completed_at TEXT,
       created_by TEXT,
       ai_overview TEXT,
-      UNIQUE(repository_id, commit_hash),
+      parent_review_id TEXT,
+      tokens_prompt INTEGER,
+      tokens_completion INTEGER,
+      tokens_total INTEGER,
+      estimated_cost REAL,
+      project_context TEXT,
       FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
     )
   `);
@@ -108,6 +114,13 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       risk_level TEXT NOT NULL,
       suggested_fix TEXT,
       category TEXT,
+      disposition TEXT NOT NULL DEFAULT 'open',
+      disposition_reason TEXT,
+      disposition_by TEXT,
+      disposition_at TEXT,
+      suppressed BOOLEAN NOT NULL DEFAULT false,
+      suppressed_by_rule_id TEXT,
+      persistent_issue_id TEXT,
       FOREIGN KEY(review_id) REFERENCES reviews(id) ON DELETE CASCADE
     )
   `);
@@ -127,6 +140,55 @@ export async function ensureSchema(pool: Pool): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_status ON reviews(repository_id, status)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
+
+  // --- Notifications table (Feature 8) ---
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT,
+      read BOOLEAN NOT NULL DEFAULT false,
+      entity_type TEXT,
+      entity_id TEXT,
+      created_at TEXT NOT NULL DEFAULT NOW(),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read)`);
+
+  // --- Finding Comments table (Feature 9) ---
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS finding_comments (
+      id TEXT PRIMARY KEY,
+      finding_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      username TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT NOW(),
+      FOREIGN KEY(finding_id) REFERENCES findings(id) ON DELETE CASCADE
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_comments_finding ON finding_comments(finding_id)`);
+
+  // --- Suppression Rules table (Feature 11) ---
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS suppression_rules (
+      id TEXT PRIMARY KEY,
+      repository_id TEXT NOT NULL,
+      category TEXT,
+      file_pattern TEXT,
+      summary_pattern TEXT,
+      risk_level TEXT,
+      reason TEXT NOT NULL,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT NOW(),
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_suppression_repo ON suppression_rules(repository_id)`);
 
   if (process.env.NODE_ENV !== "production") {
     const adminHash = bcrypt.hashSync("admin", 10);

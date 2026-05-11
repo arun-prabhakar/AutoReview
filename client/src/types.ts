@@ -13,6 +13,12 @@ export interface Review {
   repository_name?: string;
   ai_overview?: string | null;
   findings?: Finding[];
+  parent_review_id?: string | null;
+  tokens_prompt?: number | null;
+  tokens_completion?: number | null;
+  tokens_total?: number | null;
+  estimated_cost?: number | null;
+  project_context?: string | null;
 }
 
 export interface Finding {
@@ -25,6 +31,21 @@ export interface Finding {
   risk_level: 'must_fix' | 'should_fix_soon' | 'ignore';
   suggested_fix: string | null;
   category: string | null;
+  disposition: string;
+  disposition_reason: string | null;
+  disposition_by: string | null;
+  disposition_at: string | null;
+  suppressed: boolean;
+  suppressed_by_rule_id: string | null;
+}
+
+export interface FindingComment {
+  id: string;
+  finding_id: string;
+  user_id: string;
+  username: string;
+  content: string;
+  created_at: string;
 }
 
 export interface Repository {
@@ -55,6 +76,7 @@ export interface Repository {
   smtp_user: string | null;
   smtp_password_encrypted: string | null;
   smtp_from_address: string | null;
+  multi_pass_review: number;
 }
 
 export interface Credential {
@@ -100,4 +122,37 @@ export interface SmtpSettings {
   smtp_port: number | null;
   smtp_user: string | null;
   smtp_from_address: string | null;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string | null;
+  read: boolean;
+  entity_type: string | null;
+  entity_id: string | null;
+  created_at: string;
+}
+
+export interface SuppressionRule {
+  id: string;
+  repository_id: string;
+  category: string | null;
+  file_pattern: string | null;
+  summary_pattern: string | null;
+  risk_level: string | null;
+  reason: string;
+  created_by: string;
+  created_at: string;
+  enabled: boolean;
+}
+
+export interface ReviewChainItem {
+  id: string;
+  status: string;
+  created_at: string;
+  must_fix_count: string;
+  total_findings: string;
 }
