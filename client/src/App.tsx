@@ -18,6 +18,33 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Users = lazy(() => import("./pages/Users"));
 const Analytics = lazy(() => import("./pages/Analytics"));
 
+export function preloadPage(name: "Dashboard" | "ManualReview" | "ReviewDetail" | "Settings" | "Users" | "Analytics") {
+  const loaders: Record<string, () => Promise<unknown>> = {
+    Dashboard: () => import("./pages/Dashboard"),
+    ManualReview: () => import("./pages/ManualReview"),
+    ReviewDetail: () => import("./pages/ReviewDetail"),
+    Settings: () => import("./pages/Settings"),
+    Users: () => import("./pages/Users"),
+    Analytics: () => import("./pages/Analytics"),
+  };
+  loaders[name]?.();
+}
+
+function prefetchAllPages() {
+  const prefetch = () => {
+    preloadPage("ManualReview");
+    preloadPage("Analytics");
+    preloadPage("Settings");
+    preloadPage("Users");
+    preloadPage("ReviewDetail");
+  };
+  if ("requestIdleCallback" in window) {
+    requestIdleCallback(prefetch, { timeout: 3000 });
+  } else {
+    setTimeout(prefetch, 2000);
+  }
+}
+
 setOnUnauthorized(() => store.dispatch(logoutUser()));
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -66,12 +93,19 @@ export default function App() {
   const dispatch = useDispatch<AppDispatch>();
 
   useEffect(() => {
-    dispatch(validateSession());
+    dispatch(validateSession()).finally(prefetchAllPages);
   }, [dispatch]);
   return (
     <>
       <ErrorBoundary>
-        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-foreground" /></div>}>
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-[60vh]">
+            <div className="flex flex-col items-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-foreground" />
+              <span className="text-sm text-muted-foreground">Loading...</span>
+            </div>
+          </div>
+        }>
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route
