@@ -13,8 +13,8 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       role TEXT NOT NULL DEFAULT 'user',
       must_change_password BOOLEAN NOT NULL DEFAULT false,
       token_version INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT NOW(),
-      updated_at TEXT NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -27,8 +27,8 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       name TEXT NOT NULL UNIQUE,
       api_base TEXT NOT NULL,
       api_key_encrypted TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT NOW(),
-      updated_at TEXT NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -38,8 +38,8 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       username TEXT NOT NULL,
       app_password_encrypted TEXT NOT NULL,
       workspace TEXT,
-      created_at TEXT NOT NULL DEFAULT NOW(),
-      updated_at TEXT NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -73,8 +73,8 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       smtp_password_encrypted TEXT,
       smtp_from_address TEXT,
       multi_pass_review BOOLEAN NOT NULL DEFAULT false,
-      created_at TEXT NOT NULL DEFAULT NOW(),
-      updated_at TEXT NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       FOREIGN KEY(credential_id) REFERENCES credentials(id)
     )
   `);
@@ -89,8 +89,8 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       strictness TEXT NOT NULL DEFAULT 'balanced',
       review_mode TEXT NOT NULL DEFAULT 'manual',
       error_message TEXT,
-      created_at TEXT NOT NULL DEFAULT NOW(),
-      completed_at TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ,
       created_by TEXT,
       ai_overview TEXT,
       parent_review_id TEXT,
@@ -117,7 +117,7 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       disposition TEXT NOT NULL DEFAULT 'open',
       disposition_reason TEXT,
       disposition_by TEXT,
-      disposition_at TEXT,
+      disposition_at TIMESTAMPTZ,
       suppressed BOOLEAN NOT NULL DEFAULT false,
       suppressed_by_rule_id TEXT,
       persistent_issue_id TEXT,
@@ -132,8 +132,8 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       content TEXT NOT NULL,
       strictness TEXT NOT NULL DEFAULT 'all',
       is_default BOOLEAN NOT NULL DEFAULT false,
-      created_at TEXT NOT NULL DEFAULT NOW(),
-      updated_at TEXT NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
 
@@ -145,14 +145,46 @@ export async function ensureSchema(pool: Pool): Promise<void> {
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS estimated_cost REAL`);
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS project_context TEXT`);
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS error_message TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS completed_at TEXT`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS created_by TEXT`);
 
+  const timestampColumns: [string, string][] = [
+    ["users", "created_at"],
+    ["users", "updated_at"],
+    ["llm_providers", "created_at"],
+    ["llm_providers", "updated_at"],
+    ["credentials", "created_at"],
+    ["credentials", "updated_at"],
+    ["repositories", "created_at"],
+    ["repositories", "updated_at"],
+    ["reviews", "created_at"],
+    ["reviews", "completed_at"],
+    ["findings", "disposition_at"],
+    ["prompt_templates", "created_at"],
+    ["prompt_templates", "updated_at"],
+    ["notifications", "created_at"],
+    ["finding_comments", "created_at"],
+    ["suppression_rules", "created_at"],
+  ];
+
+  for (const [table, col] of timestampColumns) {
+    await pool.query(
+      `DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2 AND data_type = 'text') THEN
+          EXECUTE format('ALTER TABLE %I ALTER COLUMN %I TYPE TIMESTAMPTZ USING %I::TIMESTAMPTZ', $1, $2, $2);
+        END IF;
+      END$$`,
+      [table, col]
+    );
+  }
+
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_status ON reviews(repository_id, status)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_created_at ON reviews(created_at)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_risk_disposition ON findings(risk_level, disposition)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
 
-  // --- Notifications table (Feature 8) ---
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notifications (
       id TEXT PRIMARY KEY,
@@ -163,13 +195,12 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       read BOOLEAN NOT NULL DEFAULT false,
       entity_type TEXT,
       entity_id TEXT,
-      created_at TEXT NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read)`);
 
-  // --- Finding Comments table (Feature 9) ---
   await pool.query(`
     CREATE TABLE IF NOT EXISTS finding_comments (
       id TEXT PRIMARY KEY,
@@ -177,13 +208,12 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       user_id TEXT NOT NULL,
       username TEXT NOT NULL,
       content TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       FOREIGN KEY(finding_id) REFERENCES findings(id) ON DELETE CASCADE
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_comments_finding ON finding_comments(finding_id)`);
 
-  // --- Suppression Rules table (Feature 11) ---
   await pool.query(`
     CREATE TABLE IF NOT EXISTS suppression_rules (
       id TEXT PRIMARY KEY,
@@ -194,7 +224,7 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       risk_level TEXT,
       reason TEXT NOT NULL,
       created_by TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT NOW(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       enabled BOOLEAN NOT NULL DEFAULT true,
       FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
     )

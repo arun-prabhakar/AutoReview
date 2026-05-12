@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Info } from "lucide-react";
+import { Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface HealthInfo {
@@ -22,7 +22,7 @@ function formatDeployDate(iso: string): string {
 export function AboutIcon() {
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [show, setShow] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     fetch("/api/health")
@@ -32,35 +32,47 @@ export function AboutIcon() {
   }, []);
 
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShow(false);
-      }
+    if (!show) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setShow(false);
     }
-    if (show) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    closeRef.current?.focus();
+    return () => document.removeEventListener("keydown", handleKey);
   }, [show]);
 
   return (
-    <div className="relative" ref={containerRef}>
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" aria-label="About" onClick={() => setShow(!show)}>
+    <>
+      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" aria-label="About" onClick={() => setShow(true)}>
         <Info className="h-4 w-4" />
       </Button>
 
-      {show && health && (
-        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-60 rounded-lg border border-border bg-card shadow-lg z-[60] p-4 text-xs">
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-bold text-sm text-foreground tracking-tight">AutoReview</span>
-            <span className="text-muted-foreground font-mono">v{health.version}</span>
-          </div>
-          <div className="text-muted-foreground">
-            Deployed: {formatDeployDate(health.deployedAt)}
-          </div>
-          <div className="absolute left-1/2 top-full -translate-x-1/2">
-            <div className="w-2 h-2 rotate-45 border-l border-b border-border bg-card" />
+      {show && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" onClick={() => setShow(false)}>
+          <div className="bg-card border border-border rounded-xl shadow-2xl p-6 w-80" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-semibold text-lg text-foreground tracking-tight">AutoReview</span>
+              <Button ref={closeRef} variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => setShow(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            {health ? (
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Version</span>
+                  <span className="font-mono text-foreground">{health.version}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Deployed</span>
+                  <span className="text-foreground">{formatDeployDate(health.deployedAt)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading...</p>
+            )}
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

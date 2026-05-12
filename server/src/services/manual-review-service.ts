@@ -1,5 +1,5 @@
 import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, updateFindingDisposition, applySuppressionRules, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, getBreachedSlaFindings, type RawFindingInput } from "./storage-service.js";
-import { fetchCommitDiff, fetchPrDiff, findPullRequestForCommit, postPrComment, postBuildStatus, postInlinePrComment, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
+import { fetchCommitDiff, fetchPrDiff, findPullRequestForCommit, postPrComment, postInlinePrComment, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
@@ -271,22 +271,7 @@ async function sendNotifications(
     );
   }
 
-  const commitHash = ctx.reviewMode === "pr" && ctx.prId
-    ? ctx.commit.hash
-    : ctx.dedupKey;
-  if (commitHash && !commitHash.startsWith("pr:")) {
-    tasks.push(
-      postBuildStatus(
-        ctx.repo.workspace, ctx.repo.slug, commitHash,
-        mustFixCount > 0 ? "FAILED" : "SUCCESSFUL",
-        "autoreview",
-        mustFixCount > 0
-          ? `Found ${mustFixCount} must-fix and ${findings.filter((f) => f.risk_level === "should_fix_soon").length} should-fix findings`
-          : `Clean review — ${findings.length} informational finding${findings.length !== 1 ? "s" : ""}`,
-        password, username
-      ).catch(() => {})
-    );
-  }
+
 
   await Promise.all(tasks);
 }
