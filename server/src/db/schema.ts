@@ -171,11 +171,10 @@ export async function ensureSchema(pool: Pool): Promise<void> {
     await pool.query(
       `DO $$
       BEGIN
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = $1 AND column_name = $2 AND data_type = 'text') THEN
-          EXECUTE format('ALTER TABLE %I ALTER COLUMN %I TYPE TIMESTAMPTZ USING %I::TIMESTAMPTZ', $1, $2, $2);
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '${table.replace(/'/g, "''")}' AND column_name = '${col.replace(/'/g, "''")}' AND data_type = 'text') THEN
+          EXECUTE 'ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE TIMESTAMPTZ USING "${col}"::TIMESTAMPTZ';
         END IF;
-      END$$`,
-      [table, col]
+      END$$`
     );
   }
 
