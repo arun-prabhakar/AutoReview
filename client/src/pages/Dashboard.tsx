@@ -52,10 +52,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    dispatch(fetchReviews({ limit: PAGE_SIZE, offset: 0 }));
+    const promise = dispatch(fetchReviews({ limit: PAGE_SIZE, offset: 0 }));
     dispatch(fetchRepositories());
     api.get("/api/analytics/health-scores").then((d: unknown) => setHealthScores(d as typeof healthScores)).catch(() => {});
-    setHasLoaded(true);
+    promise.unwrap().finally(() => setHasLoaded(true));
   }, [dispatch]); // eslint-disable-line
 
   useEffect(() => {
