@@ -20,7 +20,7 @@ import { AboutIcon } from "@/components/AboutIcon";
 const allNavItems: { to: string; label: string; icon: LucideIcon; roles: string[]; preload: string }[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "user"], preload: "Dashboard" },
   { to: "/reviews/manual", label: "Manual Review", icon: FileSearch, roles: ["admin", "user"], preload: "ManualReview" },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, roles: ["admin", "user"], preload: "Analytics" },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, roles: ["admin"], preload: "Analytics" },
   { to: "/users", label: "Users", icon: Users, roles: ["admin"], preload: "Users" },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["admin"], preload: "Settings" },
 ];

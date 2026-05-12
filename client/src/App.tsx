@@ -118,7 +118,14 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/reviews/manual" element={<ManualReview />} />
             <Route path="/reviews/:id" element={<ReviewDetail />} />
-            <Route path="/analytics" element={<Analytics />} />
+            <Route
+              path="/analytics"
+              element={
+                <RequireAuth roles={["admin"]}>
+                  <Analytics />
+                </RequireAuth>
+              }
+            />
             <Route
               path="/users"
               element={

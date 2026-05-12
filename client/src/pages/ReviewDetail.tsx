@@ -558,8 +558,9 @@ AutoReview`;
         );
       })}
 
-      <Card className="border-border">
-        <button
+      {user?.role === "admin" && (
+        <Card className="border-border">
+          <button
             onClick={() => setEmailVisible(!emailVisible)}
             aria-expanded={emailVisible}
             aria-controls="email-draft-content"
@@ -585,6 +586,7 @@ AutoReview`;
             </CardContent>
           )}
         </Card>
+      )}
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-md">
