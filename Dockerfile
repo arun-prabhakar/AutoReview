@@ -27,10 +27,7 @@ COPY --from=builder /app/client/dist ./public
 
 RUN mkdir -p /app/logs
 
-ENV PORT=3001
 ENV NODE_ENV=production
 ENV DEPLOYED_AT=${DEPLOYED_AT}
-
-EXPOSE 3001
 
 CMD ["node", "dist/index.js"]

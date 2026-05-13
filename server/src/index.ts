@@ -124,9 +124,14 @@ app.get("*", (_req, res) => {
 app.use(errorHandler);
 
 async function start() {
-  await initDb();
+  // Listen FIRST so Cloud Run health checks pass immediately,
+  // then initialize DB in the background.
   const server = app.listen(PORT, () => {
     logger.info(`AutoReview server running on port ${PORT}`);
+  });
+
+  initDb().catch((err) => {
+    logger.error("Database initialization failed", { error: String(err) });
   });
 
   function shutdown() {
