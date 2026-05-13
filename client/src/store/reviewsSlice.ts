@@ -42,6 +42,7 @@ const reviewsSlice = createSlice({
     pagination: { limit: 20, offset: 0 },
     filters: {} as Record<string, string>,
     loading: false,
+    initialLoad: true,
     error: null as string | null,
   },
   reducers: {
@@ -60,6 +61,7 @@ const reviewsSlice = createSlice({
       })
       .addCase(fetchReviews.fulfilled, (state, action) => {
         state.loading = false;
+        state.initialLoad = false;
         state.items = action.payload.reviews;
         state.total = action.payload.total;
         state.statusCounts = action.payload.statusCounts;
