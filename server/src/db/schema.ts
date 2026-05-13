@@ -165,6 +165,8 @@ export async function ensureSchema(pool: Pool): Promise<void> {
     ["notifications", "created_at"],
     ["finding_comments", "created_at"],
     ["suppression_rules", "created_at"],
+    ["share_tokens", "created_at"],
+    ["share_tokens", "expires_at"],
   ];
 
   for (const [table, col] of timestampColumns) {
@@ -229,6 +231,21 @@ export async function ensureSchema(pool: Pool): Promise<void> {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_suppression_repo ON suppression_rules(repository_id)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS share_tokens (
+      id TEXT PRIMARY KEY,
+      review_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_by TEXT NOT NULL,
+      FOREIGN KEY(review_id) REFERENCES reviews(id) ON DELETE CASCADE
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_share_tokens_token ON share_tokens(token)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_share_tokens_review ON share_tokens(review_id)`);
 
   if (process.env.NODE_ENV !== "production") {
     const adminHash = bcrypt.hashSync("admin", 10);

@@ -17,6 +17,7 @@ const ReviewDetail = lazy(() => import("./pages/ReviewDetail"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Users = lazy(() => import("./pages/Users"));
 const Analytics = lazy(() => import("./pages/Analytics"));
+const SharedReview = lazy(() => import("./pages/SharedReview"));
 
 export function preloadPage(name: "Dashboard" | "ManualReview" | "ReviewDetail" | "Settings" | "Users" | "Analytics") {
   const loaders: Record<string, () => Promise<unknown>> = {
@@ -108,6 +109,7 @@ export default function App() {
         }>
           <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/shared/:token" element={<SharedReview />} />
           <Route
             element={
               <RequireAuth>

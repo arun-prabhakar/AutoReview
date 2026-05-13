@@ -156,3 +156,11 @@ export interface ReviewChainItem {
   must_fix_count: string;
   total_findings: string;
 }
+
+export interface ShareToken {
+  id: string;
+  token: string;
+  enabled: boolean;
+  expires_at: string;
+  url: string;
+}

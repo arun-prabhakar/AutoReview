@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { type RootState, type AppDispatch } from "@/store";
 import { fetchReviewDetail } from "@/store/reviewDetailSlice";
-import type { Finding, FindingComment, ReviewChainItem } from "@/types";
+import type { Finding, FindingComment, ReviewChainItem, ShareToken } from "@/types";
 import { api } from "@/services/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, MessageSquare, RotateCcw, CheckCircle2, XCircle, Eye, Coins, FileText, History, Send } from "lucide-react";
+import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, MessageSquare, RotateCcw, CheckCircle2, XCircle, Eye, Coins, FileText, History, Send, Share2, Link2, Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ReviewDetail() {
@@ -36,6 +36,9 @@ export default function ReviewDetail() {
   const [commentText, setCommentText] = useState<Record<string, string>>({});
   const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({});
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const [shareData, setShareData] = useState<ShareToken | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     if (id) dispatch(fetchReviewDetail(id));
@@ -117,6 +120,43 @@ export default function ReviewDetail() {
       setRereviewing(false);
       setRereviewOpen(false);
     }
+  };
+
+  const handleShare = async () => {
+    if (!id) return;
+    setShareLoading(true);
+    try {
+      const result = await api.post<ShareToken>("/api/share", { review_id: id });
+      setShareData(result);
+    } catch (err) {
+      toast({ title: "Failed to create share link", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleToggleShare = async () => {
+    if (!shareData) return;
+    try {
+      if (shareData.enabled) {
+        await api.del(`/api/share/${shareData.token}`);
+        setShareData({ ...shareData, enabled: false });
+        toast({ title: "Share link disabled", variant: "success" });
+      } else {
+        await handleShare();
+      }
+    } catch (err) {
+      toast({ title: "Failed to update share link", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!shareData?.url) return;
+    const url = shareData.url.startsWith("http") ? shareData.url : `${window.location.origin}${shareData.url}`;
+    await navigator.clipboard.writeText(url);
+    setShareCopied(true);
+    toast({ title: "Link copied to clipboard", variant: "success" });
+    setTimeout(() => setShareCopied(false), 2000);
   };
 
   if (loading) return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>;
@@ -287,6 +327,10 @@ AutoReview`;
           </nav>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={shareData ? undefined : handleShare} disabled={shareLoading}>
+            <Share2 className="h-3.5 w-3.5 mr-1.5" />
+            {shareLoading ? "Sharing..." : "Share"}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setRereviewOpen(true)} disabled={rereviewing}>
             <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
             {rereviewing ? "Re-reviewing..." : "Re-review"}
@@ -298,7 +342,38 @@ AutoReview`;
             </Button>
           )}
         </div>
-      </div>
+       </div>
+
+      {shareData && (
+        <Card className="border-border bg-card">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0", shareData.enabled ? "bg-success/10" : "bg-muted")}>
+                  <Link2 className={cn("h-4 w-4", shareData.enabled ? "text-success" : "text-muted-foreground")} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{shareData.enabled ? "Share link active" : "Share link disabled"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Expires {new Date(shareData.expires_at).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {shareData.enabled && (
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleCopyLink}>
+                    {shareCopied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                    {shareCopied ? "Copied" : "Copy Link"}
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleToggleShare}>
+                  {shareData.enabled ? "Disable" : "Enable"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {chain.length > 1 && (
         <Card className="border-border bg-card">

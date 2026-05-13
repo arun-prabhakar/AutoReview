@@ -19,6 +19,7 @@ import { findingsRouter } from "./routes/findings.js";
 import { notificationsRouter } from "./routes/notifications.js";
 import { suppressionsRouter } from "./routes/suppressions.js";
 import { analyticsRouter } from "./routes/analytics.js";
+import { shareRouter } from "./routes/share.js";
 import { requestLogger, errorHandler, logger } from "./middleware/index.js";
 import { jwtAuth, requireRole } from "./middleware/jwt-auth.js";
 
@@ -85,6 +86,7 @@ app.use(requestLogger);
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth", publicLimiter, authRouter);
 app.use("/api/cron", cronLimiter, cronRouter);
+app.use("/api/share", publicLimiter, shareRouter);
 const DEPLOYED_AT = process.env.DEPLOYED_AT || new Date().toISOString();
 const APP_VERSION = getDeployVersion(DEPLOYED_AT);
 
