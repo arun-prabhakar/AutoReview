@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { loginUser, clearError } from "../store/authSlice";
 import type { RootState, AppDispatch } from "../store";
@@ -7,10 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Eye, EyeOff } from "lucide-react";
 
+interface LocationState {
+  from?: { pathname: string; search: string; hash: string };
+}
+
 export default function Login() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { loading, error } = useSelector((state: RootState) => state.auth);
+  const from = (location.state as LocationState)?.from;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -25,7 +31,7 @@ export default function Login() {
     if (!username.trim() || !password.trim()) return;
     const result = await dispatch(loginUser({ username, password }));
     if (loginUser.fulfilled.match(result)) {
-      navigate("/");
+      navigate(from ? `${from.pathname}${from.search}${from.hash}` : "/", { replace: true });
     }
   }
 
