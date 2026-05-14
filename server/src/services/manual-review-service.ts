@@ -1,4 +1,4 @@
-import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, updateFindingDisposition, applySuppressionRules, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, getBreachedSlaFindings, type RawFindingInput } from "./storage-service.js";
+import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, type RawFindingInput } from "./storage-service.js";
 import { fetchCommitDiff, fetchPrDiff, findPullRequestForCommit, postPrComment, postInlinePrComment, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
@@ -129,7 +129,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       tokenUsage = singleResult.tokenUsage;
     }
 
-    const { filtered: findings, suppressed } = await applySuppressionRules(ctx.repo.id, rawFindings.map((f) => ({
+    const findings = rawFindings.map((f) => ({
       file_path: f.file_path,
       line_number: f.line_number,
       summary: f.summary,
@@ -137,10 +137,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       risk_level: f.risk_level,
       suggested_fix: f.suggested_fix,
       category: f.category,
-    })));
-    if (suppressed.length > 0) {
-      logger.info(`Suppressed ${suppressed.length} findings for repo ${ctx.repo.name}`);
-    }
+    }));
 
     let aiOverview = "";
     try {
@@ -173,7 +170,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       }
     );
 
-    return { reviewId, findings, cached: false, incomplete, aiOverview, tokenUsage, suppressedCount: suppressed.length };
+    return { reviewId, findings, cached: false, incomplete, aiOverview, tokenUsage };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     await updateReviewStatus(reviewId, "failed", message);
@@ -333,7 +330,6 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
 
   await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);
   await notifyReviewComplete(repo.id, result.reviewId, repo.name, result.findings, createdBy);
-  await checkSlaBreaches();
 
   return result;
 }
@@ -364,7 +360,6 @@ export async function runPrReview(repositoryId: string, prId: string, force = fa
 
   await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);
   await notifyReviewComplete(repo.id, result.reviewId, repo.name, result.findings, createdBy);
-  await checkSlaBreaches();
 
   return { ...result, pr };
 }
@@ -390,23 +385,6 @@ async function notifyReviewComplete(
     }
   } catch (err) {
     logger.warn(`Failed to create review notifications`, { error: String(err) });
-  }
-}
-
-async function checkSlaBreaches() {
-  try {
-    const breached = await getBreachedSlaFindings();
-    if (breached.length === 0) return;
-    const users = await all<{ id: string }>("SELECT id FROM users");
-    const title = `⚠️ SLA Breach: ${breached.length} finding${breached.length > 1 ? "s" : ""} exceeded resolution deadline`;
-    const message = breached.slice(0, 5).map((f) =>
-      `${f.risk_level === "must_fix" ? "Must-fix" : "Should-fix"} in ${f.repository_name}: "${f.summary}" — open for ${Math.round(Number(f.hours_open))}h`
-    ).join("\n");
-    for (const user of users) {
-      await createNotification(user.id, "sla_breach", title, message, "review", breached[0]?.review_id);
-    }
-  } catch (err) {
-    logger.warn(`Failed to check SLA breaches`, { error: String(err) });
   }
 }
 

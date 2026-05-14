@@ -148,6 +148,8 @@ export async function ensureSchema(pool: Pool): Promise<void> {
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS created_by TEXT`);
 
+  await pool.query(`ALTER TABLE findings ADD COLUMN IF NOT EXISTS persistent_issue_id TEXT`);
+
   const timestampColumns: [string, string][] = [
     ["users", "created_at"],
     ["users", "updated_at"],
@@ -159,12 +161,9 @@ export async function ensureSchema(pool: Pool): Promise<void> {
     ["repositories", "updated_at"],
     ["reviews", "created_at"],
     ["reviews", "completed_at"],
-    ["findings", "disposition_at"],
     ["prompt_templates", "created_at"],
     ["prompt_templates", "updated_at"],
     ["notifications", "created_at"],
-    ["finding_comments", "created_at"],
-    ["suppression_rules", "created_at"],
     ["share_tokens", "created_at"],
     ["share_tokens", "expires_at"],
   ];
@@ -201,36 +200,6 @@ export async function ensureSchema(pool: Pool): Promise<void> {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read)`);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS finding_comments (
-      id TEXT PRIMARY KEY,
-      finding_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      username TEXT NOT NULL,
-      content TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      FOREIGN KEY(finding_id) REFERENCES findings(id) ON DELETE CASCADE
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_comments_finding ON finding_comments(finding_id)`);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS suppression_rules (
-      id TEXT PRIMARY KEY,
-      repository_id TEXT NOT NULL,
-      category TEXT,
-      file_pattern TEXT,
-      summary_pattern TEXT,
-      risk_level TEXT,
-      reason TEXT NOT NULL,
-      created_by TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      enabled BOOLEAN NOT NULL DEFAULT true,
-      FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_suppression_repo ON suppression_rules(repository_id)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS share_tokens (

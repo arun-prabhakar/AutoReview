@@ -15,9 +15,7 @@ import { promptTemplateRouter } from "./routes/prompt-templates.js";
 import { providersRouter } from "./routes/providers.js";
 import { authRouter, usersRouter } from "./routes/auth.js";
 import { cronRouter } from "./routes/cron.js";
-import { findingsRouter } from "./routes/findings.js";
 import { notificationsRouter } from "./routes/notifications.js";
-import { suppressionsRouter } from "./routes/suppressions.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { shareRouter } from "./routes/share.js";
 import { requestLogger, errorHandler, logger } from "./middleware/index.js";
@@ -97,10 +95,8 @@ app.get("/api/health", publicLimiter, (_req, res) => {
 app.use("/api", apiLimiter, jwtAuth);
 
 app.use("/api/reviews", reviewsRouter);
-app.use("/api/findings", findingsRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/analytics", analyticsRouter);
-app.use("/api/suppressions", suppressionsRouter);
 app.use("/api/repositories", repositoriesRouter);
 app.use("/api/settings", requireRole("admin"), settingsRouter);
 app.use("/api/credentials", requireRole("admin"), credentialsRouter);
@@ -126,14 +122,16 @@ app.get("*", (_req, res) => {
 app.use(errorHandler);
 
 async function start() {
-  // Listen FIRST so Cloud Run health checks pass immediately,
-  // then initialize DB in the background.
+  // Cloud Run routes traffic once the port is bound — DB must be ready first.
+  try {
+    await initDb();
+  } catch (err) {
+    logger.error("Database initialization failed — exiting", { error: String(err) });
+    process.exit(1);
+  }
+
   const server = app.listen(PORT, () => {
     logger.info(`AutoReview server running on port ${PORT}`);
-  });
-
-  initDb().catch((err) => {
-    logger.error("Database initialization failed", { error: String(err) });
   });
 
   function shutdown() {

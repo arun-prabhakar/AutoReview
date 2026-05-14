@@ -1,18 +1,17 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { type RootState, type AppDispatch } from "@/store";
 import { fetchReviewDetail } from "@/store/reviewDetailSlice";
-import type { Finding, FindingComment, ReviewChainItem, ShareToken } from "@/types";
+import type { Finding, ReviewChainItem, ShareToken } from "@/types";
 import { api } from "@/services/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, MessageSquare, RotateCcw, CheckCircle2, XCircle, Eye, Coins, FileText, History, Send, Share2, Link2, Copy, Check } from "lucide-react";
+import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ReviewDetail() {
@@ -29,13 +28,6 @@ export default function ReviewDetail() {
   const [rereviewOpen, setRereviewOpen] = useState(false);
   const [chain, setChain] = useState<ReviewChainItem[]>([]);
   const [chainVisible, setChainVisible] = useState(false);
-  const [dispositionDialog, setDispositionDialog] = useState<{ findingId: string; disposition: string } | null>(null);
-  const [dispositionReason, setDispositionReason] = useState("");
-  const [dispositionLoading, setDispositionLoading] = useState(false);
-  const [commentsMap, setCommentsMap] = useState<Record<string, FindingComment[]>>({});
-  const [commentText, setCommentText] = useState<Record<string, string>>({});
-  const [commentSubmitting, setCommentSubmitting] = useState<Record<string, boolean>>({});
-  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [shareData, setShareData] = useState<ShareToken | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -49,63 +41,6 @@ export default function ReviewDetail() {
       api.get<ReviewChainItem[]>(`/api/reviews/${id}/chain`).then(setChain).catch(() => {});
     }
   }, [id]);
-
-  const loadComments = useCallback(async (findingId: string) => {
-    try {
-      const comments = await api.get<FindingComment[]>(`/api/findings/${findingId}/comments`);
-      setCommentsMap((prev) => ({ ...prev, [findingId]: comments }));
-    } catch { /* ignore */ }
-  }, []);
-
-  const toggleComments = useCallback((findingId: string) => {
-    setExpandedComments((prev) => {
-      const next = new Set(prev);
-      if (next.has(findingId)) {
-        next.delete(findingId);
-      } else {
-        next.add(findingId);
-        loadComments(findingId);
-      }
-      return next;
-    });
-  }, [loadComments]);
-
-  const submitComment = useCallback(async (findingId: string) => {
-    const text = commentText[findingId]?.trim();
-    if (!text) return;
-    setCommentSubmitting((prev) => ({ ...prev, [findingId]: true }));
-    try {
-      const comment = await api.post<FindingComment>(`/api/findings/${findingId}/comments`, { content: text });
-      setCommentsMap((prev) => ({ ...prev, [findingId]: [...(prev[findingId] || []), comment] }));
-      setCommentText((prev) => ({ ...prev, [findingId]: "" }));
-      toast({ title: "Comment added", variant: "success" });
-    } catch (err) {
-      toast({ title: "Failed to add comment", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
-    } finally {
-      setCommentSubmitting((prev) => ({ ...prev, [findingId]: false }));
-    }
-  }, [commentText, toast]);
-
-  const handleDisposition = async () => {
-    if (!dispositionDialog) return;
-    setDispositionLoading(true);
-    try {
-      const updated = await api.patch<Finding>(`/api/findings/${dispositionDialog.findingId}/disposition`, {
-        disposition: dispositionDialog.disposition,
-        reason: dispositionReason || null,
-      });
-      if (updated) {
-        dispatch(fetchReviewDetail(id!));
-        toast({ title: `Finding marked as ${dispositionDialog.disposition}`, variant: "success" });
-      }
-    } catch (err) {
-      toast({ title: "Failed to update disposition", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
-    } finally {
-      setDispositionLoading(false);
-      setDispositionDialog(null);
-      setDispositionReason("");
-    }
-  };
 
   const handleRereview = async () => {
     if (!id) return;
@@ -181,27 +116,8 @@ export default function ReviewDetail() {
   const branch = String(review.branch || "N/A");
   const aiOverview = String(review.ai_overview || "Review completed.");
 
-  const dispositionIcon = (d: string) => {
-    switch (d) {
-      case "acknowledged": return <Eye className="h-3 w-3" />;
-      case "dismissed": return <XCircle className="h-3 w-3" />;
-      case "fixed": return <CheckCircle2 className="h-3 w-3" />;
-      default: return null;
-    }
-  };
-
-  const dispositionColor = (d: string) => {
-    switch (d) {
-      case "acknowledged": return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case "dismissed": return "bg-muted text-muted-foreground border-border";
-      case "fixed": return "bg-success/10 text-success border-success/20";
-      default: return "";
-    }
-  };
-
   const totalFindings = findings.length;
   const worstRisk = grouped.must_fix.length > 0 ? "critical" : grouped.should_fix_soon.length > 0 ? "warning" : "clean";
-  const openFindings = findings.filter((f) => f.disposition === "open").length;
 
   const formatFinding = (f: Finding, index: number) => {
     const location = f.file_path + (f.line_number ? `:${f.line_number}` : "");
@@ -499,7 +415,7 @@ AutoReview`;
           </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="p-4 rounded-xl border border-border bg-card text-center">
           <p className="text-xs font-bold uppercase tracking-wider text-destructive">Must Fix</p>
           <span className="text-2xl font-bold tabular-nums text-destructive">{grouped.must_fix.length}</span>
@@ -515,10 +431,6 @@ AutoReview`;
         <div className="p-4 rounded-xl border border-border bg-card text-center">
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total</p>
           <span className="text-2xl font-bold tabular-nums text-foreground">{totalFindings}</span>
-        </div>
-        <div className="p-4 rounded-xl border border-border bg-card text-center">
-          <p className="text-xs font-bold uppercase tracking-wider text-blue-500">Open</p>
-          <span className="text-2xl font-bold tabular-nums text-blue-500">{openFindings}</span>
         </div>
       </div>
 
@@ -551,12 +463,6 @@ AutoReview`;
                       <div className="flex gap-2 flex-shrink-0 mt-0.5 flex-wrap justify-end">
                         <Badge variant={level === "must_fix" ? "critical" : level === "should_fix_soon" ? "moderate" : "low"} className="capitalize text-xs">{level.replace("_", " ")}</Badge>
                         {finding.category != null && <Badge variant="outline" className="text-xs border-border">{finding.category}</Badge>}
-                        {finding.disposition !== "open" && (
-                          <Badge variant="outline" className={cn("text-xs capitalize", dispositionColor(finding.disposition))}>
-                            {dispositionIcon(finding.disposition)}
-                            <span className="ml-1">{finding.disposition}</span>
-                          </Badge>
-                        )}
                       </div>
                     </div>
                     <p className="text-sm leading-relaxed text-muted-foreground">{finding.explanation}</p>
@@ -567,63 +473,6 @@ AutoReview`;
                           <div className="h-px flex-1 bg-border" />
                         </div>
                         <code className="text-xs font-mono block text-foreground leading-relaxed whitespace-pre-wrap">{finding.suggested_fix}</code>
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {finding.disposition === "open" && (
-                        <>
-                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDispositionDialog({ findingId: finding.id, disposition: "acknowledged" })}>
-                            <Eye className="h-3 w-3 mr-1" />Acknowledge
-                          </Button>
-                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDispositionDialog({ findingId: finding.id, disposition: "dismissed" })}>
-                            <XCircle className="h-3 w-3 mr-1" />Dismiss
-                          </Button>
-                          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDispositionDialog({ findingId: finding.id, disposition: "fixed" })}>
-                            <CheckCircle2 className="h-3 w-3 mr-1" />Fixed
-                          </Button>
-                        </>
-                      )}
-                      {finding.disposition !== "open" && (
-                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setDispositionDialog({ findingId: finding.id, disposition: "open" })}>
-                          Reopen
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => toggleComments(finding.id)}>
-                        <MessageSquare className="h-3 w-3 mr-1" />
-                        {(commentsMap[finding.id]?.length ?? 0) > 0 ? `${commentsMap[finding.id]?.length}` : "Comment"}
-                      </Button>
-                    </div>
-
-                    {expandedComments.has(finding.id) && (
-                      <div className="space-y-2 border-t border-border pt-3 mt-2">
-                        {(commentsMap[finding.id] || []).map((c) => (
-                          <div key={c.id} className="flex gap-2">
-                            <div className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center text-[10px] font-bold text-foreground flex-shrink-0 mt-0.5">
-                              {c.username.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold text-foreground">{c.username}</span>
-                                <span className="text-[10px] text-muted-foreground">{new Date(c.created_at).toLocaleDateString()}</span>
-                              </div>
-                              <p className="text-xs text-foreground mt-0.5">{c.content}</p>
-                            </div>
-                          </div>
-                        ))}
-                        <div className="flex gap-2 mt-2">
-                          <input
-                            type="text"
-                            placeholder="Add a comment..."
-                            value={commentText[finding.id] || ""}
-                            onChange={(e) => setCommentText((prev) => ({ ...prev, [finding.id]: e.target.value }))}
-                            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitComment(finding.id); } }}
-                            className="flex-1 h-8 rounded-md border border-border bg-card px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                          />
-                          <Button size="sm" className="h-8 w-8 p-0" disabled={commentSubmitting[finding.id] || !(commentText[finding.id]?.trim())} onClick={() => submitComment(finding.id)}>
-                            <Send className="h-3 w-3" />
-                          </Button>
-                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -698,36 +547,6 @@ AutoReview`;
             <Button variant="outline" onClick={() => setRereviewOpen(false)}>Cancel</Button>
             <Button onClick={handleRereview} disabled={rereviewing}>
               {rereviewing ? "Starting..." : "Start Re-review"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!dispositionDialog} onOpenChange={(open) => { if (!open) { setDispositionDialog(null); setDispositionReason(""); } }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="capitalize">
-              Mark as {dispositionDialog?.disposition}
-            </DialogTitle>
-            {dispositionDialog?.disposition !== "open" && (
-              <DialogDescription>
-                Optionally provide a reason for this change.
-              </DialogDescription>
-            )}
-          </DialogHeader>
-          {(dispositionDialog?.disposition === "dismissed" || dispositionDialog?.disposition === "fixed") && (
-            <Textarea
-              placeholder="Reason (optional)"
-              value={dispositionReason}
-              onChange={(e) => setDispositionReason(e.target.value)}
-              rows={2}
-              className="text-sm"
-            />
-          )}
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => { setDispositionDialog(null); setDispositionReason(""); }}>Cancel</Button>
-            <Button onClick={handleDisposition} disabled={dispositionLoading}>
-              {dispositionLoading ? "Updating..." : "Confirm"}
             </Button>
           </DialogFooter>
         </DialogContent>

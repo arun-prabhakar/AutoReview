@@ -24,8 +24,6 @@ interface SharedFinding {
   risk_level: "must_fix" | "should_fix_soon" | "ignore";
   suggested_fix: string | null;
   category: string | null;
-  disposition: string;
-  suppressed: boolean;
 }
 
 interface SharedReviewData {
@@ -43,32 +41,6 @@ interface SharedReviewData {
   shared_at: string;
   expires_at: string;
 }
-
-const dispositionIcon = (d: string) => {
-  switch (d) {
-    case "acknowledged":
-      return "👁";
-    case "dismissed":
-      return "✕";
-    case "fixed":
-      return "✓";
-    default:
-      return null;
-  }
-};
-
-const dispositionColor = (d: string) => {
-  switch (d) {
-    case "acknowledged":
-      return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-    case "dismissed":
-      return "bg-muted text-muted-foreground border-border";
-    case "fixed":
-      return "bg-success/10 text-success border-success/20";
-    default:
-      return "";
-  }
-};
 
 const PRINT_STYLES = `
 @media print {
@@ -472,23 +444,7 @@ export default function SharedReview() {
                                 {finding.category}
                               </Badge>
                             )}
-                            {finding.disposition !== "open" && (
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "text-xs capitalize",
-                                  dispositionColor(finding.disposition)
-                                )}
-                              >
-                                {dispositionIcon(finding.disposition) && (
-                                  <span className="mr-1 text-[10px]">
-                                    {dispositionIcon(finding.disposition)}
-                                  </span>
-                                )}
-                                {finding.disposition}
-                              </Badge>
-                            )}
-                          </div>
+                           </div>
                         </div>
                         <p className="text-sm leading-relaxed text-muted-foreground">
                           {finding.explanation}

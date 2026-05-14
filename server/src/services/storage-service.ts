@@ -97,7 +97,6 @@ export async function deleteReview(reviewId: string): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query("DELETE FROM finding_comments WHERE finding_id IN (SELECT id FROM findings WHERE review_id = $1)", [reviewId]);
     await client.query("DELETE FROM findings WHERE review_id = $1", [reviewId]);
     await client.query("DELETE FROM reviews WHERE id = $1", [reviewId]);
     await client.query("COMMIT");
@@ -107,66 +106,6 @@ export async function deleteReview(reviewId: string): Promise<void> {
   } finally {
     client.release();
   }
-}
-
-// --- Finding Disposition (Feature 1) ---
-
-export async function updateFindingDisposition(
-  findingId: string,
-  disposition: string,
-  reason: string | null,
-  updatedBy: string
-): Promise<FindingRow | null> {
-  await run(
-    "UPDATE findings SET disposition = $1, disposition_reason = $2, disposition_by = $3, disposition_at = $4 WHERE id = $5",
-    [disposition, reason, updatedBy, new Date().toISOString(), findingId]
-  );
-  const result = await get<FindingRow>("SELECT * FROM findings WHERE id = $1", [findingId]);
-  return result ?? null;
-}
-
-export async function batchUpdateDisposition(
-  findingIds: string[],
-  disposition: string,
-  reason: string | null,
-  updatedBy: string
-): Promise<void> {
-  const now = new Date().toISOString();
-  const placeholders = findingIds.map((_, i) => `$${i + 4}`).join(", ");
-  await run(
-    `UPDATE findings SET disposition = $1, disposition_reason = $2, disposition_by = $3, disposition_at = $5 WHERE id IN (${placeholders})`,
-    [disposition, reason, updatedBy, ...findingIds, now]
-  );
-}
-
-// --- Finding Comments (Feature 9) ---
-
-export type FindingCommentRow = {
-  id: string;
-  finding_id: string;
-  user_id: string;
-  username: string;
-  content: string;
-  created_at: string;
-};
-
-export async function getFindingComments(findingId: string): Promise<FindingCommentRow[]> {
-  return all<FindingCommentRow>("SELECT * FROM finding_comments WHERE finding_id = $1 ORDER BY created_at ASC", [findingId]);
-}
-
-export async function addFindingComment(
-  findingId: string,
-  userId: string,
-  username: string,
-  content: string
-): Promise<FindingCommentRow> {
-  const { v4: uuid } = await import("uuid");
-  const id = uuid();
-  await run(
-    "INSERT INTO finding_comments (id, finding_id, user_id, username, content) VALUES ($1, $2, $3, $4, $5)",
-    [id, findingId, userId, username, content]
-  );
-  return (await get<FindingCommentRow>("SELECT * FROM finding_comments WHERE id = $1", [id]))!;
 }
 
 // --- Notifications (Feature 8) ---
@@ -217,67 +156,6 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
   await run("UPDATE notifications SET read = true WHERE user_id = $1 AND read = false", [userId]);
 }
 
-// --- Suppression Rules (Feature 11) ---
-
-export type SuppressionRuleRow = {
-  id: string;
-  repository_id: string;
-  category: string | null;
-  file_pattern: string | null;
-  summary_pattern: string | null;
-  risk_level: string | null;
-  reason: string;
-  created_by: string;
-  created_at: string;
-  enabled: boolean;
-};
-
-export async function getSuppressionRules(repositoryId?: string): Promise<SuppressionRuleRow[]> {
-  if (repositoryId) {
-    return all<SuppressionRuleRow>("SELECT * FROM suppression_rules WHERE repository_id = $1 ORDER BY created_at DESC", [repositoryId]);
-  }
-  return all<SuppressionRuleRow>("SELECT * FROM suppression_rules ORDER BY created_at DESC");
-}
-
-export async function createSuppressionRule(rule: Omit<SuppressionRuleRow, "created_at">): Promise<SuppressionRuleRow> {
-  const { v4: uuid } = await import("uuid");
-  const id = rule.id || uuid();
-  await run(
-    "INSERT INTO suppression_rules (id, repository_id, category, file_pattern, summary_pattern, risk_level, reason, created_by, enabled) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-    [id, rule.repository_id, rule.category, rule.file_pattern, rule.summary_pattern, rule.risk_level, rule.reason, rule.created_by, rule.enabled]
-  );
-  return (await get<SuppressionRuleRow>("SELECT * FROM suppression_rules WHERE id = $1", [id]))!;
-}
-
-export async function deleteSuppressionRule(ruleId: string): Promise<void> {
-  await run("DELETE FROM suppression_rules WHERE id = $1", [ruleId]);
-}
-
-export async function toggleSuppressionRule(ruleId: string, enabled: boolean): Promise<void> {
-  await run("UPDATE suppression_rules SET enabled = $1 WHERE id = $2", [enabled, ruleId]);
-}
-
-export async function applySuppressionRules(repositoryId: string, findings: RawFindingInput[]): Promise<{ filtered: RawFindingInput[]; suppressed: { finding: RawFindingInput; ruleId: string }[] }> {
-  const rules = await all<SuppressionRuleRow>("SELECT * FROM suppression_rules WHERE repository_id = $1 AND enabled = true", [repositoryId]);
-  const suppressed: { finding: RawFindingInput; ruleId: string }[] = [];
-  const filtered = findings.filter((f) => {
-    for (const rule of rules) {
-      const matches = (
-        (!rule.category || rule.category === f.category) &&
-        (!rule.risk_level || rule.risk_level === f.risk_level) &&
-        (!rule.file_pattern || new RegExp(rule.file_pattern.replace(/\*/g, ".*").replace(/\?/g, ".")).test(f.file_path)) &&
-        (!rule.summary_pattern || new RegExp(rule.summary_pattern, "i").test(f.summary))
-      );
-      if (matches) {
-        suppressed.push({ finding: f, ruleId: rule.id });
-        return false;
-      }
-    }
-    return true;
-  });
-  return { filtered, suppressed };
-}
-
 // --- Analytics (Feature 4) ---
 
 export async function getFindingsByCategoryOverTime(days = 30): Promise<{ date: string; category: string; count: string }[]> {
@@ -314,12 +192,6 @@ export async function getFindingDensityPerRepo(): Promise<{ repository_id: strin
      WHERE r.status = 'completed'
      GROUP BY r.repository_id, repo.name
      ORDER BY avg_findings DESC`
-  );
-}
-
-export async function getDispositionStats(): Promise<{ disposition: string; count: string }[]> {
-  return all(
-    "SELECT disposition, COUNT(*) as count FROM findings GROUP BY disposition ORDER BY count DESC"
   );
 }
 
@@ -461,40 +333,5 @@ export async function getAllRepoHealthScores(): Promise<{ repository_id: string;
      WHERE r.status = 'completed' AND r.created_at >= NOW() - INTERVAL '30 days'
      GROUP BY r.repository_id, repo.name
      ORDER BY score ASC`
-  );
-}
-
-// --- SLA Tracking (Feature 8) ---
-
-export async function getBreachedSlaFindings(): Promise<{ id: string; file_path: string; summary: string; risk_level: string; review_id: string; repository_name: string; created_at: string; hours_open: string }[]> {
-  return all(
-    `SELECT f.id, f.file_path, f.summary, f.risk_level, f.review_id,
-       repo.name as repository_name, r.created_at as created_at,
-       EXTRACT(EPOCH FROM (NOW() - r.created_at)) / 3600 as hours_open
-     FROM findings f
-     JOIN reviews r ON f.review_id = r.id
-     JOIN repositories repo ON r.repository_id = repo.id
-     WHERE f.disposition = 'open' AND f.risk_level IN ('must_fix', 'should_fix_soon')
-       AND (
-         (f.risk_level = 'must_fix' AND r.created_at < NOW() - INTERVAL '48 hours')
-         OR (f.risk_level = 'should_fix_soon' AND r.created_at < NOW() - INTERVAL '168 hours')
-       )
-     ORDER BY hours_open DESC`
-  );
-}
-
-export async function getSlaStats(): Promise<{ risk_level: string; total_open: string; breached: string; avg_hours_open: string }[]> {
-  return all(
-    `SELECT f.risk_level,
-       COUNT(*) as total_open,
-       SUM(CASE
-         WHEN (f.risk_level = 'must_fix' AND r.created_at < NOW() - INTERVAL '48 hours')
-           OR (f.risk_level = 'should_fix_soon' AND r.created_at < NOW() - INTERVAL '168 hours')
-         THEN 1 ELSE 0 END) as breached,
-       ROUND(AVG(EXTRACT(EPOCH FROM (NOW() - r.created_at)) / 3600)) as avg_hours_open
-     FROM findings f
-     JOIN reviews r ON f.review_id = r.id
-     WHERE f.disposition = 'open' AND f.risk_level IN ('must_fix', 'should_fix_soon')
-     GROUP BY f.risk_level`
   );
 }

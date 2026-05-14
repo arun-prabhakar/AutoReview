@@ -31,21 +31,6 @@ export interface Finding {
   risk_level: 'must_fix' | 'should_fix_soon' | 'ignore';
   suggested_fix: string | null;
   category: string | null;
-  disposition: string;
-  disposition_reason: string | null;
-  disposition_by: string | null;
-  disposition_at: string | null;
-  suppressed: boolean;
-  suppressed_by_rule_id: string | null;
-}
-
-export interface FindingComment {
-  id: string;
-  finding_id: string;
-  user_id: string;
-  username: string;
-  content: string;
-  created_at: string;
 }
 
 export interface Repository {
@@ -134,19 +119,6 @@ export interface Notification {
   entity_type: string | null;
   entity_id: string | null;
   created_at: string;
-}
-
-export interface SuppressionRule {
-  id: string;
-  repository_id: string;
-  category: string | null;
-  file_pattern: string | null;
-  summary_pattern: string | null;
-  risk_level: string | null;
-  reason: string;
-  created_by: string;
-  created_at: string;
-  enabled: boolean;
 }
 
 export interface ReviewChainItem {
