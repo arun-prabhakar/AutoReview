@@ -99,6 +99,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     tokens_total: null,
     estimated_cost: null,
     project_context: projectContext ?? null,
+    commit_author: ctx.commit.author?.raw ?? null,
   });
 
   if (!created) {

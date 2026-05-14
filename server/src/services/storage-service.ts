@@ -20,6 +20,7 @@ export type ReviewRow = {
   tokens_total: number | null;
   estimated_cost: number | null;
   project_context: string | null;
+  commit_author: string | null;
 };
 
 export type FindingRow = {
@@ -50,11 +51,11 @@ export async function findFindingsByReviewId(reviewId: string): Promise<FindingR
 
 export async function createReview(review: Omit<ReviewRow, "created_at" | "ai_overview">): Promise<{ id: string; created: boolean }> {
   const result = await getPool().query(
-    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      ON CONFLICT DO NOTHING
      RETURNING id`,
-    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null]
+    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null]
   );
   const created = result.rows.length > 0;
   return { id: created ? result.rows[0].id : review.id, created };
@@ -261,77 +262,5 @@ export async function linkFindings(findingIds: string[], persistentIssueId: stri
   await run(
     `UPDATE findings SET persistent_issue_id = $1 WHERE id IN (${placeholders})`,
     [persistentIssueId, ...findingIds]
-  );
-}
-
-// --- Code Health Score (Feature 7) ---
-
-export async function getRepoHealthScore(repositoryId: string): Promise<{ score: number; trend: number; breakdown: { must_fix: number; should_fix: number; open: number; fixed: number; dismissed: number } }> {
-  const recent = await get<{
-    total: string; must_fix: string; should_fix: string;
-    open_count: string; fixed_count: string; dismissed_count: string;
-  }>(
-    `SELECT
-       COUNT(f.id) as total,
-       COALESCE(SUM(CASE WHEN f.risk_level = 'must_fix' THEN 1 ELSE 0 END), 0) as must_fix,
-       COALESCE(SUM(CASE WHEN f.risk_level = 'should_fix_soon' THEN 1 ELSE 0 END), 0) as should_fix,
-       COALESCE(SUM(CASE WHEN f.disposition = 'open' THEN 1 ELSE 0 END), 0) as open_count,
-       COALESCE(SUM(CASE WHEN f.disposition = 'fixed' THEN 1 ELSE 0 END), 0) as fixed_count,
-       COALESCE(SUM(CASE WHEN f.disposition = 'dismissed' THEN 1 ELSE 0 END), 0) as dismissed_count
-     FROM findings f
-     JOIN reviews r ON f.review_id = r.id
-     WHERE r.repository_id = $1 AND r.status = 'completed' AND r.created_at >= NOW() - INTERVAL '30 days'`,
-    [repositoryId]
-  );
-
-  const total = Number(recent?.total ?? 0);
-  const mustFix = Number(recent?.must_fix ?? 0);
-  const shouldFix = Number(recent?.should_fix ?? 0);
-  const openCount = Number(recent?.open_count ?? 0);
-  const fixedCount = Number(recent?.fixed_count ?? 0);
-  const dismissedCount = Number(recent?.dismissed_count ?? 0);
-
-  const fixRate = total > 0 ? (fixedCount + dismissedCount) / total : 1;
-  const severityPenalty = (mustFix * 10 + shouldFix * 3) / Math.max(total, 1);
-  const score = Math.round(Math.max(0, Math.min(100, 100 - severityPenalty * 50 + fixRate * 20)));
-
-  const prevPeriod = await get<{ total: string; must_fix: string }>(
-    `SELECT COUNT(f.id) as total,
-       COALESCE(SUM(CASE WHEN f.risk_level = 'must_fix' THEN 1 ELSE 0 END), 0) as must_fix
-     FROM findings f JOIN reviews r ON f.review_id = r.id
-     WHERE r.repository_id = $1 AND r.status = 'completed'
-       AND r.created_at >= NOW() - INTERVAL '60 days' AND r.created_at < NOW() - INTERVAL '30 days'`,
-    [repositoryId]
-  );
-  const prevTotal = Number(prevPeriod?.total ?? 0);
-  const prevMustFix = Number(prevPeriod?.must_fix ?? 0);
-  const prevScore = prevTotal > 0 ? Math.round(Math.max(0, Math.min(100, 100 - (prevMustFix * 10 / prevTotal) * 50))) : 50;
-  const trend = score - prevScore;
-
-  return {
-    score,
-    trend,
-    breakdown: { must_fix: mustFix, should_fix: shouldFix, open: openCount, fixed: fixedCount, dismissed: dismissedCount },
-  };
-}
-
-export async function getAllRepoHealthScores(): Promise<{ repository_id: string; repository_name: string; score: number; trend: number }[]> {
-  return all(
-    `SELECT r.repository_id, repo.name as repository_name,
-       CASE
-         WHEN COUNT(f.id) = 0 THEN 100
-         ELSE ROUND(GREATEST(0, LEAST(100,
-           100 - (COALESCE(SUM(CASE WHEN f.risk_level = 'must_fix' THEN 10 ELSE 0 END), 0) +
-                   COALESCE(SUM(CASE WHEN f.risk_level = 'should_fix_soon' THEN 3 ELSE 0 END), 0)) * 50.0 / COUNT(f.id)
-           + COALESCE(SUM(CASE WHEN f.disposition IN ('fixed', 'dismissed') THEN 1 ELSE 0 END), 0) * 20.0 / NULLIF(COUNT(f.id), 0)
-         )))
-       END as score,
-       0 as trend
-     FROM reviews r
-     JOIN repositories repo ON r.repository_id = repo.id
-     LEFT JOIN findings f ON f.review_id = r.id
-     WHERE r.status = 'completed' AND r.created_at >= NOW() - INTERVAL '30 days'
-     GROUP BY r.repository_id, repo.name
-     ORDER BY score ASC`
   );
 }

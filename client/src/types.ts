@@ -19,6 +19,7 @@ export interface Review {
   tokens_total?: number | null;
   estimated_cost?: number | null;
   project_context?: string | null;
+  commit_author?: string | null;
 }
 
 export interface Finding {

@@ -68,41 +68,13 @@ shareRouter.post("/", jwtAuth, async (req, res) => {
       return;
     }
 
-    const days = expires_in_days && expires_in_days > 0 ? Math.min(expires_in_days, 90) : 7;
-
-    const review = await get<ReviewRow>(
-      `SELECT r.*, repo.name as repository_name
-       FROM reviews r JOIN repositories repo ON r.repository_id = repo.id
-       WHERE r.id = $1`,
-      [review_id]
-    );
-
-    if (!review) {
-      res.status(404).json({ error: "Review not found" });
-      return;
-    }
-
-    const existing = await get<ShareTokenRow>(
-      `SELECT * FROM share_tokens
-       WHERE review_id = $1 AND enabled = true AND expires_at > NOW()
-       ORDER BY created_at DESC LIMIT 1`,
-      [review_id]
-    );
-
-    if (existing) {
-      res.json({
-        id: existing.id,
-        token: existing.token,
-        enabled: existing.enabled,
-        expires_at: existing.expires_at,
-        url: `${process.env.BASE_URL || ""}/shared/${existing.token}`,
-      });
-      return;
-    }
+    const days = expires_in_days != null && expires_in_days > 0 ? Math.min(expires_in_days, 90) : 0;
+    const expires_at = days > 0
+      ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
+      : new Date("2099-12-31T23:59:59Z").toISOString();
 
     const id = uuid();
     const token = uuid();
-    const expires_at = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
     await run(
       `INSERT INTO share_tokens (id, review_id, token, enabled, expires_at, created_by)

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getFindingsByCategoryOverTime, getTopProblemFiles, getFindingDensityPerRepo, getCostSummary, getRepoHealthScore, getAllRepoHealthScores } from "../services/storage-service.js";
+import { getFindingsByCategoryOverTime, getTopProblemFiles, getFindingDensityPerRepo, getCostSummary } from "../services/storage-service.js";
 import { logger } from "../middleware/index.js";
 
 export const analyticsRouter = Router();
@@ -40,26 +40,6 @@ analyticsRouter.get("/cost-summary", async (_req, res) => {
     res.json(data);
   } catch (err) {
     logger.error("Failed to fetch cost-summary", { error: err instanceof Error ? err.message : String(err) });
-    res.status(500).json({ error: "Failed to fetch analytics" });
-  }
-});
-
-analyticsRouter.get("/health-score/:repoId", async (req, res) => {
-  try {
-    const data = await getRepoHealthScore(req.params.repoId);
-    res.json(data);
-  } catch (err) {
-    logger.error("Failed to fetch health-score", { error: err instanceof Error ? err.message : String(err) });
-    res.status(500).json({ error: "Failed to fetch analytics" });
-  }
-});
-
-analyticsRouter.get("/health-scores", async (_req, res) => {
-  try {
-    const data = await getAllRepoHealthScores();
-    res.json(data);
-  } catch (err) {
-    logger.error("Failed to fetch health-scores", { error: err instanceof Error ? err.message : String(err) });
     res.status(500).json({ error: "Failed to fetch analytics" });
   }
 });

@@ -29,7 +29,7 @@ export default function ReviewDetail() {
   const [chain, setChain] = useState<ReviewChainItem[]>([]);
   const [chainVisible, setChainVisible] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareExpiry, setShareExpiry] = useState(7);
+  const [shareExpiry, setShareExpiry] = useState(0);
   const [shareData, setShareData] = useState<ShareToken | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -266,26 +266,19 @@ AutoReview`;
       {shareData && (
         <Card className="border-border bg-card">
           <CardContent className="py-3 px-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0", shareData.enabled ? "bg-success/10" : "bg-muted")}>
-                  <Link2 className={cn("h-4 w-4", shareData.enabled ? "text-success" : "text-muted-foreground")} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{shareData.enabled ? "Share link active" : "Share link disabled"}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Expires {new Date(shareData.expires_at).toLocaleDateString()}
-                  </p>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0", shareData.enabled ? "bg-success/10" : "bg-muted")}>
+                <Link2 className={cn("h-4 w-4", shareData.enabled ? "text-success" : "text-muted-foreground")} />
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {shareData.enabled && (
-                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleCopyLink}>
-                    {shareCopied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-                    {shareCopied ? "Copied" : "Copy Link"}
-                  </Button>
-                )}
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleToggleShare}>
+              <div className="flex-1 min-w-0 flex items-center gap-2">
+                <code className="text-xs font-mono text-foreground truncate flex-1 block">
+                  {shareData.url?.startsWith("http") ? shareData.url : `${window.location.origin}${shareData.url}`}
+                </code>
+                <Button variant="outline" size="sm" className="h-7 text-xs flex-shrink-0" onClick={handleCopyLink}>
+                  {shareCopied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                  {shareCopied ? "Copied" : "Copy"}
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs flex-shrink-0" onClick={handleToggleShare}>
                   {shareData.enabled ? "Disable" : "Enable"}
                 </Button>
               </div>
@@ -351,6 +344,7 @@ AutoReview`;
                   <h3 className="font-semibold text-foreground">{repoName}</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {isPrReview ? `Pull Request #${prId}` : "Commit Review"}
+                    {review.commit_author && ` · by ${review.commit_author}`}
                     {review.completed_at && ` · ${new Date(String(review.completed_at)).toLocaleDateString()}`}
                   </p>
                 </div>
@@ -531,6 +525,7 @@ AutoReview`;
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Link expires after</label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {[
+                  { label: "Permanent", value: 0 },
                   { label: "1 day", value: 1 },
                   { label: "7 days", value: 7 },
                   { label: "14 days", value: 14 },

@@ -99,6 +99,7 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       tokens_total INTEGER,
       estimated_cost REAL,
       project_context TEXT,
+      commit_author TEXT,
       FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
     )
   `);
@@ -147,6 +148,7 @@ export async function ensureSchema(pool: Pool): Promise<void> {
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS error_message TEXT`);
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS created_by TEXT`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS commit_author TEXT`);
 
   await pool.query(`ALTER TABLE findings ADD COLUMN IF NOT EXISTS persistent_issue_id TEXT`);
 
