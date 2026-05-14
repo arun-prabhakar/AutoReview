@@ -215,8 +215,8 @@ export function extractFilePaths(diff: string): string {
 const RISK_ORDER: Record<string, number> = { must_fix: 0, should_fix_soon: 1, ignore: 2 };
 
 export function parseFindings(content: string): RawFinding[] {
-  const jsonMatch = content.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
+  const jsonStr = extractJsonArray(content);
+  if (!jsonStr) {
     logger.warn("parseFindings: no JSON array found in LLM response", {
       contentPreview: content.substring(0, 500),
     });
@@ -225,18 +225,27 @@ export function parseFindings(content: string): RawFinding[] {
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(jsonMatch[0]);
+    parsed = JSON.parse(jsonStr);
   } catch (err) {
     logger.warn("parseFindings: JSON.parse failed", {
       error: err instanceof Error ? err.message : String(err),
-      matchedJson: jsonMatch[0].substring(0, 300),
+      matchedJson: jsonStr.substring(0, 300),
     });
     return [];
   }
 
   if (!Array.isArray(parsed)) {
-    logger.warn("parseFindings: parsed result is not an array", { type: typeof parsed });
-    return [];
+    if (parsed && typeof parsed === "object") {
+      const obj = parsed as Record<string, unknown>;
+      const arrayKey = Object.keys(obj).find((k) => Array.isArray(obj[k]));
+      if (arrayKey) {
+        parsed = obj[arrayKey];
+      }
+    }
+    if (!Array.isArray(parsed)) {
+      logger.warn("parseFindings: parsed result is not an array", { type: typeof parsed });
+      return [];
+    }
   }
 
   if (parsed.length === 0) {
@@ -267,6 +276,57 @@ export function parseFindings(content: string): RawFinding[] {
   }
 }
 
+/**
+ * Extracts the outermost valid JSON array from LLM output.
+ * Uses balanced-bracket counting to find the correct bounds,
+ * avoiding greedy regex that can match across multiple arrays.
+ */
+function extractJsonArray(content: string): string | null {
+  const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (codeBlockMatch) {
+    const inner = codeBlockMatch[1].trim();
+    if (inner.startsWith("[")) return inner;
+  }
+
+  const start = content.indexOf("[");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < content.length; i++) {
+    const ch = content[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (ch === "\\") {
+      if (inString) escape = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === "[") depth++;
+    else if (ch === "]") {
+      depth--;
+      if (depth === 0) {
+        return content.substring(start, i + 1);
+      }
+    }
+  }
+
+  return content.substring(start);
+}
+
 const SPECIALIZED_PROMPTS: Record<string, string> = {
   security: `You are a senior security engineer performing a focused security audit. Identify ONLY security vulnerabilities: injection attacks, authentication issues, authorization bypasses, data exposure, insecure cryptography, SSRF, XSS, CSRF, path traversal, deserialization flaws, and similar. Do NOT flag style or maintainability issues.`,
   performance: `You are a performance engineering specialist. Identify ONLY performance problems: N+1 queries, memory leaks, unnecessary allocations, missing indexes, inefficient algorithms, unbounded growth, blocking operations in async code, and similar. Do NOT flag style or security issues.`,
@@ -294,12 +354,19 @@ export async function multiPassReview(
 
   const focuses = Object.keys(SPECIALIZED_PROMPTS);
 
-  for (const focus of focuses) {
-    const specializedSuffix = `\n\n## Specialized Focus\n\n${SPECIALIZED_PROMPTS[focus]}\n\nOnly report findings relevant to this focus area. If no ${focus}-related issues exist, return an empty array [].`;
-    const template = baseTemplate + specializedSuffix;
+  const results = await Promise.allSettled(
+    focuses.map(async (focus) => {
+      const specializedSuffix = `\n\n## Specialized Focus\n\n${SPECIALIZED_PROMPTS[focus]}\n\nOnly report findings relevant to this focus area. If no ${focus}-related issues exist, return an empty array [].`;
+      const template = baseTemplate + specializedSuffix;
 
-    try {
       const { findings, tokenUsage } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext);
+      return { focus, findings, tokenUsage };
+    })
+  );
+
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      const { focus, findings, tokenUsage } = result.value;
       allFindings.push(...findings);
       totalUsage = {
         prompt_tokens: totalUsage.prompt_tokens + tokenUsage.prompt_tokens,
@@ -307,8 +374,9 @@ export async function multiPassReview(
         total_tokens: totalUsage.total_tokens + tokenUsage.total_tokens,
       };
       passes.push({ focus, findings: findings.length });
-    } catch (err) {
-      logger.warn(`Multi-pass ${focus} review failed`, { error: String(err) });
+    } else {
+      const focus = focuses[results.indexOf(result)];
+      logger.warn(`Multi-pass ${focus} review failed`, { error: String(result.reason) });
       passes.push({ focus, findings: 0 });
     }
   }
