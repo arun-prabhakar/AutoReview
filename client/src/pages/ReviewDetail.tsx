@@ -28,6 +28,8 @@ export default function ReviewDetail() {
   const [rereviewOpen, setRereviewOpen] = useState(false);
   const [chain, setChain] = useState<ReviewChainItem[]>([]);
   const [chainVisible, setChainVisible] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareExpiry, setShareExpiry] = useState(7);
   const [shareData, setShareData] = useState<ShareToken | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
@@ -61,8 +63,9 @@ export default function ReviewDetail() {
     if (!id) return;
     setShareLoading(true);
     try {
-      const result = await api.post<ShareToken>("/api/share", { review_id: id });
+      const result = await api.post<ShareToken>("/api/share", { review_id: id, expires_in_days: shareExpiry });
       setShareData(result);
+      setShareOpen(false);
     } catch (err) {
       toast({ title: "Failed to create share link", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
@@ -243,7 +246,7 @@ AutoReview`;
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={shareData ? undefined : handleShare} disabled={shareLoading}>
+          <Button variant="outline" size="sm" onClick={shareData ? undefined : () => setShareOpen(true)} disabled={shareLoading}>
             <Share2 className="h-3.5 w-3.5 mr-1.5" />
             {shareLoading ? "Sharing..." : "Share"}
           </Button>
@@ -511,6 +514,50 @@ AutoReview`;
           )}
         </Card>
       )}
+
+      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Share2 className="h-4 w-4" />
+              Share Review
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              Create a public link to share this review. Anyone with the link can view it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Link expires after</label>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {[
+                  { label: "1 day", value: 1 },
+                  { label: "7 days", value: 7 },
+                  { label: "14 days", value: 14 },
+                  { label: "30 days", value: 30 },
+                  { label: "90 days", value: 90 },
+                ].map((opt) => (
+                  <Button
+                    key={opt.value}
+                    variant={shareExpiry === opt.value ? "default" : "outline"}
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => setShareExpiry(opt.value)}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShareOpen(false)}>Cancel</Button>
+            <Button onClick={handleShare} disabled={shareLoading}>
+              {shareLoading ? "Creating..." : "Create Link"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-md">

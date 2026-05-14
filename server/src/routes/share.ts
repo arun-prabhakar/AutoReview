@@ -61,12 +61,14 @@ interface FindingRow {
 
 shareRouter.post("/", jwtAuth, async (req, res) => {
   try {
-    const { review_id } = req.body as { review_id?: string };
+    const { review_id, expires_in_days } = req.body as { review_id?: string; expires_in_days?: number };
 
     if (!review_id) {
       res.status(400).json({ error: "review_id is required" });
       return;
     }
+
+    const days = expires_in_days && expires_in_days > 0 ? Math.min(expires_in_days, 90) : 7;
 
     const review = await get<ReviewRow>(
       `SELECT r.*, repo.name as repository_name
@@ -100,7 +102,7 @@ shareRouter.post("/", jwtAuth, async (req, res) => {
 
     const id = uuid();
     const token = uuid();
-    const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const expires_at = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
     await run(
       `INSERT INTO share_tokens (id, review_id, token, enabled, expires_at, created_by)
