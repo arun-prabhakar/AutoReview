@@ -37,7 +37,7 @@ export default function Dashboard() {
   const [deleting, setDeleting] = useState(false);
   const filterUserTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 10;
 
   const activeFilters = (userFilter?: string) => {
     const params: Record<string, string> = {};
@@ -134,7 +134,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
         <Link to="/reviews/manual">
@@ -150,11 +150,11 @@ export default function Dashboard() {
           { label: "Failed", value: stats.failed, color: "text-destructive", bg: "bg-destructive/5", icon: XCircle },
         ] as const).map((stat) => (
           <Card key={stat.label} className={cn("border-border", stat.bg)}>
-            <CardContent className="flex items-center gap-3 pt-6 pb-5">
-              <stat.icon className={cn("h-8 w-8 flex-shrink-0", stat.color)} />
+            <CardContent className="flex items-center gap-3 py-3 px-4">
+              <stat.icon className={cn("h-5 w-5 flex-shrink-0", stat.color)} />
               <div className="min-w-0">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{stat.label}</span>
-                <span className={cn("block mt-0.5 text-3xl font-bold tracking-tight tabular-nums", stat.color)}>{stat.value}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{stat.label}</span>
+                <span className={cn("block text-xl font-bold tracking-tight tabular-nums", stat.color)}>{stat.value}</span>
               </div>
             </CardContent>
           </Card>
