@@ -249,7 +249,7 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-border">
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground pl-4">Repository</TableHead>
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground pl-4 w-36 max-w-36">Repository</TableHead>
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-24">Type</TableHead>
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-32">Identifier</TableHead>
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-28">Status</TableHead>
@@ -269,7 +269,7 @@ export default function Dashboard() {
                       onClick={() => navigate(`/reviews/${review.id}`)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/reviews/${review.id}`); } }}
                     >
-                      <TableCell className="font-medium text-foreground pl-4 py-3">
+                      <TableCell className="font-medium text-foreground pl-4 py-3 max-w-36 truncate">
                         {review.repository_name || review.repository_id}
                       </TableCell>
                       <TableCell className="py-3">{typeBadge(review.review_mode, review.commit_hash)}</TableCell>
