@@ -7,7 +7,7 @@ import { Bell, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export function NotificationBell() {
+export function NotificationBell({ placement = "bottom-right" }: { placement?: "bottom-right" | "top-left" }) {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { items, unreadCount } = useSelector((state: RootState) => state.notifications);
@@ -59,7 +59,7 @@ export function NotificationBell() {
       </Button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-border bg-card shadow-lg z-50 overflow-hidden">
+        <div className={cn("absolute w-80 rounded-lg border border-border bg-card shadow-lg z-50 overflow-hidden", placement === "top-left" ? "bottom-full mb-2 left-0" : "top-full mt-2 right-0")}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <span className="text-sm font-semibold text-foreground">Notifications</span>
             {unreadCount > 0 && (

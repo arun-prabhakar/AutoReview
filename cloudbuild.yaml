@@ -27,6 +27,7 @@ steps:
       - --port=3001
       - --allow-unauthenticated
       - --set-env-vars=NODE_ENV=production
+      - --set-env-vars=PORT=3001
       - --set-env-vars=DATABASE_URL=postgresql://postgres.zoslzzqwukdojohttubs:8OeLGNSQ8BQKtG3s@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres
       - --set-env-vars=ENCRYPTION_KEY=61a1d5ef272821ff1e6d1969e6b84dea6aaccf6f217dbcfcfc53ac7c7a94fb2d
       - --set-env-vars=JWT_SECRET=autoreview-jwt-secret-change-in-prod

@@ -28,7 +28,7 @@ AutoReview allows users to:
 | Styling | Tailwind CSS 3.4 |
 | State Management | Redux Toolkit |
 | AI Integration | OpenAI SDK (direct — supports any OpenAI-compatible API) |
-| Database | SQLite via sql.js (WASM-based, no native builds) |
+| Database | PostgreSQL (via pg) |
 | Authentication | JWT (bcryptjs + jsonwebtoken) |
 | Encryption | AES-256-GCM (credential and API key storage) |
 | VCS Integration | Bitbucket Cloud REST API |
@@ -376,7 +376,7 @@ AutoReview
 
 ## Database Schema
 
-SQLite via sql.js (WASM-based). Schema versioned with `_schema_version` table. All tables created on first run.
+PostgreSQL. Schema versioned with `ensureSchema` check on startup. All tables created on first run.
 
 ### users
 
@@ -583,11 +583,12 @@ Defined in `client/src/App.tsx` with `RequireAuth` wrapper for protected routes 
 
 ### UI Design
 
-Based on Linear's dark aesthetic (see `DESIGN.MD`):
-- Deep dark canvas (#010102) with lavender accent (#5e6ad2)
-- Surface ladder for visual hierarchy (no shadows)
+Based on a monochromatic architectural aesthetic (see `DESIGN.MD`):
+- High-contrast black-and-white theme (Achromatic)
+- Surface ladder for visual hierarchy
 - Risk-first color system: red (Must Fix), amber (Should Fix), muted (Ignore)
-- Dark/light theme toggle (persisted in localStorage)
+- Support for Light and Dark modes with automatic persistence
+- Powered by Tailwind CSS, Radix UI, and Framer Motion for smooth transitions
 
 ---
 
@@ -660,11 +661,11 @@ Single app service in Docker Compose:
 - **app** — Node.js application (API server + React frontend)
 - Multi-stage Dockerfile (builder + runner)
 - Port mapping: `3000:3001`
-- Volumes: `app-data` (SQLite), `app-logs`
+- Volumes: `app-logs`
 - Health check: `GET /api/health`
 - Restart policy: `unless-stopped`
 
-SQLite database is stored as a mounted volume inside the app container.
+Database connection is managed via `DATABASE_URL` environment variable.
 
 ### Environment Variables
 
@@ -673,7 +674,7 @@ Set via `docker-compose.yml` environment section or `.env` file:
 | Variable | Description | Required |
 |---|---|---|
 | `PORT` | Server port (default: 3001) | No |
-| `DB_PATH` | SQLite database path (default: `./data/autoreview.db`) | No |
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
 | `NODE_ENV` | `production` or `development` | No |
 | `STATIC_DIR` | React build output directory | No |
 | `LOG_DIR` | Log file directory | No |

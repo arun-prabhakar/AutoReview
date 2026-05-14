@@ -13,79 +13,104 @@ promptTemplateRouter.get("/fixed-output-format", (_req, res) => {
 });
 
 promptTemplateRouter.get("/", async (_req, res) => {
-  const templates = await all("SELECT * FROM prompt_templates ORDER BY created_at DESC");
-  res.json(templates);
+  try {
+    const templates = await all("SELECT * FROM prompt_templates ORDER BY created_at DESC");
+    res.json(templates);
+  } catch (err) {
+    logger.error("Failed to list prompt templates", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to list templates" });
+  }
 });
 
 promptTemplateRouter.get("/:id", async (req, res) => {
-  const template = await get("SELECT * FROM prompt_templates WHERE id = $1", [req.params.id]);
-  if (!template) {
-    res.status(404).json({ error: "Template not found" });
-    return;
+  try {
+    const template = await get("SELECT * FROM prompt_templates WHERE id = $1", [req.params.id]);
+    if (!template) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+    res.json(template);
+  } catch (err) {
+    logger.error("Failed to fetch prompt template", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to fetch template" });
   }
-  res.json(template);
 });
 
 promptTemplateRouter.post("/", async (req, res) => {
-  const id = uuid();
-  const { name, content, strictness = "all" } = req.body;
+  try {
+    const id = uuid();
+    const { name, content, strictness = "all" } = req.body;
 
-  if (!name || !content) {
-    res.status(400).json({ error: "name and content are required" });
-    return;
+    if (!name || !content) {
+      res.status(400).json({ error: "name and content are required" });
+      return;
+    }
+
+    await run(
+      `INSERT INTO prompt_templates (id, name, content, strictness, is_default)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [id, name, content, strictness, false]
+    );
+
+    const template = await get("SELECT * FROM prompt_templates WHERE id = $1", [id]);
+    res.status(201).json(template);
+  } catch (err) {
+    logger.error("Failed to create prompt template", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to create template" });
   }
-
-  await run(
-    `INSERT INTO prompt_templates (id, name, content, strictness, is_default)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [id, name, content, strictness, false]
-  );
-
-  const template = await get("SELECT * FROM prompt_templates WHERE id = $1", [id]);
-  res.status(201).json(template);
 });
 
 promptTemplateRouter.put("/:id", async (req, res) => {
-  const { name, content, strictness } = req.body;
-  const existing = await get<{ content: string }>("SELECT content FROM prompt_templates WHERE id = $1", [req.params.id]);
+  try {
+    const { name, content, strictness } = req.body;
+    const existing = await get<{ content: string }>("SELECT content FROM prompt_templates WHERE id = $1", [req.params.id]);
 
-  if (!existing) {
-    res.status(404).json({ error: "Template not found" });
-    return;
+    if (!existing) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+
+    const fields: string[] = [];
+    const values: unknown[] = [];
+    let paramIdx = 1;
+
+    if (name !== undefined) { fields.push(`name = $${paramIdx++}`); values.push(name); }
+    if (content !== undefined) { fields.push(`content = $${paramIdx++}`); values.push(content); }
+    if (strictness !== undefined) { fields.push(`strictness = $${paramIdx++}`); values.push(strictness); }
+
+    if (fields.length === 0) {
+      res.status(400).json({ error: "No fields to update" });
+      return;
+    }
+
+    fields.push("updated_at = NOW()");
+    await run(`UPDATE prompt_templates SET ${fields.join(", ")} WHERE id = $${paramIdx}`, [...values, req.params.id]);
+
+    const template = await get("SELECT * FROM prompt_templates WHERE id = $1", [req.params.id]);
+    res.json(template);
+  } catch (err) {
+    logger.error("Failed to update prompt template", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to update template" });
   }
-
-  const fields: string[] = [];
-  const values: unknown[] = [];
-  let paramIdx = 1;
-
-  if (name !== undefined) { fields.push(`name = $${paramIdx++}`); values.push(name); }
-  if (content !== undefined) { fields.push(`content = $${paramIdx++}`); values.push(content); }
-  if (strictness !== undefined) { fields.push(`strictness = $${paramIdx++}`); values.push(strictness); }
-
-  if (fields.length === 0) {
-    res.status(400).json({ error: "No fields to update" });
-    return;
-  }
-
-  fields.push("updated_at = NOW()");
-  await run(`UPDATE prompt_templates SET ${fields.join(", ")} WHERE id = $${paramIdx}`, [...values, req.params.id]);
-
-  const template = await get("SELECT * FROM prompt_templates WHERE id = $1", [req.params.id]);
-  res.json(template);
 });
 
 promptTemplateRouter.delete("/:id", async (req, res) => {
-  const template = await get("SELECT id, is_default FROM prompt_templates WHERE id = $1", [req.params.id]);
-  if (!template) {
-    res.status(404).json({ error: "Template not found" });
-    return;
+  try {
+    const template = await get("SELECT id, is_default FROM prompt_templates WHERE id = $1", [req.params.id]);
+    if (!template) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+    if ((template as { is_default: boolean }).is_default) {
+      res.status(400).json({ error: "Cannot delete the default template" });
+      return;
+    }
+    await run("DELETE FROM prompt_templates WHERE id = $1", [req.params.id]);
+    res.status(204).send();
+  } catch (err) {
+    logger.error("Failed to delete prompt template", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to delete template" });
   }
-  if ((template as { is_default: boolean }).is_default) {
-    res.status(400).json({ error: "Cannot delete the default template" });
-    return;
-  }
-  await run("DELETE FROM prompt_templates WHERE id = $1", [req.params.id]);
-  res.status(204).send();
 });
 
 promptTemplateRouter.post("/enhance", async (req, res) => {
@@ -143,22 +168,23 @@ promptTemplateRouter.post("/enhance", async (req, res) => {
 });
 
 promptTemplateRouter.post("/test", async (req, res) => {
-  const { content, strictness } = req.body;
+  try {
+    const { content, strictness } = req.body;
 
-  if (!content) {
-    res.status(400).json({ error: "content is required" });
-    return;
-  }
+    if (!content) {
+      res.status(400).json({ error: "content is required" });
+      return;
+    }
 
-  const rendered = content
-    .replace(/\{\{repository\}\}/g, "example-repo")
-    .replace(/\{\{branch\}\}/g, "main")
-    .replace(/\{\{commit_hash\}\}/g, "abc123def456")
-    .replace(/\{\{commit_message\}\}/g, "Fix authentication bug")
-    .replace(/\{\{strictness_level\}\}/g, strictness || "balanced")
-    .replace(/\{\{file_paths\}\}/g, "src/auth.ts\nsrc/middleware.ts")
-    .replace(/\{\{excluded_paths\}\}/g, "node_modules/\n*.min.js")
-    .replace(/\{\{diff\}\}/g, `diff --git a/src/auth.ts b/src/auth.ts
+    const rendered = content
+      .replace(/\{\{repository\}\}/g, "example-repo")
+      .replace(/\{\{branch\}\}/g, "main")
+      .replace(/\{\{commit_hash\}\}/g, "abc123def456")
+      .replace(/\{\{commit_message\}\}/g, "Fix authentication bug")
+      .replace(/\{\{strictness_level\}\}/g, strictness || "balanced")
+      .replace(/\{\{file_paths\}\}/g, "src/auth.ts\nsrc/middleware.ts")
+      .replace(/\{\{excluded_paths\}\}/g, "node_modules/\n*.min.js")
+      .replace(/\{\{diff\}\}/g, `diff --git a/src/auth.ts b/src/auth.ts
 --- a/src/auth.ts
 +++ b/src/auth.ts
 @@ -10,7 +10,7 @@
@@ -167,7 +193,11 @@ promptTemplateRouter.post("/test", async (req, res) => {
 +function validateToken(token: string): boolean {
 +  if (!token) return false;
 +  return jwt.verify(token, SECRET);
- }`);
+}`);
 
-  res.json({ rendered: rendered + FIXED_OUTPUT_FORMAT });
+    res.json({ rendered: rendered + FIXED_OUTPUT_FORMAT });
+  } catch (err) {
+    logger.error("Failed to test prompt template", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to test template" });
+  }
 });

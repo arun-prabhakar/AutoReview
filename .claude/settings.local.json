@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npx vitest *)",
-      "Bash(node scripts/update-default-template.mjs)"
+      "Bash(node scripts/update-default-template.mjs)",
+      "Bash(npm install *)"
     ]
   }
 }

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { get, all, run } from "../db/queries.js";
 import { v4 as uuid } from "uuid";
 import { jwtAuth } from "../middleware/jwt-auth.js";
+import { logger } from "../middleware/index.js";
 
 export const shareRouter = Router();
 
@@ -59,153 +60,168 @@ interface FindingRow {
 }
 
 shareRouter.post("/", jwtAuth, async (req, res) => {
-  const { review_id } = req.body as { review_id?: string };
+  try {
+    const { review_id } = req.body as { review_id?: string };
 
-  if (!review_id) {
-    res.status(400).json({ error: "review_id is required" });
-    return;
-  }
+    if (!review_id) {
+      res.status(400).json({ error: "review_id is required" });
+      return;
+    }
 
-  const review = await get<ReviewRow>(
-    `SELECT r.*, repo.name as repository_name
-     FROM reviews r JOIN repositories repo ON r.repository_id = repo.id
-     WHERE r.id = $1`,
-    [review_id]
-  );
+    const review = await get<ReviewRow>(
+      `SELECT r.*, repo.name as repository_name
+       FROM reviews r JOIN repositories repo ON r.repository_id = repo.id
+       WHERE r.id = $1`,
+      [review_id]
+    );
 
-  if (!review) {
-    res.status(404).json({ error: "Review not found" });
-    return;
-  }
+    if (!review) {
+      res.status(404).json({ error: "Review not found" });
+      return;
+    }
 
-  const existing = await get<ShareTokenRow>(
-    `SELECT * FROM share_tokens
-     WHERE review_id = $1 AND enabled = true AND expires_at > NOW()
-     ORDER BY created_at DESC LIMIT 1`,
-    [review_id]
-  );
+    const existing = await get<ShareTokenRow>(
+      `SELECT * FROM share_tokens
+       WHERE review_id = $1 AND enabled = true AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1`,
+      [review_id]
+    );
 
-  if (existing) {
-    res.json({
-      id: existing.id,
-      token: existing.token,
-      enabled: existing.enabled,
-      expires_at: existing.expires_at,
-      url: `${process.env.BASE_URL || ""}/shared/${existing.token}`,
+    if (existing) {
+      res.json({
+        id: existing.id,
+        token: existing.token,
+        enabled: existing.enabled,
+        expires_at: existing.expires_at,
+        url: `${process.env.BASE_URL || ""}/shared/${existing.token}`,
+      });
+      return;
+    }
+
+    const id = uuid();
+    const token = uuid();
+    const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    await run(
+      `INSERT INTO share_tokens (id, review_id, token, enabled, expires_at, created_by)
+       VALUES ($1, $2, $3, true, $4, $5)`,
+      [id, review_id, token, expires_at, req.user!.username]
+    );
+
+    res.status(201).json({
+      id,
+      token,
+      enabled: true,
+      expires_at,
+      url: `${process.env.BASE_URL || ""}/shared/${token}`,
     });
-    return;
+  } catch (err) {
+    logger.error("Failed to create share token", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to create share link" });
   }
-
-  const id = uuid();
-  const token = uuid();
-  const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
-  await run(
-    `INSERT INTO share_tokens (id, review_id, token, enabled, expires_at, created_by)
-     VALUES ($1, $2, $3, true, $4, $5)`,
-    [id, review_id, token, expires_at, req.user!.username]
-  );
-
-  res.status(201).json({
-    id,
-    token,
-    enabled: true,
-    expires_at,
-    url: `${process.env.BASE_URL || ""}/shared/${token}`,
-  });
 });
 
 /** GET /:token — Public, no auth */
 shareRouter.get("/:token", async (req, res) => {
-  const { token } = req.params;
+  try {
+    const { token } = req.params;
 
-  const shareToken = await get<ShareTokenRow>(
-    `SELECT * FROM share_tokens WHERE token = $1`,
-    [token]
-  );
+    const shareToken = await get<ShareTokenRow>(
+      `SELECT * FROM share_tokens WHERE token = $1`,
+      [token]
+    );
 
-  if (!shareToken || !shareToken.enabled) {
-    res.status(404).json({ error: "Share link not found" });
-    return;
-  }
+    if (!shareToken || !shareToken.enabled) {
+      res.status(404).json({ error: "Share link not found" });
+      return;
+    }
 
-  if (new Date(shareToken.expires_at) <= new Date()) {
-    res.status(410).json({ error: "Share link has expired" });
-    return;
-  }
+    if (new Date(shareToken.expires_at) <= new Date()) {
+      res.status(410).json({ error: "Share link has expired" });
+      return;
+    }
 
-  const review = await get<ReviewRow>(
-    `SELECT r.*, repo.name as repository_name
-     FROM reviews r JOIN repositories repo ON r.repository_id = repo.id
-     WHERE r.id = $1`,
-    [shareToken.review_id]
-  );
+    const review = await get<ReviewRow>(
+      `SELECT r.*, repo.name as repository_name
+       FROM reviews r JOIN repositories repo ON r.repository_id = repo.id
+       WHERE r.id = $1`,
+      [shareToken.review_id]
+    );
 
-  if (!review) {
-    res.status(404).json({ error: "Review not found" });
-    return;
-  }
+    if (!review) {
+      res.status(404).json({ error: "Review not found" });
+      return;
+    }
 
-  const findings = await all<FindingRow>(
-    `SELECT * FROM findings WHERE review_id = $1
-     ORDER BY CASE risk_level WHEN 'must_fix' THEN 0 WHEN 'should_fix_soon' THEN 1 ELSE 2 END`,
-    [shareToken.review_id]
-  );
+    const findings = await all<FindingRow>(
+      `SELECT * FROM findings WHERE review_id = $1
+       ORDER BY CASE risk_level WHEN 'must_fix' THEN 0 WHEN 'should_fix_soon' THEN 1 ELSE 2 END`,
+      [shareToken.review_id]
+    );
 
-  const {
-    repository_id: _ri,
-    tokens_prompt: _tp,
-    tokens_completion: _tc,
-    tokens_total: _tt,
-    estimated_cost: _ec,
-    project_context: _pc,
-    created_by: _cb,
-    ...sanitizedReview
-  } = review;
-
-  const sanitizedFindings = findings.map((f) => {
     const {
-      disposition_by: _db,
-      disposition_at: _da,
-      disposition_reason: _dr,
-      suppressed_by_rule_id: _sr,
-      persistent_issue_id: _pi,
-      ...rest
-    } = f;
-    return rest;
-  });
+      repository_id: _ri,
+      tokens_prompt: _tp,
+      tokens_completion: _tc,
+      tokens_total: _tt,
+      estimated_cost: _ec,
+      project_context: _pc,
+      created_by: _cb,
+      ...sanitizedReview
+    } = review;
 
-  res.json({
-    ...sanitizedReview,
-    findings: sanitizedFindings,
-    shared_at: shareToken.created_at,
-    expires_at: shareToken.expires_at,
-  });
+    const sanitizedFindings = findings.map((f) => {
+      const {
+        disposition_by: _db,
+        disposition_at: _da,
+        disposition_reason: _dr,
+        suppressed_by_rule_id: _sr,
+        persistent_issue_id: _pi,
+        ...rest
+      } = f;
+      return rest;
+    });
+
+    res.json({
+      ...sanitizedReview,
+      findings: sanitizedFindings,
+      shared_at: shareToken.created_at,
+      expires_at: shareToken.expires_at,
+    });
+  } catch (err) {
+    logger.error("Failed to fetch shared review", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to load shared review" });
+  }
 });
 
 /** DELETE /:token — Auth required */
 shareRouter.delete("/:token", jwtAuth, async (req, res) => {
-  const { token } = req.params;
+  try {
+    const { token } = req.params;
 
-  const shareToken = await get<ShareTokenRow>(
-    `SELECT * FROM share_tokens WHERE token = $1`,
-    [token]
-  );
+    const shareToken = await get<ShareTokenRow>(
+      `SELECT * FROM share_tokens WHERE token = $1`,
+      [token]
+    );
 
-  if (!shareToken) {
-    res.status(404).json({ error: "Share link not found" });
-    return;
+    if (!shareToken) {
+      res.status(404).json({ error: "Share link not found" });
+      return;
+    }
+
+    if (shareToken.created_by !== req.user!.username && req.user!.role !== "admin") {
+      res.status(403).json({ error: "Insufficient permissions" });
+      return;
+    }
+
+    await run(
+      `UPDATE share_tokens SET enabled = false WHERE token = $1`,
+      [token]
+    );
+
+    res.status(204).send();
+  } catch (err) {
+    logger.error("Failed to revoke share token", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to revoke share link" });
   }
-
-  if (shareToken.created_by !== req.user!.username && req.user!.role !== "admin") {
-    res.status(403).json({ error: "Insufficient permissions" });
-    return;
-  }
-
-  await run(
-    `UPDATE share_tokens SET enabled = false WHERE token = $1`,
-    [token]
-  );
-
-  res.status(204).send();
 });
