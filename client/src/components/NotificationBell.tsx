@@ -5,7 +5,6 @@ import { type RootState, type AppDispatch } from "@/store";
 import { fetchNotifications, fetchUnreadCount, markNotificationRead, markAllRead } from "@/store/notificationsSlice";
 import { Bell, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 export function NotificationBell({ placement = "bottom-right" }: { placement?: "bottom-right" | "top-left" }) {
@@ -70,7 +69,7 @@ export function NotificationBell({ placement = "bottom-right" }: { placement?: "
               </button>
             )}
           </div>
-          <ScrollArea className="max-h-80">
+          <div className="max-h-80 overflow-y-auto custom-scroll">
             {items.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <p className="text-xs text-muted-foreground">No notifications yet</p>
@@ -96,7 +95,7 @@ export function NotificationBell({ placement = "bottom-right" }: { placement?: "
                 </button>
               ))
             )}
-          </ScrollArea>
+          </div>
         </div>
       )}
     </div>

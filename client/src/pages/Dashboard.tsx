@@ -36,6 +36,7 @@ export default function Dashboard() {
   const [deleteTarget, setDeleteTarget] = useState<Review | null>(null);
   const [deleting, setDeleting] = useState(false);
   const filterUserTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pageEffectMounted = useRef(false);
 
   const PAGE_SIZE = 10;
 
@@ -66,9 +67,11 @@ export default function Dashboard() {
   }, [filterRepo, filterStatus, filterType, debouncedFilterUser]); // eslint-disable-line
 
   useEffect(() => {
-    if (page > 0) {
-      dispatch(fetchReviews({ ...activeFilters(debouncedFilterUser), limit: PAGE_SIZE, offset: page * PAGE_SIZE }));
+    if (!pageEffectMounted.current) {
+      pageEffectMounted.current = true;
+      return;
     }
+    dispatch(fetchReviews({ ...activeFilters(debouncedFilterUser), limit: PAGE_SIZE, offset: page * PAGE_SIZE }));
   }, [page]); // eslint-disable-line
 
   const totalPages = Math.ceil(total / PAGE_SIZE);

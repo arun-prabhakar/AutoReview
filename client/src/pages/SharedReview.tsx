@@ -412,18 +412,18 @@ export default function SharedReview() {
                     >
                       <CardContent className="pt-4 space-y-3">
                         <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5 min-w-0 flex-1">
                             <p className="font-semibold text-foreground">
                               {finding.summary}
                             </p>
-                            <p className="text-xs text-muted-foreground font-mono bg-secondary px-2 py-0.5 rounded inline-block">
+                            <p className="text-xs text-muted-foreground font-mono bg-secondary px-2 py-0.5 rounded inline-block max-w-full truncate">
                               {finding.file_path}
                               {finding.line_number
                                 ? `:${finding.line_number}`
                                 : ""}
                             </p>
                           </div>
-                          <div className="flex gap-2 flex-shrink-0 mt-0.5 flex-wrap justify-end">
+                          <div className="flex gap-2 mt-0.5 flex-wrap justify-end shrink-0 max-w-[50%]">
                             <Badge
                               variant={
                                 level === "must_fix"

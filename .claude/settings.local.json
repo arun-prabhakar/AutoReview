@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npx vitest *)",
       "Bash(node scripts/update-default-template.mjs)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "PowerShell(Get-ChildItem \"D:\\\\Personal\\\\IdeaProjects\\\\AutoReview\\\\client\\\\src\" -Force | ForEach-Object { $_.Name })",
+      "PowerShell(Get-ChildItem \"D:\\\\Personal\\\\IdeaProjects\\\\AutoReview\\\\client\\\\src\" -Recurse | ForEach-Object { $_.FullName })"
     ]
   }
 }
