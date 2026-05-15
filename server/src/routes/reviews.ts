@@ -66,8 +66,8 @@ reviewsRouter.get("/:id", async (req, res) => {
     const review = await get<{
       id: string; repository_id: string; commit_hash: string; branch: string | null;
       status: string; strictness: string; review_mode: string; error_message: string | null;
-      created_at: string; completed_at: string | null; repository_name: string;
-      ai_overview: string | null;
+      failure_category: string | null; created_at: string; completed_at: string | null;
+      repository_name: string; ai_overview: string | null;
     }>(
       `SELECT r.*, repo.name as repository_name
        FROM reviews r JOIN repositories repo ON r.repository_id = repo.id

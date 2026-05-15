@@ -22,6 +22,43 @@ interface ReviewContext {
   prId?: string;
 }
 
+function classifyError(error: unknown): string {
+  const msg = (error instanceof Error ? error.message : String(error)).toLowerCase();
+
+  if (msg.includes("no llm provider") || (msg.includes("llm provider") && msg.includes("not found"))) return "no_provider";
+  if (msg.includes("credential not found")) return "no_credential";
+  if (msg.includes("credential_expired")) return "vcs_auth_failed";
+
+  if (
+    msg.includes("context_length_exceeded") ||
+    msg.includes("maximum context") ||
+    (msg.includes("context") && (msg.includes("length") || msg.includes("window"))) ||
+    (msg.includes("token") && msg.includes("exceed"))
+  ) return "llm_context_exceeded";
+
+  if (msg.includes("rate limit") || msg.includes("too many requests") || msg.includes("ratelimit")) return "llm_rate_limited";
+
+  if (
+    msg.includes("invalid api key") ||
+    (msg.includes("api key") && (msg.includes("invalid") || msg.includes("expired")))
+  ) return "llm_auth_failed";
+
+  if (
+    msg.includes("service unavailable") ||
+    msg.includes("overloaded") ||
+    msg.includes("timed out") ||
+    msg.includes("timeout") ||
+    msg.includes("econnrefused") ||
+    msg.includes("enotfound") ||
+    msg.includes("503")
+  ) return "llm_unavailable";
+
+  if (msg.includes("unauthorized") || msg.includes("forbidden") || msg.includes("401") || msg.includes("403")) return "vcs_auth_failed";
+  if (msg.includes("not found") || msg.includes("404")) return "vcs_not_found";
+
+  return "internal_error";
+}
+
 async function resolveCredentials(repo: RepositoryConfig): Promise<{ password: string; username: string }> {
   const password = await getDecryptedPassword(repo.credential_id);
   const credential = await get<{ username: string }>("SELECT username FROM credentials WHERE id = $1", [repo.credential_id]);
@@ -174,8 +211,9 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     return { reviewId, findings, cached: false, incomplete, aiOverview, tokenUsage };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    await updateReviewStatus(reviewId, "failed", message);
-    if (message.includes("CREDENTIAL_EXPIRED")) {
+    const category = classifyError(error);
+    await updateReviewStatus(reviewId, "failed", message, undefined, undefined, category);
+    if (category === "vcs_auth_failed" || message.includes("CREDENTIAL_EXPIRED")) {
       logger.error(`ALERT: Credential expired for repo ${ctx.repo.name}`, { repoId: ctx.repo.id });
     }
     throw error;

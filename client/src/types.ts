@@ -7,6 +7,7 @@ export interface Review {
   strictness: string;
   review_mode: string;
   error_message: string | null;
+  failure_category: string | null;
   created_at: string;
   completed_at: string | null;
   created_by: string | null;

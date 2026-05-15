@@ -10,6 +10,7 @@ export type ReviewRow = {
   strictness: string;
   review_mode: string;
   error_message: string | null;
+  failure_category: string | null;
   created_at: string;
   completed_at: string | null;
   created_by: string | null;
@@ -66,12 +67,13 @@ export async function updateReviewStatus(
   status: string,
   errorMessage?: string,
   aiOverview?: string,
-  tokenData?: { tokens_prompt: number; tokens_completion: number; tokens_total: number; estimated_cost: number }
+  tokenData?: { tokens_prompt: number; tokens_completion: number; tokens_total: number; estimated_cost: number },
+  failureCategory?: string
 ): Promise<void> {
   const completedAt = status === "completed" || status === "failed" ? new Date().toISOString() : null;
   await run(
-    "UPDATE reviews SET status = $1, error_message = $2, completed_at = COALESCE($3, completed_at), ai_overview = COALESCE($4, ai_overview), tokens_prompt = COALESCE($5, tokens_prompt), tokens_completion = COALESCE($6, tokens_completion), tokens_total = COALESCE($7, tokens_total), estimated_cost = COALESCE($8, estimated_cost) WHERE id = $9",
-    [status, errorMessage || null, completedAt, aiOverview || null, tokenData?.tokens_prompt ?? null, tokenData?.tokens_completion ?? null, tokenData?.tokens_total ?? null, tokenData?.estimated_cost ?? null, id]
+    "UPDATE reviews SET status = $1, error_message = $2, completed_at = COALESCE($3, completed_at), ai_overview = COALESCE($4, ai_overview), tokens_prompt = COALESCE($5, tokens_prompt), tokens_completion = COALESCE($6, tokens_completion), tokens_total = COALESCE($7, tokens_total), estimated_cost = COALESCE($8, estimated_cost), failure_category = COALESCE($9, failure_category) WHERE id = $10",
+    [status, errorMessage || null, completedAt, aiOverview || null, tokenData?.tokens_prompt ?? null, tokenData?.tokens_completion ?? null, tokenData?.tokens_total ?? null, tokenData?.estimated_cost ?? null, failureCategory || null, id]
   );
 }
 

@@ -96,11 +96,28 @@ export default function Dashboard() {
     }
   };
 
-  const statusBadge = (status: string) => {
+  const FAILURE_LABELS: Record<string, string> = {
+    llm_context_exceeded: "Context Exceeded",
+    llm_rate_limited: "LLM Rate Limited",
+    llm_auth_failed: "LLM Auth Failed",
+    llm_unavailable: "LLM Unavailable",
+    vcs_rate_limited: "VCS Rate Limited",
+    vcs_auth_failed: "VCS Auth Failed",
+    vcs_not_found: "Not Found",
+    no_provider: "No LLM Provider",
+    no_credential: "No Credential",
+    internal_error: "Internal Error",
+  };
+
+  const statusBadge = (status: string, failureCategory?: string | null) => {
     switch (status) {
-      case "completed": return <Badge variant="outline" className="capitalize bg-success/10 text-success border-success/20">{status}</Badge>;
-      case "pending": return <Badge variant="outline" className="capitalize bg-warning/10 text-warning border-warning/20">{status}</Badge>;
-      case "failed": return <Badge variant="outline" className="capitalize bg-destructive/10 text-destructive border-destructive/20">{status}</Badge>;
+      case "completed": return <Badge variant="outline" className="capitalize bg-success/10 text-success border-success/20">Completed</Badge>;
+      case "pending": return <Badge variant="outline" className="capitalize bg-warning/10 text-warning border-warning/20">Pending</Badge>;
+      case "failed": return (
+        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
+          {failureCategory && FAILURE_LABELS[failureCategory] ? FAILURE_LABELS[failureCategory] : "Failed"}
+        </Badge>
+      );
       default: return <Badge variant="outline" className="capitalize">{status}</Badge>;
     }
   };
@@ -277,7 +294,7 @@ export default function Dashboard() {
                       </TableCell>
                       <TableCell className="py-3">{typeBadge(review.review_mode, review.commit_hash)}</TableCell>
                       <TableCell className="py-3">{identifier(review)}</TableCell>
-                      <TableCell className="py-3">{statusBadge(review.status)}</TableCell>
+                      <TableCell className="py-3">{statusBadge(review.status, review.failure_category)}</TableCell>
                       <TableCell className="py-3">
                         <span className="text-xs text-muted-foreground">
                           {review.commit_author || "—"}

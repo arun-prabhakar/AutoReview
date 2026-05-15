@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check } from "lucide-react";
+import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ReviewDetail() {
@@ -157,6 +157,19 @@ export default function ReviewDetail() {
         .join("\n")
     : "     (none)";
 
+  const FAILURE_LABELS: Record<string, string> = {
+    llm_context_exceeded: "LLM Context Exceeded",
+    llm_rate_limited: "LLM Rate Limited",
+    llm_auth_failed: "LLM Auth Failed",
+    llm_unavailable: "LLM Unavailable",
+    vcs_rate_limited: "VCS Rate Limited",
+    vcs_auth_failed: "VCS Auth Failed",
+    vcs_not_found: "Commit / PR Not Found",
+    no_provider: "No LLM Provider Configured",
+    no_credential: "No Credential Configured",
+    internal_error: "Internal Error",
+  };
+
   const riskAssessment = grouped.must_fix.length > 0
     ? "⛔ HIGH RISK — Action required before merge"
     : grouped.should_fix_soon.length > 0
@@ -285,6 +298,20 @@ AutoReview`;
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {review.status === "failed" && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 flex items-start gap-3">
+          <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-destructive">
+              {FAILURE_LABELS[review.failure_category ?? ""] ?? "Review Failed"}
+            </p>
+            {review.error_message && (
+              <p className="text-xs text-destructive/80 mt-0.5 font-mono break-all">{review.error_message}</p>
+            )}
+          </div>
+        </div>
       )}
 
       {chain.length > 1 && (
