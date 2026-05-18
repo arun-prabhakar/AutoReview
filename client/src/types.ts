@@ -21,6 +21,7 @@ export interface Review {
   estimated_cost?: number | null;
   project_context?: string | null;
   commit_author?: string | null;
+  diff_text?: string | null;
 }
 
 export interface Finding {

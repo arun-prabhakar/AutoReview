@@ -8,6 +8,7 @@ import { sendReviewEmail, type ReviewMetadata } from "./email-draft-service.js";
 import { all, get } from "../db/queries.js";
 import { v4 as uuid } from "uuid";
 import { logger } from "../middleware/index.js";
+import { NotFoundError, ValidationError } from "../errors.js";
 
 type DedupKey = string;
 type ReviewMode = "manual" | "pr";
@@ -62,17 +63,17 @@ function classifyError(error: unknown): string {
 async function resolveCredentials(repo: RepositoryConfig): Promise<{ password: string; username: string }> {
   const password = await getDecryptedPassword(repo.credential_id);
   const credential = await get<{ username: string }>("SELECT username FROM credentials WHERE id = $1", [repo.credential_id]);
-  if (!credential) throw new Error("Credential not found");
+  if (!credential) throw new NotFoundError("Credential not found");
   return { password, username: credential.username };
 }
 
 async function resolveProvider(repo: RepositoryConfig): Promise<ProviderConfig> {
   if (!repo.llm_provider_id) {
-    throw new Error(`No LLM provider configured for repository ${repo.name}`);
+    throw new ValidationError(`No LLM provider configured for repository ${repo.name}`);
   }
   const provider = await getProviderById(repo.llm_provider_id);
   if (!provider) {
-    throw new Error(`LLM provider ${repo.llm_provider_id} not found`);
+    throw new NotFoundError(`LLM provider ${repo.llm_provider_id} not found`);
   }
   const apiKey = await getDecryptedApiKey(repo.llm_provider_id);
   return { apiBase: provider.api_base, apiKey };
@@ -137,6 +138,8 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     estimated_cost: null,
     project_context: projectContext ?? null,
     commit_author: ctx.commit.author?.raw ?? null,
+    diff_text: ctx.diff ?? null,
+    failure_category: null,
   });
 
   if (!created) {
@@ -351,7 +354,7 @@ async function linkDuplicateFindings(repositoryId: string, findings: RawFindingI
 
 export async function runManualReview(repositoryId: string, commitHash: string, force = false, createdBy?: string) {
   const repo = await getRepoById(repositoryId);
-  if (!repo) throw new Error(`Repository ${repositoryId} not found`);
+  if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
 
   const { password, username } = await resolveCredentials(repo);
 
@@ -381,7 +384,7 @@ export async function runPrReview(repositoryId: string, prId: string, force = fa
   if (dedupResult.action === "in_progress") return { review: dedupResult.review, findings: [], cached: false, message: "Review already in progress" };
 
   const repo = await getRepoById(repositoryId);
-  if (!repo) throw new Error(`Repository ${repositoryId} not found`);
+  if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
 
   const { password, username } = await resolveCredentials(repo);
 
@@ -431,7 +434,7 @@ export async function rerunReview(reviewId: string, createdBy?: string) {
   const review = await get<{ id: string; repository_id: string; commit_hash: string; review_mode: string }>(
     "SELECT id, repository_id, commit_hash, review_mode FROM reviews WHERE id = $1", [reviewId]
   );
-  if (!review) throw new Error("Review not found");
+  if (!review) throw new NotFoundError("Review not found");
 
   if (review.review_mode === "pr") {
     const prId = review.commit_hash.replace("pr:", "");

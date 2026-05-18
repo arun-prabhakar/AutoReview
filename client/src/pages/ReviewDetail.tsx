@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle } from "lucide-react";
+import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ReviewDetail() {
@@ -33,6 +33,7 @@ export default function ReviewDetail() {
   const [shareData, setShareData] = useState<ShareToken | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [diffVisible, setDiffVisible] = useState(false);
 
   useEffect(() => {
     if (id) dispatch(fetchReviewDetail(id));
@@ -267,7 +268,57 @@ AutoReview`;
             <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
             {rereviewing ? "Re-reviewing..." : "Re-review"}
           </Button>
-          {user?.role === "admin" && (
+      {review.diff_text && (
+        <Card className="border-border">
+          <button
+            onClick={() => setDiffVisible(!diffVisible)}
+            aria-expanded={diffVisible}
+            aria-controls="diff-content"
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-accent transition-colors rounded-t-lg"
+          >
+            <div className="flex items-center gap-2.5">
+              <FileCode className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Diff</span>
+              {!diffVisible && <span className="text-xs text-muted-foreground">Click to view the reviewed changes</span>}
+            </div>
+            <div className="flex items-center gap-3">
+              {diffVisible && (
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(review.diff_text!); toast({ title: "Diff copied to clipboard", variant: "success" }); }}>
+                  Copy
+                </Button>
+              )}
+              {diffVisible ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </div>
+          </button>
+          {diffVisible && (
+            <CardContent id="diff-content" className="pt-0 pb-4 border-t border-border">
+              <div className="overflow-x-auto mt-4 rounded-md border border-border bg-secondary/50">
+                <pre className="text-xs font-mono leading-relaxed p-4 whitespace-pre">
+                  {review.diff_text.split("\n").map((line, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "px-3 -mx-4 min-w-[calc(100%+2rem)]",
+                        line.startsWith("+") && !line.startsWith("++")
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : line.startsWith("-") && !line.startsWith("--")
+                            ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                            : line.startsWith("@@")
+                              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                              : ""
+                      )}
+                    >
+                      {line}
+                    </div>
+                  ))}
+                </pre>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {user?.role === "admin" && (
             <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
               <Trash2 className="h-3.5 w-3.5 mr-1.5" />
               Delete

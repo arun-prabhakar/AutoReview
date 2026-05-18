@@ -22,6 +22,7 @@ export type ReviewRow = {
   estimated_cost: number | null;
   project_context: string | null;
   commit_author: string | null;
+  diff_text: string | null;
 };
 
 export type FindingRow = {
@@ -52,11 +53,11 @@ export async function findFindingsByReviewId(reviewId: string): Promise<FindingR
 
 export async function createReview(review: Omit<ReviewRow, "created_at" | "ai_overview">): Promise<{ id: string; created: boolean }> {
   const result = await getPool().query(
-    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author, diff_text)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      ON CONFLICT DO NOTHING
      RETURNING id`,
-    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null]
+    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null, review.diff_text ?? null]
   );
   const created = result.rows.length > 0;
   return { id: created ? result.rows[0].id : review.id, created };
