@@ -13,6 +13,7 @@ export const usersRouter = Router();
 const JWT_EXPIRES_IN = "24h";
 const COOKIE_MAX_AGE = 24 * 60 * 60 * 1000;
 const MIN_PASSWORD_LENGTH = 8;
+const BCRYPT_ROUNDS = 12;
 
 function generateToken(user: { id: string; username: string; role: string; tokenVersion?: number }): string {
   return jwt.sign(
@@ -44,6 +45,14 @@ authRouter.post("/login", async (req, res) => {
     if (!match) {
       res.status(401).json({ error: "Invalid credentials" });
       return;
+    }
+
+    // Auto-upgrade: re-hash with current rounds if the stored hash uses a lower cost
+    const storedRounds = parseInt(user.password_hash.split("$")[2], 10);
+    if (storedRounds < BCRYPT_ROUNDS) {
+      bcrypt.hash(password, BCRYPT_ROUNDS).then((upgradedHash) => {
+        run("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [upgradedHash, user.id]).catch(() => {});
+      }).catch(() => {});
     }
 
     const token = generateToken(user);
@@ -151,11 +160,11 @@ authRouter.post("/change-password", jwtAuth, async (req, res) => {
     return;
   }
 
-  const hash = await bcrypt.hash(new_password, 8);
-  await run(
-    "UPDATE users SET password_hash = $1, must_change_password = false, token_version = token_version + 1, updated_at = NOW() WHERE id = $2",
-    [hash, user.id],
-  );
+    const hash = await bcrypt.hash(new_password, BCRYPT_ROUNDS);
+    await run(
+      "UPDATE users SET password_hash = $1, must_change_password = false, token_version = token_version + 1, updated_at = NOW() WHERE id = $2",
+      [hash, user.id],
+    );
 
   logger.audit("password_changed", { userId: user.id });
   res.json({ message: "Password changed successfully" });
@@ -199,7 +208,7 @@ usersRouter.post("/", async (req, res) => {
     }
 
     const id = uuid();
-    const hash = await bcrypt.hash(password, 8);
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
     await run(
       "INSERT INTO users (id, username, name, password_hash, role, must_change_password) VALUES ($1, $2, $3, $4, $5, true)",
@@ -298,7 +307,7 @@ usersRouter.put("/:id/password", async (req, res) => {
       return;
     }
 
-    const hash = await bcrypt.hash(password, 8);
+    const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     await run(
       "UPDATE users SET password_hash = $1, must_change_password = true, token_version = token_version + 1, updated_at = NOW() WHERE id = $2",
       [hash, id],

@@ -220,7 +220,7 @@ export async function ensureSchema(pool: Pool): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_share_tokens_review ON share_tokens(review_id)`);
 
   if (process.env.NODE_ENV !== "production") {
-    const adminHash = bcrypt.hashSync("admin", 10);
+    const adminHash = await bcrypt.hash("admin", 12);
     await pool.query(
       `INSERT INTO users (id, username, password_hash, role) VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING`,
       [uuid(), "admin", adminHash, "admin"]
