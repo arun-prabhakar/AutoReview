@@ -273,6 +273,40 @@ AutoReview`;
             <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
             {rereviewing ? "Re-reviewing..." : "Re-review"}
           </Button>
+
+      {user?.role === "admin" && (
+            <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete
+            </Button>
+          )}
+        </div>
+       </div>
+
+      {shareData && (
+        <Card className="border-border bg-card">
+          <CardContent className="py-3 px-4">
+            <div className="flex items-center gap-3">
+              <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0", shareData.enabled ? "bg-success/10" : "bg-muted")}>
+                <Link2 className={cn("h-4 w-4", shareData.enabled ? "text-success" : "text-muted-foreground")} />
+              </div>
+              <div className="flex-1 min-w-0 flex items-center gap-2">
+                <code className="text-xs font-mono text-foreground truncate flex-1 block">
+                  {shareData.url?.startsWith("http") ? shareData.url : `${window.location.origin}${shareData.url}`}
+                </code>
+                <Button variant="outline" size="sm" className="h-7 text-xs flex-shrink-0" onClick={handleCopyLink}>
+                  {shareCopied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+                  {shareCopied ? "Copied" : "Copy"}
+                </Button>
+                <Button variant="outline" size="sm" className="h-7 text-xs flex-shrink-0" onClick={handleToggleShare}>
+                  {shareData.enabled ? "Disable" : "Enable"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {review.diff_text && (
         <Card className="border-border">
           <button
@@ -321,39 +355,6 @@ AutoReview`;
               </div>
             </CardContent>
           )}
-        </Card>
-      )}
-
-      {user?.role === "admin" && (
-            <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-              Delete
-            </Button>
-          )}
-        </div>
-       </div>
-
-      {shareData && (
-        <Card className="border-border bg-card">
-          <CardContent className="py-3 px-4">
-            <div className="flex items-center gap-3">
-              <div className={cn("h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0", shareData.enabled ? "bg-success/10" : "bg-muted")}>
-                <Link2 className={cn("h-4 w-4", shareData.enabled ? "text-success" : "text-muted-foreground")} />
-              </div>
-              <div className="flex-1 min-w-0 flex items-center gap-2">
-                <code className="text-xs font-mono text-foreground truncate flex-1 block">
-                  {shareData.url?.startsWith("http") ? shareData.url : `${window.location.origin}${shareData.url}`}
-                </code>
-                <Button variant="outline" size="sm" className="h-7 text-xs flex-shrink-0" onClick={handleCopyLink}>
-                  {shareCopied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-                  {shareCopied ? "Copied" : "Copy"}
-                </Button>
-                <Button variant="outline" size="sm" className="h-7 text-xs flex-shrink-0" onClick={handleToggleShare}>
-                  {shareData.enabled ? "Disable" : "Enable"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
         </Card>
       )}
 
