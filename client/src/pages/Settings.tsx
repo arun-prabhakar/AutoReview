@@ -45,8 +45,8 @@ export default function Settings() {
   };
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
+    <div className="space-y-4">
+      <h2 className="text-lg font-bold tracking-tight">Settings</h2>
 
       <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
         <TabsList className="w-full flex-wrap h-auto gap-1">
@@ -59,31 +59,31 @@ export default function Settings() {
           <TabsTrigger value="notifications"><Bell className="h-3.5 w-3.5 mr-1.5" />Notifications</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="providers" className="space-y-4 mt-4">
+        <TabsContent value="providers" className="space-y-3 mt-2">
           <ProvidersTab providers={providers} onRefresh={loadProviders} loading={loadingProviders} />
         </TabsContent>
 
-        <TabsContent value="credentials" className="space-y-4 mt-4">
+        <TabsContent value="credentials" className="space-y-3 mt-2">
           <CredentialsTab credentials={credentials} onRefresh={loadCredentials} loading={loadingCredentials} />
         </TabsContent>
 
-        <TabsContent value="repositories" className="space-y-4 mt-4">
+        <TabsContent value="repositories" className="space-y-3 mt-2">
           <RepositoriesTab credentials={credentials} loadingCredentials={loadingCredentials} />
         </TabsContent>
 
-        <TabsContent value="review" className="space-y-4 mt-4">
+        <TabsContent value="review" className="space-y-3 mt-2">
           <ReviewConfigTab />
         </TabsContent>
 
-        <TabsContent value="llm" className="space-y-4 mt-4">
+        <TabsContent value="llm" className="space-y-3 mt-2">
           <LlmTab providers={providers} loading={loadingProviders} />
         </TabsContent>
 
-        <TabsContent value="prompt" className="space-y-4 mt-4">
+        <TabsContent value="prompt" className="space-y-3 mt-2">
           <PromptTemplateTab />
         </TabsContent>
 
-        <TabsContent value="notifications" className="space-y-4 mt-4">
+        <TabsContent value="notifications" className="space-y-3 mt-2">
           <NotificationsTab />
         </TabsContent>
        </Tabs>

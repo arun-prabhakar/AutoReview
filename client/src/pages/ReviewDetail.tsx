@@ -254,10 +254,10 @@ AutoReview`;
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-4 max-w-5xl mx-auto">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold tracking-tight">Review Detail</h2>
+          <h2 className="text-lg font-bold tracking-tight">Review Detail</h2>
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
             <button onClick={() => navigate("/")} className="hover:text-foreground transition-colors">Dashboard</button>
             <span>/</span>

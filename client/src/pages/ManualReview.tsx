@@ -151,8 +151,8 @@ export default function ManualReview() {
     : `PR #${prId}`;
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <h2 className="text-2xl font-bold tracking-tight">Manual Review</h2>
+    <div className="mx-auto max-w-xl space-y-4">
+      <h2 className="text-lg font-bold tracking-tight">Manual Review</h2>
 
         <Card className="border-border bg-card">
           <CardHeader className="pb-4 border-b border-border">
@@ -181,7 +181,7 @@ export default function ManualReview() {
             </div>
           </CardHeader>
           <CardContent className="pt-6">
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="repo" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Repository</Label>
                 <Select value={repoId} onValueChange={handleRepoChange}>

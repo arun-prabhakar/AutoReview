@@ -195,7 +195,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold tracking-tight">Dashboard</h2>
+        <h2 className="text-lg font-bold tracking-tight">Dashboard</h2>
         <Link to="/reviews/manual">
           <Button className="font-semibold shadow-sm">New Review</Button>
         </Link>

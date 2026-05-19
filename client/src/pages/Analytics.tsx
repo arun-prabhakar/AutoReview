@@ -37,9 +37,9 @@ export default function Analytics() {
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold tracking-tight">Cost Analytics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="space-y-4">
+        <h2 className="text-lg font-bold tracking-tight">Cost Analytics</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Skeleton className="h-64 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
@@ -48,8 +48,8 @@ export default function Analytics() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <h2 className="text-2xl font-bold tracking-tight">Cost Analytics</h2>
+    <div className="space-y-4 max-w-6xl mx-auto">
+      <h2 className="text-lg font-bold tracking-tight">Cost Analytics</h2>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="border-border bg-card">

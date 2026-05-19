@@ -119,9 +119,9 @@ export default function Users() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold tracking-tight">Users</h2>
+          <h2 className="text-lg font-bold tracking-tight">Users</h2>
           <Dialog open={userDialogOpen} onOpenChange={(o) => { setUserDialogOpen(o); if (o) { setAutoGenPassword(true); setManualPassword(""); } }}>
             <DialogTrigger asChild><Button size="sm"><Plus className="mr-2 h-4 w-4" />Add User</Button></DialogTrigger>
             <DialogContent>
