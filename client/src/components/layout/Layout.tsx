@@ -198,7 +198,7 @@ export function Layout() {
           </div>
           <div className={cn("flex items-center gap-1", collapsed ? "flex-col" : "justify-center")}>
             <AboutIcon />
-            {user?.role === "admin" && <NotificationBell placement="top-left" />}
+            <NotificationBell placement="top-left" />
             <Button variant="ghost" size="icon" aria-label="Change password" onClick={() => setChangePasswordOpen(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Change Password">
               <KeyRound className="h-4 w-4" />
             </Button>

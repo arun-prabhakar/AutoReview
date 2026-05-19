@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead } from "../services/storage-service.js";
+import { getNotifications, getUnreadCount, markNotificationRead, markReviewNotificationsRead, markAllNotificationsRead } from "../services/storage-service.js";
 import { logger } from "../middleware/index.js";
 
 export const notificationsRouter = Router();
@@ -22,6 +22,16 @@ notificationsRouter.get("/unread-count", async (req, res) => {
   } catch (err) {
     logger.error("Failed to fetch unread count", { error: err instanceof Error ? err.message : String(err) });
     res.status(500).json({ error: "Failed to fetch unread count" });
+  }
+});
+
+notificationsRouter.patch("/review/:reviewId/read", async (req, res) => {
+  try {
+    const ids = await markReviewNotificationsRead(String(req.params.reviewId), req.user?.id || "");
+    res.json({ success: true, ids, count: ids.length });
+  } catch (err) {
+    logger.error("Failed to mark review notifications read", { error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: "Failed to mark notifications" });
   }
 });
 

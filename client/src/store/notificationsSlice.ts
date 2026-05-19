@@ -25,6 +25,14 @@ export const markNotificationRead = createAsyncThunk(
   }
 );
 
+export const markReviewNotificationsRead = createAsyncThunk(
+  "notifications/markReviewRead",
+  async (reviewId: string) => {
+    const result = await api.patch<{ ids: string[]; count: number }>(`/api/notifications/review/${reviewId}/read`);
+    return result;
+  }
+);
+
 export const markAllRead = createAsyncThunk(
   "notifications/markAllRead",
   async () => {
@@ -65,6 +73,13 @@ const notificationsSlice = createSlice({
         const notif = state.items.find((n) => n.id === action.payload);
         if (notif) notif.read = true;
         state.unreadCount = Math.max(0, state.unreadCount - 1);
+      })
+      .addCase(markReviewNotificationsRead.fulfilled, (state, action) => {
+        const markedIds = new Set(action.payload.ids);
+        state.items.forEach((n) => {
+          if (markedIds.has(n.id)) n.read = true;
+        });
+        state.unreadCount = Math.max(0, state.unreadCount - action.payload.count);
       })
       .addCase(markAllRead.fulfilled, (state) => {
         state.items.forEach((n) => { n.read = true; });

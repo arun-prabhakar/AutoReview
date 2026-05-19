@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { type RootState, type AppDispatch } from "@/store";
 import { fetchReviewDetail } from "@/store/reviewDetailSlice";
+import { markReviewNotificationsRead } from "@/store/notificationsSlice";
 import type { Finding, ReviewChainItem, ShareToken } from "@/types";
 import { api } from "@/services/api";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,6 +38,10 @@ export default function ReviewDetail() {
 
   useEffect(() => {
     if (id) dispatch(fetchReviewDetail(id));
+  }, [id, dispatch]);
+
+  useEffect(() => {
+    if (id) dispatch(markReviewNotificationsRead(id));
   }, [id, dispatch]);
 
   useEffect(() => {

@@ -194,6 +194,7 @@ Rules:
 Commit: ${commit.hash.substring(0, 12)}
 Message: ${commit.message}
 Repository: ${repo.name}
+Branch: ${repo.branch}
 
 Diff:
 ${snippet}`;
@@ -203,7 +204,7 @@ ${snippet}`;
   const response = await client.chat.completions.create({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 60,
+    max_tokens: 200,
     temperature: 0.2,
   });
 
