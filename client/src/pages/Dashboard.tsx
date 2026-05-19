@@ -415,9 +415,16 @@ export default function Dashboard() {
                       </TableCell>
                       <TableCell className="py-2">{typeBadge(review.review_mode, review.commit_hash)}</TableCell>
                       <TableCell className="py-2 max-w-xs">
-                        <span className="text-xs text-muted-foreground line-clamp-1">
-                          {review.ai_overview || identifier(review)}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground line-clamp-1 flex-1">
+                            {review.ai_overview || identifier(review)}
+                          </span>
+                          {review.commit_author && (
+                            <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-muted text-[9px] font-bold text-foreground border border-border shrink-0" title={review.commit_author}>
+                              {review.commit_author.trim().split(/\s+/).map(w => w.charAt(0)).join("").substring(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="py-2 text-xs">{formatDate(review.created_at)}</TableCell>
                       {isAdmin && (
