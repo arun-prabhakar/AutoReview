@@ -144,11 +144,11 @@ export default function Dashboard() {
     }
     if (review.status === "failed") {
       const label = review.failure_category && FAILURE_LABELS[review.failure_category] ? FAILURE_LABELS[review.failure_category] : "Failed";
-      return <span title={label}><XCircle className="h-4 w-4 text-destructive" /></span>;
+      return <span title={label}><XCircle className="h-4 w-4 text-muted-foreground" /></span>;
     }
     const mustFix = review.must_fix_count ?? 0;
     const shouldFix = review.should_fix_count ?? 0;
-    if (mustFix > 0) return <span title={`${mustFix} must-fix, ${shouldFix} should-fix`}><AlertTriangle className="h-4 w-4 text-destructive" /></span>;
+    if (mustFix > 0) return <span title={`${mustFix} must-fix, ${shouldFix} should-fix`}><XCircle className="h-4 w-4 text-destructive" /></span>;
     if (shouldFix > 0) return <span title={`${shouldFix} should-fix`}><AlertTriangle className="h-4 w-4 text-warning" /></span>;
     return <span title="No issues found"><CheckCircle2 className="h-4 w-4 text-success" /></span>;
   };
