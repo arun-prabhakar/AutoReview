@@ -23,6 +23,7 @@ export type ReviewRow = {
   project_context: string | null;
   commit_author: string | null;
   diff_text: string | null;
+  pr_head_commit: string | null;
 };
 
 export type FindingRow = {
@@ -53,11 +54,11 @@ export async function findFindingsByReviewId(reviewId: string): Promise<FindingR
 
 export async function createReview(review: Omit<ReviewRow, "created_at" | "ai_overview">): Promise<{ id: string; created: boolean }> {
   const result = await getPool().query(
-    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author, diff_text)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author, diff_text, pr_head_commit)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
      ON CONFLICT DO NOTHING
      RETURNING id`,
-    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null, review.diff_text ?? null]
+    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null, review.diff_text ?? null, review.pr_head_commit ?? null]
   );
   const created = result.rows.length > 0;
   return { id: created ? result.rows[0].id : review.id, created };
@@ -212,11 +213,44 @@ export async function getCostSummary(days = 30): Promise<{ total_reviews: string
   );
 }
 
+export async function findPreviousPrReview(repositoryId: string, prId: string, excludeReviewId?: string): Promise<ReviewRow | undefined> {
+  const conditions = `(commit_hash = 'pr:' || $2 OR commit_hash LIKE 'pr:' || $2 || ':%')`;
+  const params: unknown[] = [repositoryId, prId];
+  if (excludeReviewId) {
+    params.push(excludeReviewId);
+  }
+  const excludeClause = excludeReviewId ? ` AND id != $${params.length}` : "";
+  return get<ReviewRow>(
+    `SELECT * FROM reviews WHERE repository_id = $1 AND ${conditions}${excludeClause} ORDER BY created_at DESC LIMIT 1`,
+    params
+  );
+}
+
 export async function getReviewChain(reviewId: string): Promise<{ id: string; status: string; created_at: string; must_fix_count: string; total_findings: string }[]> {
   const review = await get<{ repository_id: string; commit_hash: string; parent_review_id: string | null }>(
     "SELECT repository_id, commit_hash, parent_review_id FROM reviews WHERE id = $1", [reviewId]
   );
   if (!review) return [];
+
+  // For PR reviews (commit_hash starts with "pr:"), match both old and new format
+  if (review.commit_hash.startsWith("pr:")) {
+    // Extract prId: handle both "pr:123" (old) and "pr:123:abc123" (new)
+    const parts = review.commit_hash.split(":");
+    const prId = parts[1];
+    return all(
+      `SELECT r.id, r.status, r.created_at,
+         SUM(CASE WHEN f.risk_level = 'must_fix' THEN 1 ELSE 0 END) as must_fix_count,
+         COUNT(f.id) as total_findings
+       FROM reviews r
+       LEFT JOIN findings f ON f.review_id = r.id
+       WHERE r.repository_id = $1 AND (r.commit_hash = 'pr:' || $2 OR r.commit_hash LIKE 'pr:' || $2 || ':%')
+       GROUP BY r.id, r.status, r.created_at
+       ORDER BY r.created_at ASC`,
+      [review.repository_id, prId]
+    );
+  }
+
+  // Manual reviews: exact match (unchanged)
   return all(
     `SELECT r.id, r.status, r.created_at,
        SUM(CASE WHEN f.risk_level = 'must_fix' THEN 1 ELSE 0 END) as must_fix_count,

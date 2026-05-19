@@ -151,6 +151,7 @@ export async function ensureSchema(pool: Pool): Promise<void> {
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS commit_author TEXT`);
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS diff_text TEXT`);
   await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS failure_category TEXT`);
+  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS pr_head_commit TEXT`);
 
   await pool.query(`ALTER TABLE findings ADD COLUMN IF NOT EXISTS persistent_issue_id TEXT`);
 
