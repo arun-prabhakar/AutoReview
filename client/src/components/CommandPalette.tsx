@@ -6,17 +6,17 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { api } from "@/services/api";
 import type { RootState } from "@/store";
 import type { Review } from "@/types";
-import { LayoutDashboard, FileSearch, Settings, Users, BarChart3, Hash, GitPullRequest, Search } from "lucide-react";
+import { LayoutDashboard, FileSearch, Settings, Users, BarChart3, Hash, GitPullRequest, Search, Keyboard } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-type NavItem = { to: string; label: string; icon: LucideIcon };
+type NavItem = { to: string; label: string; icon: LucideIcon; shortcut: string; adminOnly?: boolean };
 
 const NAV_ITEMS: NavItem[] = [
-  { to: "/", label: "Go to Dashboard", icon: LayoutDashboard },
-  { to: "/reviews/manual", label: "New Review", icon: FileSearch },
-  { to: "/settings", label: "Go to Settings", icon: Settings },
-  { to: "/users", label: "Go to Users", icon: Users },
-  { to: "/analytics", label: "Go to Analytics", icon: BarChart3 },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, shortcut: "D" },
+  { to: "/reviews/manual", label: "New Review", icon: FileSearch, shortcut: "N" },
+  { to: "/settings", label: "Settings", icon: Settings, shortcut: "S", adminOnly: true },
+  { to: "/users", label: "Users", icon: Users, shortcut: "U", adminOnly: true },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, shortcut: "A", adminOnly: true },
 ];
 
 type SearchResult = { id: string; type: "review"; label: string; sub: string; to: string };
@@ -27,6 +27,8 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
     setQuery("");
@@ -76,13 +78,36 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   );
 
   const visibleNav = NAV_ITEMS.filter((item) => {
-    if (item.to === "/users" || item.to === "/settings" || item.to === "/analytics") return user?.role === "admin";
+    if (item.adminOnly) return isAdmin;
     return true;
   });
 
   const filteredNav = query.trim()
     ? visibleNav.filter((item) => item.label.toLowerCase().includes(query.toLowerCase()))
     : visibleNav;
+
+  const shortcutMap = new Map<string, string>();
+  for (const item of visibleNav) {
+    shortcutMap.set(item.shortcut.toLowerCase(), item.to);
+  }
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onOpenChange(false);
+        return;
+      }
+      const ch = e.key.toLowerCase();
+      if (ch.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const target = shortcutMap.get(ch);
+        if (target) {
+          e.preventDefault();
+          run(target);
+        }
+      }
+    },
+    [shortcutMap, run, onOpenChange],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,18 +116,36 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
           <div className="flex items-center border-b border-border px-3" cmdk-input-wrapper="">
             <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
             <Command.Input
-              placeholder="Search reviews, navigate..."
+              placeholder="Search reviews or type a shortcut..."
               value={query}
               onValueChange={setQuery}
+              onKeyDown={handleKeyDown}
               className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
           <Command.List className="max-h-80 overflow-y-auto p-1">
             {!query.trim() && (
-              <div className="flex items-center gap-4 px-2 py-2 text-[10px] text-muted-foreground border-b border-border mb-1">
-                <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↑↓</kbd> Navigate</span>
-                <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↵</kbd> Open</span>
-                <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">Esc</kbd> Close</span>
+              <div className="px-2 py-2 border-b border-border mb-1">
+                <div className="flex items-center gap-1.5 mb-2 text-[10px] text-muted-foreground">
+                  <Keyboard className="h-3 w-3" />
+                  <span className="font-medium">Shortcuts</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  {visibleNav.map((item) => (
+                    <div key={item.to} className="flex items-center justify-between text-xs py-0.5">
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <item.icon className="h-3 w-3" />
+                        {item.label}
+                      </span>
+                      <kbd className="rounded border border-border bg-secondary px-1.5 font-mono text-[10px] font-medium text-muted-foreground">{item.shortcut}</kbd>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center gap-4 mt-2 pt-1.5 border-t border-border/50 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↑↓</kbd> Navigate</span>
+                  <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↵</kbd> Open</span>
+                  <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">Esc</kbd> Close</span>
+                </div>
               </div>
             )}
             {query.trim() && searching && (
@@ -132,7 +175,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               </Command.Group>
             )}
             {filteredNav.length > 0 && (
-              <Command.Group heading="Navigation">
+              <Command.Group heading={query.trim() ? "Navigation" : undefined}>
                 {filteredNav.map((item) => (
                   <Command.Item
                     key={item.to}
@@ -141,6 +184,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                   >
                     <item.icon className="h-4 w-4 text-muted-foreground shrink-0" />
                     <span className="font-medium text-foreground">{item.label}</span>
+                    <kbd className="ml-auto rounded border border-border bg-secondary px-1.5 font-mono text-[10px] font-medium text-muted-foreground">{item.shortcut}</kbd>
                   </Command.Item>
                 ))}
               </Command.Group>
