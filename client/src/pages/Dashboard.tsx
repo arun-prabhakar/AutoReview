@@ -356,7 +356,7 @@ export default function Dashboard() {
       <Card className="border-border bg-card">
         <CardHeader className="border-b border-border pb-4">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg font-semibold tracking-headline">Recent Reviews</CardTitle>
+              <CardTitle className="text-sm font-semibold tracking-tight uppercase text-muted-foreground">Recent Reviews</CardTitle>
               {total > 0 && (
                 <span className="text-xs text-muted-foreground">{total} result{total !== 1 ? "s" : ""}</span>
               )}
