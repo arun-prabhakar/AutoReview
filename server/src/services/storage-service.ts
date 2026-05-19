@@ -239,9 +239,9 @@ export async function getCostByModel(days = 30): Promise<{ llm_model: string; re
   );
 }
 
-export async function getCostPerReview(days = 30, limit = 50, offset = 0): Promise<{ id: string; repository_name: string; llm_model: string; tokens_total: number; estimated_cost: number; created_at: string }[]> {
+export async function getCostPerReview(days = 30, limit = 50, offset = 0): Promise<{ id: string; repository_name: string; commit_hash: string; review_mode: string; llm_model: string; tokens_total: number; estimated_cost: number; created_at: string }[]> {
   return all(
-    `SELECT r.id, repo.name as repository_name, COALESCE(r.llm_model, repo.llm_model, 'unknown') as llm_model,
+    `SELECT r.id, repo.name as repository_name, r.commit_hash, r.review_mode, COALESCE(r.llm_model, repo.llm_model, 'unknown') as llm_model,
        r.tokens_total, r.estimated_cost, r.created_at
      FROM reviews r
      JOIN repositories repo ON r.repository_id = repo.id

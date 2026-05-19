@@ -22,7 +22,7 @@ function collectQueryValues(value: unknown): string[] {
 
 reviewsRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { repository_id, status, review_mode, created_by, commit_author, limit = "20", offset = "0" } = req.query;
+    const { repository_id, status, review_mode, created_by, commit_author, search, limit = "20", offset = "0" } = req.query;
     const clampedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
     const clampedOffset = Math.max(Number(offset) || 0, 0);
     const selectedAuthors = collectQueryValues(commit_author);
@@ -37,6 +37,12 @@ reviewsRouter.get("/", async (req: Request, res: Response, next: NextFunction) =
     `;
     const params: unknown[] = [];
     let paramIdx = 1;
+
+    if (search) {
+      query += ` AND (repo.name ILIKE $${paramIdx} OR r.commit_hash ILIKE $${paramIdx} OR r.ai_overview ILIKE $${paramIdx})`;
+      params.push(`%${String(search)}%`);
+      paramIdx++;
+    }
 
     if (repository_id) {
       query += ` AND r.repository_id = $${paramIdx++}`;
@@ -110,6 +116,22 @@ reviewsRouter.get("/authors", async (req: Request, res: Response, next: NextFunc
   }
 });
 
+reviewsRouter.get("/open-prs/:repositoryId", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const repo = await getRepoById(String(req.params.repositoryId));
+    if (!repo) throw new NotFoundError("Repository not found");
+
+    const credential = await get<{ username: string }>("SELECT username FROM credentials WHERE id = $1", [repo.credential_id]);
+    if (!credential) throw new ValidationError("Credential not found for this repository");
+
+    const password = await getDecryptedPassword(repo.credential_id);
+    const prs = await fetchOpenPullRequests(repo.workspace, repo.slug, password, credential.username);
+    res.json(prs);
+  } catch (err) {
+    next(err);
+  }
+});
+
 reviewsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const review = await get<{
@@ -132,22 +154,6 @@ reviewsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction
     );
 
     res.json({ ...review, findings });
-  } catch (err) {
-    next(err);
-  }
-});
-
-reviewsRouter.get("/open-prs/:repositoryId", async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const repo = await getRepoById(String(req.params.repositoryId));
-    if (!repo) throw new NotFoundError("Repository not found");
-
-    const credential = await get<{ username: string }>("SELECT username FROM credentials WHERE id = $1", [repo.credential_id]);
-    if (!credential) throw new ValidationError("Credential not found for this repository");
-
-    const password = await getDecryptedPassword(repo.credential_id);
-    const prs = await fetchOpenPullRequests(repo.workspace, repo.slug, password, credential.username);
-    res.json(prs);
   } catch (err) {
     next(err);
   }
