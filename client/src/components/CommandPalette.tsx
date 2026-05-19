@@ -98,6 +98,13 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
             />
           </div>
           <Command.List className="max-h-80 overflow-y-auto p-1">
+            {!query.trim() && (
+              <div className="flex items-center gap-4 px-2 py-2 text-[10px] text-muted-foreground border-b border-border mb-1">
+                <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↑↓</kbd> Navigate</span>
+                <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↵</kbd> Open</span>
+                <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">Esc</kbd> Close</span>
+              </div>
+            )}
             {query.trim() && searching && (
               <Command.Loading className="py-6 text-center text-sm text-muted-foreground">Searching...</Command.Loading>
             )}

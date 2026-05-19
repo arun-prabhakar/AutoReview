@@ -3,7 +3,7 @@ import { useSelector, useDispatch } from "react-redux";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, PanelLeft, PanelLeftClose, Users, KeyRound, BarChart3 } from "lucide-react";
+import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, PanelLeft, PanelLeftClose, Users, KeyRound, BarChart3, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
@@ -278,9 +278,34 @@ export function Layout() {
              <AboutIcon />
              <NotificationBell />
            </div>
-          </header>
+           </header>
 
-        <main id="main-content" className="flex-1 overflow-auto p-6 md:p-8 lg:p-12">
+        <div className="hidden md:flex items-center border-b border-border px-8 h-12 bg-background/50 backdrop-blur-md z-10 gap-3">
+          <button
+            type="button"
+            onClick={() => setCommandOpen(true)}
+            className="flex items-center gap-3 h-8 w-full max-w-sm rounded-lg border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-accent hover:border-foreground/20 transition-colors cursor-pointer"
+          >
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1 text-left">Search reviews...</span>
+            <kbd className="pointer-events-none hidden sm:inline-flex h-5 select-none items-center gap-0.5 rounded border border-border bg-secondary px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              {typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl"} K
+            </kbd>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1 md:hidden px-4 py-2 border-b border-border bg-background">
+          <button
+            type="button"
+            onClick={() => setCommandOpen(true)}
+            className="flex items-center gap-2 h-8 flex-1 rounded-lg border border-border bg-card px-3 text-xs text-muted-foreground"
+          >
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            <span className="flex-1 text-left">Search...</span>
+          </button>
+        </div>
+
+         <main id="main-content" className="flex-1 overflow-auto p-6 md:p-8 lg:p-12">
           <Outlet />
         </main>
       </div>
