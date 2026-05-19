@@ -116,8 +116,23 @@ promptTemplateRouter.delete("/:id", async (req, res) => {
 promptTemplateRouter.post("/enhance", async (req, res) => {
   const { content, custom_prompt } = req.body;
 
-  if (!content) {
-    res.status(400).json({ error: "content is required" });
+  if (!content || typeof content !== "string") {
+    res.status(400).json({ error: "content is required and must be a string" });
+    return;
+  }
+
+  if (content.length > 8000) {
+    res.status(400).json({ error: "content exceeds maximum length of 8000 characters" });
+    return;
+  }
+
+  if (custom_prompt !== undefined && typeof custom_prompt !== "string") {
+    res.status(400).json({ error: "custom_prompt must be a string" });
+    return;
+  }
+
+  if (custom_prompt && custom_prompt.length > 2000) {
+    res.status(400).json({ error: "custom_prompt exceeds maximum length of 2000 characters" });
     return;
   }
 
