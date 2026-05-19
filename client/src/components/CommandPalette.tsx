@@ -6,7 +6,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { api } from "@/services/api";
 import type { RootState } from "@/store";
 import type { Review } from "@/types";
-import { LayoutDashboard, FileSearch, Settings, Users, BarChart3, Hash, GitPullRequest, Search, Keyboard } from "lucide-react";
+import { LayoutDashboard, FileSearch, Settings, Users, BarChart3, Hash, GitPullRequest, Search } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 type NavItem = { to: string; label: string; icon: LucideIcon; shortcut: string; adminOnly?: boolean };
@@ -126,27 +126,10 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
           </div>
           <Command.List className="max-h-80 overflow-y-auto p-1">
             {!query.trim() && (
-              <div className="px-2 py-2 border-b border-border mb-1">
-                <div className="flex items-center gap-1.5 mb-2 text-[10px] text-muted-foreground">
-                  <Keyboard className="h-3 w-3" />
-                  <span className="font-medium">Shortcuts</span>
-                </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                  {visibleNav.map((item) => (
-                    <div key={item.to} className="flex items-center justify-between text-xs py-0.5">
-                      <span className="flex items-center gap-2 text-muted-foreground">
-                        <item.icon className="h-3 w-3" />
-                        {item.label}
-                      </span>
-                      <kbd className="rounded border border-border bg-secondary px-1.5 font-mono text-[10px] font-medium text-muted-foreground">{item.shortcut}</kbd>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-4 mt-2 pt-1.5 border-t border-border/50 text-[10px] text-muted-foreground">
-                  <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↑↓</kbd> Navigate</span>
-                  <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↵</kbd> Open</span>
-                  <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">Esc</kbd> Close</span>
-                </div>
+              <div className="flex items-center gap-4 px-2 py-2 text-[10px] text-muted-foreground border-b border-border mb-1">
+                <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↑↓</kbd> Navigate</span>
+                <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">↵</kbd> Open</span>
+                <span className="flex items-center gap-1"><kbd className="rounded border border-border bg-secondary px-1 font-mono">Esc</kbd> Close</span>
               </div>
             )}
             {query.trim() && searching && (
