@@ -88,7 +88,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const shortcutMap = new Map<string, string>();
   for (const item of visibleNav) {
-    shortcutMap.set(item.shortcut.toLowerCase(), item.to);
+    shortcutMap.set(item.shortcut.toLowerCase(), item.label);
   }
 
   const handleKeyDown = useCallback(
@@ -100,14 +100,14 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       if (query.trim()) return;
       const ch = e.key.toLowerCase();
       if (ch.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const target = shortcutMap.get(ch);
-        if (target) {
+        const match = shortcutMap.get(ch);
+        if (match) {
           e.preventDefault();
-          run(target);
+          setQuery(match);
         }
       }
     },
-    [query, shortcutMap, run, onOpenChange],
+    [query, shortcutMap, onOpenChange],
   );
 
   return (
