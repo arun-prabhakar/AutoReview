@@ -22,6 +22,8 @@ export interface Review {
   project_context?: string | null;
   commit_author?: string | null;
   diff_text?: string | null;
+  must_fix_count?: number;
+  should_fix_count?: number;
 }
 
 export interface Finding {

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { BarChart3, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, GitCommit, GitPullRequest, Minus, Search, Trash2, User, XCircle } from "lucide-react";
+import { BarChart3, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, GitCommit, GitPullRequest, Minus, Search, Trash2, User, XCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Review } from "@/types";
 
@@ -138,16 +138,19 @@ export default function Dashboard() {
     internal_error: "Internal Error",
   };
 
-  const statusIcon = (status: string, failureCategory?: string | null) => {
-    const label = status === "failed" && failureCategory && FAILURE_LABELS[failureCategory]
-      ? FAILURE_LABELS[failureCategory]
-      : status.charAt(0).toUpperCase() + status.slice(1);
-    switch (status) {
-      case "completed": return <span title={label}><CheckCircle2 className="h-4 w-4 text-success" /></span>;
-      case "pending": return <span title={label}><Clock className="h-4 w-4 text-warning animate-pulse" /></span>;
-      case "failed": return <span title={label}><XCircle className="h-4 w-4 text-destructive" /></span>;
-      default: return <span title={label}><Clock className="h-4 w-4 text-muted-foreground" /></span>;
+  const statusIcon = (review: Review) => {
+    if (review.status === "pending") {
+      return <span title="In progress"><div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 border-t-foreground animate-spin" /></span>;
     }
+    if (review.status === "failed") {
+      const label = review.failure_category && FAILURE_LABELS[review.failure_category] ? FAILURE_LABELS[review.failure_category] : "Failed";
+      return <span title={label}><XCircle className="h-4 w-4 text-destructive" /></span>;
+    }
+    const mustFix = review.must_fix_count ?? 0;
+    const shouldFix = review.should_fix_count ?? 0;
+    if (mustFix > 0) return <span title={`${mustFix} must-fix, ${shouldFix} should-fix`}><AlertTriangle className="h-4 w-4 text-destructive" /></span>;
+    if (shouldFix > 0) return <span title={`${shouldFix} should-fix`}><AlertTriangle className="h-4 w-4 text-warning" /></span>;
+    return <span title="No issues found"><CheckCircle2 className="h-4 w-4 text-success" /></span>;
   };
 
   const typeBadge = (mode: string, commitHash: string) => {
@@ -407,7 +410,7 @@ export default function Dashboard() {
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/reviews/${review.id}`); } }}
                     >
                       <TableCell className="pl-4 py-3 w-10">
-                        {statusIcon(review.status, review.failure_category)}
+                        {statusIcon(review)}
                       </TableCell>
                       <TableCell className="font-medium text-foreground py-3 max-w-32 truncate">
                         {review.repository_name || review.repository_id}

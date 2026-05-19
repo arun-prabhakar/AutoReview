@@ -28,7 +28,9 @@ reviewsRouter.get("/", async (req: Request, res: Response, next: NextFunction) =
     const selectedAuthors = collectQueryValues(commit_author);
 
     let query = `
-      SELECT r.*, repo.name as repository_name
+      SELECT r.*, repo.name as repository_name,
+        COALESCE((SELECT COUNT(*) FROM findings f WHERE f.review_id = r.id AND f.risk_level = 'must_fix'), 0) as must_fix_count,
+        COALESCE((SELECT COUNT(*) FROM findings f WHERE f.review_id = r.id AND f.risk_level = 'should_fix_soon'), 0) as should_fix_count
       FROM reviews r
       JOIN repositories repo ON r.repository_id = repo.id
       WHERE 1=1
@@ -58,8 +60,8 @@ reviewsRouter.get("/", async (req: Request, res: Response, next: NextFunction) =
     }
 
     const countQuery = query.replace(
-      /SELECT r\.\*, repo\.name as repository_name/,
-      "SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN r.status = 'pending' THEN 1 ELSE 0 END), 0) as pending, COALESCE(SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END), 0) as completed, COALESCE(SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END), 0) as failed"
+      /SELECT r\.\*, repo\.name as repository_name[\s\S]*?FROM reviews r/,
+      "SELECT COUNT(*) as total, COALESCE(SUM(CASE WHEN r.status = 'pending' THEN 1 ELSE 0 END), 0) as pending, COALESCE(SUM(CASE WHEN r.status = 'completed' THEN 1 ELSE 0 END), 0) as completed, COALESCE(SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END), 0) as failed FROM reviews r"
     );
     const counts = await get<{ total: string; pending: string; completed: string; failed: string }>(countQuery, params);
     const total = Number(counts?.total ?? 0);
