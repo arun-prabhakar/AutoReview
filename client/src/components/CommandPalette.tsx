@@ -86,28 +86,13 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
     ? visibleNav.filter((item) => item.label.toLowerCase().includes(query.toLowerCase()))
     : visibleNav;
 
-  const shortcutMap = new Map<string, string>();
-  for (const item of visibleNav) {
-    shortcutMap.set(item.shortcut.toLowerCase(), item.label);
-  }
-
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") {
         onOpenChange(false);
-        return;
-      }
-      if (query.trim()) return;
-      const ch = e.key.toLowerCase();
-      if (ch.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const match = shortcutMap.get(ch);
-        if (match) {
-          e.preventDefault();
-          setQuery(match);
-        }
       }
     },
-    [query, shortcutMap, onOpenChange],
+    [onOpenChange],
   );
 
   return (
