@@ -1,5 +1,5 @@
-import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, type RawFindingInput } from "./storage-service.js";
-import { fetchCommitDiff, fetchPrDiff, findPullRequestForCommit, postPrComment, postInlinePrComment, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
+import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, findPreviousPrReview, type RawFindingInput } from "./storage-service.js";
+import { fetchCommitDiff, fetchPrDiff, fetchPrInfo, findPullRequestForCommit, postPrComment, postInlinePrComment, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
@@ -21,6 +21,7 @@ interface ReviewContext {
   dedupKey: DedupKey;
   reviewMode: ReviewMode;
   prId?: string;
+  prHeadCommit?: string;
 }
 
 function classifyError(error: unknown): string {
@@ -140,6 +141,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     commit_author: ctx.commit.author?.raw ?? null,
     diff_text: ctx.diff ?? null,
     failure_category: null,
+    pr_head_commit: ctx.prHeadCommit ?? null,
   });
 
   if (!created) {
@@ -377,16 +379,24 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
 }
 
 export async function runPrReview(repositoryId: string, prId: string, force = false, createdBy?: string) {
-  const dedupKey = `pr:${prId}`;
+  const repo = await getRepoById(repositoryId);
+  if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
+
+  const { password, username } = await resolveCredentials(repo);
+
+  const prInfo = await fetchPrInfo(repo.workspace, repo.slug, prId, password, username);
+
+  const dedupKey = `pr:${prId}:${prInfo.commitHash}`;
 
   const dedupResult = await performDedup(repositoryId, dedupKey, force);
   if (dedupResult.action === "cached") return { review: dedupResult.review, findings: dedupResult.findings, cached: true, reviewId: dedupResult.review.id };
   if (dedupResult.action === "in_progress") return { review: dedupResult.review, findings: [], cached: false, message: "Review already in progress" };
 
-  const repo = await getRepoById(repositoryId);
-  if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
-
-  const { password, username } = await resolveCredentials(repo);
+  let parentReviewId = dedupResult.parentReviewId;
+  if (!parentReviewId) {
+    const previousReview = await findPreviousPrReview(repositoryId, prId);
+    if (previousReview) parentReviewId = previousReview.id;
+  }
 
   const { diff, pr, truncated } = await fetchPrDiff(repo.workspace, repo.slug, prId, password, username);
 
@@ -397,8 +407,8 @@ export async function runPrReview(repositoryId: string, prId: string, force = fa
     author: { raw: pr.author },
   };
 
-  const ctx: ReviewContext = { repo, diff, commit: syntheticCommit, truncated, dedupKey, reviewMode: "pr", prId };
-  const result = await executeReview(ctx, createdBy, dedupResult.parentReviewId);
+  const ctx: ReviewContext = { repo, diff, commit: syntheticCommit, truncated, dedupKey, reviewMode: "pr", prId, prHeadCommit: pr.commitHash };
+  const result = await executeReview(ctx, createdBy, parentReviewId);
 
   await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);
   await notifyReviewComplete(repo.id, result.reviewId, repo.name, result.findings, createdBy);
@@ -437,7 +447,8 @@ export async function rerunReview(reviewId: string, createdBy?: string) {
   if (!review) throw new NotFoundError("Review not found");
 
   if (review.review_mode === "pr") {
-    const prId = review.commit_hash.replace("pr:", "");
+    const parts = review.commit_hash.split(":");
+    const prId = parts[1];
     return runPrReview(review.repository_id, prId, true, createdBy);
   }
   return runManualReview(review.repository_id, review.commit_hash, true, createdBy);

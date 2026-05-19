@@ -1,11 +1,11 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { getAutoReviewRepos, type RepositoryConfig } from "../services/repository-service.js";
-import { findExistingReview } from "../services/storage-service.js";
+import { findExistingReview, deleteReview } from "../services/storage-service.js";
 import { fetchRecentCommits, fetchOpenPullRequests } from "../services/bitbucket-client.js";
 import { getDecryptedPassword } from "../services/credential-service.js";
 import { get } from "../db/queries.js";
-import { runManualReview } from "../services/manual-review-service.js";
+import { runManualReview, runPrReview } from "../services/manual-review-service.js";
 import { logger } from "../middleware/index.js";
 import { getCronSecret } from "../config.js";
 
@@ -104,9 +104,22 @@ async function pollPullRequests(repo: RepositoryConfig, password: string, userna
 
   for (const pr of prs) {
     if (!pr.commitHash) continue;
-    const existing = await findExistingReview(repo.id, pr.commitHash);
-    if (!existing || existing.status === "failed") {
-      await runManualReview(repo.id, pr.commitHash);
+
+    const dedupKey = `pr:${pr.id}:${pr.commitHash}`;
+    const existing = await findExistingReview(repo.id, dedupKey);
+
+    if (existing) {
+      if (existing.status === "failed") {
+        await deleteReview(existing.id);
+      } else {
+        continue;
+      }
+    }
+
+    try {
+      await runPrReview(repo.id, pr.id);
+    } catch (error) {
+      logger.error(`Auto-review failed for PR`, { repoId: repo.id, prId: pr.id, error: String(error) });
     }
   }
 }
