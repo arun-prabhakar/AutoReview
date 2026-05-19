@@ -3,7 +3,30 @@ import bcrypt from "bcryptjs";
 import { v4 as uuid } from "uuid";
 import { logger } from "../middleware/index.js";
 
-export async function ensureSchema(pool: Pool): Promise<void> {
+/**
+ * Migration system:
+ *
+ * 1. `createTables()` runs `CREATE TABLE IF NOT EXISTS` with the CURRENT full schema.
+ *    This gives brand-new databases everything in one pass.
+ *
+ * 2. `schema_migrations` table tracks which numbered migrations have been applied.
+ *
+ * 3. `runPendingMigrations()` runs only migrations not yet recorded.
+ *    For existing databases that were created before a column/table was added.
+ *
+ * To add a new schema change:
+ *    - Add the column/table to the CREATE TABLE block (for new databases)
+ *    - Add a numbered migration in MIGRATIONS array (for existing databases)
+ */
+
+async function createTables(pool: Pool): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      id TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -19,7 +42,6 @@ export async function ensureSchema(pool: Pool): Promise<void> {
   `);
 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
-  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS llm_providers (
@@ -89,6 +111,7 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       strictness TEXT NOT NULL DEFAULT 'balanced',
       review_mode TEXT NOT NULL DEFAULT 'manual',
       error_message TEXT,
+      failure_category TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       completed_at TIMESTAMPTZ,
       created_by TEXT,
@@ -100,6 +123,9 @@ export async function ensureSchema(pool: Pool): Promise<void> {
       estimated_cost REAL,
       project_context TEXT,
       commit_author TEXT,
+      diff_text TEXT,
+      pr_head_commit TEXT,
+      llm_model TEXT,
       FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
     )
   `);
@@ -138,25 +164,108 @@ export async function ensureSchema(pool: Pool): Promise<void> {
     )
   `);
 
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS ai_overview TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS parent_review_id TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS tokens_prompt INTEGER`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS tokens_completion INTEGER`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS tokens_total INTEGER`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS estimated_cost REAL`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS project_context TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS error_message TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS created_by TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS commit_author TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS diff_text TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS failure_category TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS pr_head_commit TEXT`);
-  await pool.query(`ALTER TABLE reviews ADD COLUMN IF NOT EXISTS llm_model TEXT`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT,
+      read BOOLEAN NOT NULL DEFAULT false,
+      entity_type TEXT,
+      entity_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
 
-  await pool.query(`ALTER TABLE findings ADD COLUMN IF NOT EXISTS persistent_issue_id TEXT`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS share_tokens (
+      id TEXT PRIMARY KEY,
+      review_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_by TEXT NOT NULL,
+      FOREIGN KEY(review_id) REFERENCES reviews(id) ON DELETE CASCADE
+    )
+  `);
+}
 
-  const timestampColumns: [string, string][] = [
+async function createIndexes(pool: Pool): Promise<void> {
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_share_tokens_token ON share_tokens(token)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_share_tokens_review ON share_tokens(review_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_status ON reviews(repository_id, status)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_created_at ON reviews(created_at)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_repo_commit ON reviews(repository_id, commit_hash)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_risk_disposition ON findings(risk_level, disposition)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
+}
+
+const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
+  {
+    id: "001",
+    description: "Add name column to users",
+    sql: [`ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT`],
+  },
+  {
+    id: "002",
+    description: "Add review metadata columns",
+    sql: [
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS ai_overview TEXT`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS parent_review_id TEXT`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS tokens_prompt INTEGER`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS tokens_completion INTEGER`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS tokens_total INTEGER`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS estimated_cost REAL`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS project_context TEXT`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS error_message TEXT`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS created_by TEXT`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS commit_author TEXT`,
+    ],
+  },
+  {
+    id: "003",
+    description: "Convert text timestamps to TIMESTAMPTZ",
+    sql: buildTimestampMigrations(),
+  },
+  {
+    id: "004",
+    description: "Add diff storage columns to reviews",
+    sql: [
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS diff_text TEXT`,
+    ],
+  },
+  {
+    id: "005",
+    description: "Add failure_category and pr_head_commit to reviews",
+    sql: [
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS failure_category TEXT`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS pr_head_commit TEXT`,
+    ],
+  },
+  {
+    id: "006",
+    description: "Add persistent_issue_id to findings",
+    sql: [
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS persistent_issue_id TEXT`,
+    ],
+  },
+  {
+    id: "007",
+    description: "Add llm_model to reviews",
+    sql: [
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS llm_model TEXT`,
+    ],
+  },
+];
+
+function buildTimestampMigrations(): string[] {
+  const columns: [string, string][] = [
     ["users", "created_at"],
     ["users", "updated_at"],
     ["llm_providers", "created_at"],
@@ -174,54 +283,36 @@ export async function ensureSchema(pool: Pool): Promise<void> {
     ["share_tokens", "expires_at"],
   ];
 
-  for (const [table, col] of timestampColumns) {
+  return columns.map(([table, col]) => `
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '${table.replace(/'/g, "''")}' AND column_name = '${col.replace(/'/g, "''")}' AND data_type = 'text') THEN
+        EXECUTE 'ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE TIMESTAMPTZ USING "${col}"::TIMESTAMPTZ';
+      END IF;
+    END$$
+  `);
+}
+
+async function runPendingMigrations(pool: Pool): Promise<void> {
+  const { rows } = await pool.query("SELECT id FROM schema_migrations");
+  const applied = new Set(rows.map((r: { id: string }) => r.id));
+
+  for (const migration of MIGRATIONS) {
+    if (applied.has(migration.id)) continue;
+
+    logger.info(`Running migration ${migration.id}: ${migration.description}`);
+    for (const sql of migration.sql) {
+      await pool.query(sql);
+    }
     await pool.query(
-      `DO $$
-      BEGIN
-        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = '${table.replace(/'/g, "''")}' AND column_name = '${col.replace(/'/g, "''")}' AND data_type = 'text') THEN
-          EXECUTE 'ALTER TABLE "${table}" ALTER COLUMN "${col}" TYPE TIMESTAMPTZ USING "${col}"::TIMESTAMPTZ';
-        END IF;
-      END$$`
+      "INSERT INTO schema_migrations (id, applied_at) VALUES ($1, NOW())",
+      [migration.id]
     );
+    logger.info(`Migration ${migration.id} applied`);
   }
+}
 
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_status ON reviews(repository_id, status)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_created_at ON reviews(created_at)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_risk_disposition ON findings(risk_level, disposition)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS notifications (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT,
-      read BOOLEAN NOT NULL DEFAULT false,
-      entity_type TEXT,
-      entity_id TEXT,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, read)`);
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS share_tokens (
-      id TEXT PRIMARY KEY,
-      review_id TEXT NOT NULL,
-      token TEXT NOT NULL UNIQUE,
-      enabled BOOLEAN NOT NULL DEFAULT true,
-      expires_at TIMESTAMPTZ NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      created_by TEXT NOT NULL,
-      FOREIGN KEY(review_id) REFERENCES reviews(id) ON DELETE CASCADE
-    )
-  `);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_share_tokens_token ON share_tokens(token)`);
-  await pool.query(`CREATE INDEX IF NOT EXISTS idx_share_tokens_review ON share_tokens(review_id)`);
-
+async function seedData(pool: Pool): Promise<void> {
   if (process.env.NODE_ENV !== "production") {
     const adminHash = await bcrypt.hash("admin", 12);
     await pool.query(
@@ -275,6 +366,13 @@ If the diff is clean with no findings, return an empty array \`[]\`.`,
       ]
     );
   }
+}
+
+export async function ensureSchema(pool: Pool): Promise<void> {
+  await createTables(pool);
+  await createIndexes(pool);
+  await runPendingMigrations(pool);
+  await seedData(pool);
 
   logger.info("Database schema ensured");
 }
