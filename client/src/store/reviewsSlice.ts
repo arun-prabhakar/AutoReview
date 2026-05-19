@@ -15,6 +15,7 @@ interface FetchReviewsParams {
   status?: string;
   review_mode?: string;
   created_by?: string;
+  commit_author?: string[];
   limit?: number;
   offset?: number;
 }
@@ -27,6 +28,7 @@ export const fetchReviews = createAsyncThunk(
     if (params?.status) query.set("status", params.status);
     if (params?.review_mode) query.set("review_mode", params.review_mode);
     if (params?.created_by) query.set("created_by", params.created_by);
+    params?.commit_author?.forEach((author) => query.append("commit_author", author));
     if (params?.limit !== undefined) query.set("limit", String(params.limit));
     if (params?.offset !== undefined) query.set("offset", String(params.offset));
     return api.get<PaginatedReviewsResponse>(`/api/reviews?${query.toString()}`);

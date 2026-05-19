@@ -1,6 +1,7 @@
 import { get, all, run } from "../db/queries.js";
 import { encrypt, decrypt } from "./encryption-service.js";
 import { logger } from "../middleware/index.js";
+import { NotFoundError, ConflictError } from "../errors.js";
 
 export type LlmProvider = {
   id: string;
@@ -43,7 +44,7 @@ export async function createProvider(name: string, apiBase: string, apiKey: stri
 
 export async function updateProvider(id: string, name?: string, apiBase?: string, apiKey?: string): Promise<void> {
   const existing = await getProviderById(id);
-  if (!existing) throw new Error("Provider not found");
+  if (!existing) throw new NotFoundError("Provider not found");
 
   const newName = name ?? existing.name;
   const newBase = apiBase ?? existing.api_base;
@@ -62,7 +63,7 @@ export async function deleteProvider(id: string): Promise<void> {
     "SELECT id, name FROM repositories WHERE llm_provider_id = $1", [id]
   );
   if (deps.length > 0) {
-    throw new Error(
+    throw new ConflictError(
       `Cannot delete provider: still referenced by ${deps.length} repository(ies). Remove the provider assignment first.`
     );
   }
@@ -72,6 +73,6 @@ export async function deleteProvider(id: string): Promise<void> {
 
 export async function getDecryptedApiKey(providerId: string): Promise<string> {
   const provider = await getProviderById(providerId);
-  if (!provider) throw new Error(`Provider ${providerId} not found`);
+  if (!provider) throw new NotFoundError(`Provider ${providerId} not found`);
   return decrypt(provider.api_key_encrypted);
 }

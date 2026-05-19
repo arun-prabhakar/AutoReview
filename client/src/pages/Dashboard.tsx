@@ -10,11 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-  import { BarChart3, CheckCircle2, ChevronLeft, ChevronRight, Clock, FileSearch, GitCommit, GitPullRequest, Trash2, User, XCircle } from "lucide-react";
+import { BarChart3, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, GitCommit, GitPullRequest, Trash2, User, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Review } from "@/types";
 
@@ -30,23 +29,23 @@ export default function Dashboard() {
   const [filterRepo, setFilterRepo] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterType, setFilterType] = useState("all");
-  const [filterUser, setFilterUser] = useState("");
-  const [debouncedFilterUser, setDebouncedFilterUser] = useState("");
+  const [filterAuthors, setFilterAuthors] = useState<string[]>([]);
+  const [authorOptions, setAuthorOptions] = useState<string[]>([]);
+  const [authorDropdownOpen, setAuthorDropdownOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<Review | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const filterUserTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const authorDropdownRef = useRef<HTMLDivElement | null>(null);
   const pageEffectMounted = useRef(false);
 
   const PAGE_SIZE = 10;
 
-  const activeFilters = (userFilter?: string) => {
-    const params: Record<string, string> = {};
+  const activeFilters = () => {
+    const params: { repository_id?: string; status?: string; review_mode?: string; commit_author?: string[] } = {};
     if (filterRepo !== "all") params.repository_id = filterRepo;
     if (filterStatus !== "all") params.status = filterStatus;
     if (filterType !== "all") params.review_mode = filterType;
-    const userVal = userFilter ?? debouncedFilterUser;
-    if (userVal.trim()) params.created_by = userVal.trim();
+    if (filterAuthors.length > 0) params.commit_author = filterAuthors;
     return params;
   };
 
@@ -56,23 +55,44 @@ export default function Dashboard() {
   }, [dispatch]); // eslint-disable-line
 
   useEffect(() => {
-    if (filterUserTimeoutRef.current) clearTimeout(filterUserTimeoutRef.current);
-    filterUserTimeoutRef.current = setTimeout(() => setDebouncedFilterUser(filterUser), 300);
-    return () => { if (filterUserTimeoutRef.current) clearTimeout(filterUserTimeoutRef.current); };
-  }, [filterUser]);
-
-  useEffect(() => {
     setPage(0);
-    dispatch(fetchReviews({ ...activeFilters(debouncedFilterUser), limit: PAGE_SIZE, offset: 0 }));
-  }, [filterRepo, filterStatus, filterType, debouncedFilterUser]); // eslint-disable-line
+    dispatch(fetchReviews({ ...activeFilters(), limit: PAGE_SIZE, offset: 0 }));
+  }, [filterRepo, filterStatus, filterType, filterAuthors]); // eslint-disable-line
 
   useEffect(() => {
     if (!pageEffectMounted.current) {
       pageEffectMounted.current = true;
       return;
     }
-    dispatch(fetchReviews({ ...activeFilters(debouncedFilterUser), limit: PAGE_SIZE, offset: page * PAGE_SIZE }));
+    dispatch(fetchReviews({ ...activeFilters(), limit: PAGE_SIZE, offset: page * PAGE_SIZE }));
   }, [page]); // eslint-disable-line
+
+  useEffect(() => {
+    const fetchAuthors = async () => {
+      const query = new URLSearchParams();
+      if (filterRepo !== "all") query.set("repository_id", filterRepo);
+      if (filterStatus !== "all") query.set("status", filterStatus);
+      if (filterType !== "all") query.set("review_mode", filterType);
+      const authors = await api.get<string[]>(`/api/reviews/authors?${query.toString()}`);
+      setAuthorOptions(authors);
+      setFilterAuthors((selected) => selected.filter((author) => authors.includes(author)));
+    };
+
+    fetchAuthors().catch((err) => {
+      toast({ title: "Failed to load authors", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    });
+  }, [filterRepo, filterStatus, filterType, toast]);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (authorDropdownRef.current && !authorDropdownRef.current.contains(event.target as Node)) {
+        setAuthorDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
+  }, []);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -95,6 +115,18 @@ export default function Dashboard() {
       setDeleting(false);
     }
   };
+
+  const toggleAuthor = (author: string) => {
+    setFilterAuthors((selected) =>
+      selected.includes(author) ? selected.filter((item) => item !== author) : [...selected, author]
+    );
+  };
+
+  const authorFilterLabel = filterAuthors.length === 0
+    ? "All Authors"
+    : filterAuthors.length === 1
+      ? filterAuthors[0]
+      : `${filterAuthors.length} Authors`;
 
   const FAILURE_LABELS: Record<string, string> = {
     llm_context_exceeded: "Context Exceeded",
@@ -217,17 +249,60 @@ export default function Dashboard() {
             </SelectContent>
           </Select>
 
-          <div className="relative">
-            <User className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              value={filterUser}
-              onChange={(e) => setFilterUser(e.target.value)}
-              placeholder="Filter by user"
-              className="pl-8 w-40 bg-card border-border h-9 text-sm"
-            />
+          <div className="relative" ref={authorDropdownRef}>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-48 justify-between bg-card border-border px-3 text-sm font-normal"
+              onClick={() => setAuthorDropdownOpen((open) => !open)}
+              aria-haspopup="listbox"
+              aria-expanded={authorDropdownOpen}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <User className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                <span className="truncate">{authorFilterLabel}</span>
+              </span>
+              <ChevronDown className="h-4 w-4 flex-shrink-0 opacity-50" />
+            </Button>
+            {authorDropdownOpen && (
+              <div
+                className="absolute left-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+                role="listbox"
+                aria-label="Filter by author"
+              >
+                {authorOptions.length === 0 ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">No authors found</div>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto">
+                    {authorOptions.map((author) => {
+                      const selected = filterAuthors.includes(author);
+                      return (
+                        <button
+                          key={author}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus:bg-accent"
+                          onClick={() => toggleAuthor(author)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            readOnly
+                            tabIndex={-1}
+                            className="h-4 w-4 flex-shrink-0 accent-primary"
+                          />
+                          <span className="truncate">{author}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          {(filterRepo !== "all" || filterStatus !== "all" || filterType !== "all" || filterUser.trim()) && (
-            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setFilterRepo("all"); setFilterStatus("all"); setFilterType("all"); setFilterUser(""); }}>
+          {(filterRepo !== "all" || filterStatus !== "all" || filterType !== "all" || filterAuthors.length > 0) && (
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setFilterRepo("all"); setFilterStatus("all"); setFilterType("all"); setFilterAuthors([]); }}>
               Clear filters
             </Button>
           )}

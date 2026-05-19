@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { all, get } from "../db/queries.js";
 import { runManualReview, runPrReview, rerunReview } from "../services/manual-review-service.js";
 import { getRepoById } from "../services/repository-service.js";
@@ -7,14 +7,25 @@ import { fetchOpenPullRequests } from "../services/bitbucket-client.js";
 import { requireRole } from "../middleware/jwt-auth.js";
 import { deleteReview, getReviewChain } from "../services/storage-service.js";
 import { logger } from "../middleware/index.js";
+import { NotFoundError, ValidationError } from "../errors.js";
 
 export const reviewsRouter = Router();
 
-reviewsRouter.get("/", async (req, res) => {
+function collectQueryValues(value: unknown): string[] {
+  if (!value) return [];
+  const values = Array.isArray(value) ? value : [value];
+  return values
+    .flatMap((v) => String(v).split(","))
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+reviewsRouter.get("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { repository_id, status, review_mode, created_by, limit = "20", offset = "0" } = req.query;
+    const { repository_id, status, review_mode, created_by, commit_author, limit = "20", offset = "0" } = req.query;
     const clampedLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
     const clampedOffset = Math.max(Number(offset) || 0, 0);
+    const selectedAuthors = collectQueryValues(commit_author);
 
     let query = `
       SELECT r.*, repo.name as repository_name
@@ -41,6 +52,10 @@ reviewsRouter.get("/", async (req, res) => {
       query += ` AND r.created_by = $${paramIdx++}`;
       params.push(String(created_by));
     }
+    if (selectedAuthors.length > 0) {
+      query += ` AND r.commit_author = ANY($${paramIdx++})`;
+      params.push(selectedAuthors);
+    }
 
     const countQuery = query.replace(
       /SELECT r\.\*, repo\.name as repository_name/,
@@ -56,12 +71,44 @@ reviewsRouter.get("/", async (req, res) => {
     const reviews = await all(query, params);
     res.json({ reviews, total, statusCounts, limit: Number(limit), offset: Number(offset) });
   } catch (err) {
-    logger.error("Failed to list reviews", { error: err instanceof Error ? err.message : String(err) });
-    res.status(500).json({ error: "Failed to list reviews" });
+    next(err);
   }
 });
 
-reviewsRouter.get("/:id", async (req, res) => {
+reviewsRouter.get("/authors", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { repository_id, status, review_mode } = req.query;
+    let query = `
+      SELECT DISTINCT r.commit_author
+      FROM reviews r
+      JOIN repositories repo ON r.repository_id = repo.id
+      WHERE r.commit_author IS NOT NULL AND r.commit_author <> ''
+    `;
+    const params: unknown[] = [];
+    let paramIdx = 1;
+
+    if (repository_id) {
+      query += ` AND r.repository_id = $${paramIdx++}`;
+      params.push(String(repository_id));
+    }
+    if (status) {
+      query += ` AND r.status = $${paramIdx++}`;
+      params.push(String(status));
+    }
+    if (review_mode) {
+      query += ` AND r.review_mode = $${paramIdx++}`;
+      params.push(String(review_mode));
+    }
+
+    query += " ORDER BY r.commit_author ASC LIMIT 200";
+    const authors = await all<{ commit_author: string }>(query, params);
+    res.json(authors.map((row) => row.commit_author));
+  } catch (err) {
+    next(err);
+  }
+});
+
+reviewsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const review = await get<{
       id: string; repository_id: string; commit_hash: string; branch: string | null;
@@ -75,10 +122,7 @@ reviewsRouter.get("/:id", async (req, res) => {
       [req.params.id]
     );
 
-    if (!review) {
-      res.status(404).json({ error: "Review not found" });
-      return;
-    }
+    if (!review) throw new NotFoundError("Review not found");
 
     const findings = await all(
       "SELECT * FROM findings WHERE review_id = $1 ORDER BY CASE risk_level WHEN 'must_fix' THEN 0 WHEN 'should_fix_soon' THEN 1 ELSE 2 END",
@@ -87,45 +131,39 @@ reviewsRouter.get("/:id", async (req, res) => {
 
     res.json({ ...review, findings });
   } catch (err) {
-    logger.error("Failed to fetch review", { error: err instanceof Error ? err.message : String(err) });
-    res.status(500).json({ error: "Failed to fetch review" });
+    next(err);
   }
 });
 
-reviewsRouter.get("/open-prs/:repositoryId", async (req, res) => {
+reviewsRouter.get("/open-prs/:repositoryId", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const repo = await getRepoById(req.params.repositoryId);
-    if (!repo) { res.status(404).json({ error: "Repository not found" }); return; }
+    const repo = await getRepoById(String(req.params.repositoryId));
+    if (!repo) throw new NotFoundError("Repository not found");
 
     const credential = await get<{ username: string }>("SELECT username FROM credentials WHERE id = $1", [repo.credential_id]);
-    if (!credential) { res.status(400).json({ error: "Credential not found" }); return; }
+    if (!credential) throw new ValidationError("Credential not found for this repository");
 
     const password = await getDecryptedPassword(repo.credential_id);
     const prs = await fetchOpenPullRequests(repo.workspace, repo.slug, password, credential.username);
     res.json(prs);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    res.status(500).json({ error: message });
+  } catch (err) {
+    next(err);
   }
 });
 
-reviewsRouter.delete("/:id", requireRole("admin"), async (req, res) => {
+reviewsRouter.delete("/:id", requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const reviewId = String(req.params.id);
     const review = await get<{ id: string }>("SELECT id FROM reviews WHERE id = $1", [reviewId]);
-    if (!review) {
-      res.status(404).json({ error: "Review not found" });
-      return;
-    }
+    if (!review) throw new NotFoundError("Review not found");
     await deleteReview(reviewId);
     res.status(204).send();
   } catch (err) {
-    logger.error("Failed to delete review", { error: err instanceof Error ? err.message : String(err) });
-    res.status(500).json({ error: "Failed to delete review" });
+    next(err);
   }
 });
 
-reviewsRouter.post("/manual", async (req, res) => {
+reviewsRouter.post("/manual", async (req: Request, res: Response, next: NextFunction) => {
   const { repository_id, commit_hash, force = false } = req.body;
 
   if (!repository_id || !commit_hash) {
@@ -136,14 +174,12 @@ reviewsRouter.post("/manual", async (req, res) => {
   try {
     const result = await runManualReview(repository_id, commit_hash, Boolean(force), req.user?.username);
     res.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    const status = message.includes("not found") ? 404 : 500;
-    res.status(status).json({ error: message });
+  } catch (err) {
+    next(err);
   }
 });
 
-reviewsRouter.post("/pr", async (req, res) => {
+reviewsRouter.post("/pr", async (req: Request, res: Response, next: NextFunction) => {
   const { repository_id, pr_id, force = false } = req.body;
 
   if (!repository_id || !pr_id) {
@@ -154,30 +190,26 @@ reviewsRouter.post("/pr", async (req, res) => {
   try {
     const result = await runPrReview(repository_id, String(pr_id), Boolean(force), req.user?.username);
     res.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    const status = message.includes("not found") ? 404 : 500;
-    res.status(status).json({ error: message });
+  } catch (err) {
+    next(err);
   }
 });
 
-reviewsRouter.post("/:id/rereview", async (req, res) => {
+reviewsRouter.post("/:id/rereview", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const result = await rerunReview(req.params.id, req.user?.username);
+    const result = await rerunReview(String(req.params.id), req.user?.username);
     res.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    const status = message.includes("not found") ? 404 : 500;
-    res.status(status).json({ error: message });
+  } catch (err) {
+    next(err);
   }
 });
 
-reviewsRouter.get("/:id/chain", async (req, res) => {
+reviewsRouter.get("/:id/chain", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const chain = await getReviewChain(req.params.id);
+    const chain = await getReviewChain(String(req.params.id));
     res.json(chain);
   } catch (err) {
     logger.error("Failed to fetch review chain", { error: err instanceof Error ? err.message : String(err) });
-    res.status(500).json({ error: "Failed to fetch review chain" });
+    next(err);
   }
 });

@@ -1,6 +1,7 @@
 import { get, all, run } from "../db/queries.js";
 import { encrypt, decrypt } from "./encryption-service.js";
 import { logger } from "../middleware/index.js";
+import { NotFoundError, ConflictError } from "../errors.js";
 
 export async function getAllCredentials() {
   return all("SELECT id, username, workspace, created_at, updated_at FROM credentials");
@@ -29,7 +30,7 @@ export async function deleteCredential(id: string) {
     "SELECT id, name FROM repositories WHERE credential_id = $1", [id]
   );
   if (deps.length > 0) {
-    throw new Error(
+    throw new ConflictError(
       `Cannot delete credential: still referenced by ${deps.length} repository(ies). Update repositories first.`
     );
   }
@@ -42,6 +43,6 @@ export async function getDecryptedPassword(credentialId: string): Promise<string
     "SELECT app_password_encrypted FROM credentials WHERE id = $1",
     [credentialId]
   );
-  if (!row) throw new Error(`Credential ${credentialId} not found`);
+  if (!row) throw new NotFoundError(`Credential ${credentialId} not found`);
   return decrypt(row.app_password_encrypted);
 }

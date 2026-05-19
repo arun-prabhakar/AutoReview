@@ -91,7 +91,9 @@ function mockQueryImpl(sql: string, params: unknown[]) {
         } else if (sqlLower.includes("must_change_password = false")) {
           user.must_change_password = false;
         }
-        user.token_version += 1;
+        if (sqlLower.includes("token_version")) {
+          user.token_version += 1;
+        }
       }
     } else if (sqlLower.includes("role")) {
       const uid = params[1] as string;

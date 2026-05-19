@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import type { Request, Response, NextFunction } from "express";
+import { AppError } from "../errors.js";
 
 const LOG_DIR = process.env.LOG_DIR || path.join(process.cwd(), "logs");
 const LOG_FILE = path.join(LOG_DIR, "autoreview.log");
@@ -49,9 +50,11 @@ export function requestLogger(req: Request, _res: Response, next: NextFunction):
 }
 
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
+  if (err instanceof AppError) {
+    res.status(err.statusCode).json({ error: err.message, code: err.code });
+    return;
+  }
   logger.error(err.message, { stack: err.stack });
-  const message = process.env.NODE_ENV === 'production'
-    ? 'Internal server error'
-    : err.message;
+  const message = process.env.NODE_ENV === "production" ? "Internal server error" : err.message;
   res.status(500).json({ error: message });
 }
