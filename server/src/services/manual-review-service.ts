@@ -22,6 +22,7 @@ interface ReviewContext {
   reviewMode: ReviewMode;
   prId?: string;
   prHeadCommit?: string;
+  prBranch?: string;
   llmModel?: string;
 }
 
@@ -126,7 +127,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     id: reviewId,
     repository_id: ctx.repo.id,
     commit_hash: ctx.dedupKey,
-    branch: ctx.repo.branch,
+    branch: ctx.prBranch || ctx.repo.branch,
     status: "pending",
     strictness: ctx.repo.strictness,
     review_mode: ctx.reviewMode,
@@ -407,7 +408,7 @@ export async function runPrReview(repositoryId: string, prId: string, force = fa
     author: { raw: pr.author },
   };
 
-  const ctx: ReviewContext = { repo, diff, commit: syntheticCommit, truncated, dedupKey, reviewMode: "pr", prId, prHeadCommit: pr.commitHash, llmModel: repo.llm_model };
+  const ctx: ReviewContext = { repo, diff, commit: syntheticCommit, truncated, dedupKey, reviewMode: "pr", prId, prHeadCommit: pr.commitHash, prBranch: pr.sourceBranch, llmModel: repo.llm_model };
   const result = await executeReview(ctx, createdBy, parentReviewId);
 
   await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);
