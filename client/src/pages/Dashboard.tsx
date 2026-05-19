@@ -153,6 +153,15 @@ export default function Dashboard() {
     return <span title="No issues found"><CheckCircle2 className="h-4 w-4 text-success" /></span>;
   };
 
+  const severityBorder = (review: Review) => {
+    if (review.status === "pending" || review.status === "failed") return "";
+    const mustFix = review.must_fix_count ?? 0;
+    const shouldFix = review.should_fix_count ?? 0;
+    if (mustFix > 0) return "border-l-4 border-l-destructive";
+    if (shouldFix > 0) return "border-l-4 border-l-warning";
+    return "border-l-4 border-l-success";
+  };
+
   const typeBadge = (mode: string, commitHash: string) => {
     const isPr = mode === "pr" || commitHash?.startsWith("pr:");
     return isPr ? (
@@ -411,7 +420,7 @@ export default function Dashboard() {
                   {reviews.map((review) => (
                     <TableRow
                       key={review.id}
-                      className="cursor-pointer border-border hover:bg-accent transition-colors group focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                      className={cn("cursor-pointer border-border hover:bg-accent transition-colors group focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset", severityBorder(review))}
                       role="button"
                       tabIndex={0}
                       onClick={() => navigate(`/reviews/${review.id}`)}

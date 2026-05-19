@@ -298,12 +298,12 @@ AutoReview`;
           {diffVisible && (
             <CardContent id="diff-content" className="pt-0 pb-4 border-t border-border">
               <div className="overflow-x-auto mt-4 rounded-md border border-border bg-secondary/50">
-                <pre className="text-xs font-mono leading-relaxed p-4 whitespace-pre">
+                <div className="text-xs font-mono leading-relaxed whitespace-pre">
                   {review.diff_text.split("\n").map((line, i) => (
                     <div
                       key={i}
                       className={cn(
-                        "px-3 -mx-4 min-w-[calc(100%+2rem)]",
+                        "flex",
                         line.startsWith("+") && !line.startsWith("++")
                           ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                           : line.startsWith("-") && !line.startsWith("--")
@@ -313,10 +313,11 @@ AutoReview`;
                               : ""
                       )}
                     >
-                      {line}
+                      <span className="inline-block w-10 shrink-0 select-none text-right pr-3 text-muted-foreground/40 border-r border-border/50 mr-3">{i + 1}</span>
+                      <span className="px-1 flex-1">{line}</span>
                     </div>
                   ))}
-                </pre>
+                </div>
               </div>
             </CardContent>
           )}
