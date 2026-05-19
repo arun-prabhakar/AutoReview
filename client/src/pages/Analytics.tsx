@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/services/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BarChart3, TrendingUp, FileWarning, DollarSign } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 type CategoryOverTime = { date: string; category: string; count: string };
 type TopFile = { file_path: string; count: string; must_fix_count: string };
@@ -18,6 +18,8 @@ export default function Analytics() {
   const [density, setDensity] = useState<RepoDensity[]>([]);
   const [cost, setCost] = useState<CostSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [chartWidth, setChartWidth] = useState(0);
+  const chartRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function load() {
@@ -37,6 +39,18 @@ export default function Analytics() {
       finally { setLoading(false); }
     }
     load();
+  }, []);
+
+  useEffect(() => {
+    const el = chartRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setChartWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
   const overTimeAgg = overTime.reduce<Record<string, Record<string, number>>>((acc, cur) => {
@@ -110,17 +124,19 @@ export default function Analytics() {
             {overTimeChart.length === 0 ? (
               <div className="h-48 flex items-center justify-center text-xs text-muted-foreground">No data yet</div>
             ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={overTimeChart}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                  <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                  <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                  {categories.map((cat, i) => (
-                    <Bar key={cat} dataKey={cat} stackId="a" fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+              <div ref={chartRef} style={{ width: "100%", height: 220 }}>
+                {chartWidth > 0 && (
+                  <BarChart width={chartWidth} height={220} data={overTimeChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                    <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+                    {categories.map((cat, i) => (
+                      <Bar key={cat} dataKey={cat} stackId="a" fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </BarChart>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
