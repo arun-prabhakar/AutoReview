@@ -178,19 +178,22 @@ export async function generateDiffOverview(
   repo: RepositoryConfig,
   provider: ProviderConfig
 ): Promise<string> {
-  const truncated = diff.length > 12000;
-  const snippet = truncated ? diff.slice(0, 12000) : diff;
+  const truncated = diff.length > 8000;
+  const snippet = truncated ? diff.slice(0, 8000) : diff;
 
-  const prompt = `You are a senior engineer writing a brief summary for a code review email.
-Given the following git diff, write a concise 3-6 sentence overview of what this changeset does.
-Focus on: what was added/changed/removed, the purpose/intent, and which areas of the codebase are affected.
-Do NOT list findings or issues — only describe what the code changes accomplish.
-Reply with plain text only, no markdown, no bullet points, no headers.
+  const prompt = `You are writing a one-line summary for a code review.
+
+Given the git diff below, write ONE concise sentence (max 15 words) describing what this change accomplishes.
+
+Rules:
+- Start with an active verb (Add, Fix, Remove, Refactor, Update, Implement, etc.)
+- Do NOT start with "This changeset", "This PR", "This commit", or similar phrases
+- Focus on WHAT was done, not HOW
+- Plain text only, no markdown
 
 Commit: ${commit.hash.substring(0, 12)}
 Message: ${commit.message}
 Repository: ${repo.name}
-Branch: ${repo.branch}
 
 Diff:
 ${snippet}`;
@@ -200,11 +203,11 @@ ${snippet}`;
   const response = await client.chat.completions.create({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 300,
-    temperature: 0.3,
+    max_tokens: 60,
+    temperature: 0.2,
   });
 
-  return response.choices?.[0]?.message?.content?.trim() || "Unable to generate overview.";
+  return response.choices?.[0]?.message?.content?.trim() || "";
 }
 
 export function extractFilePaths(diff: string): string {

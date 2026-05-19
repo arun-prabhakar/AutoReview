@@ -189,9 +189,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       aiOverview = await generateDiffOverview(ctx.diff, ctx.commit, ctx.repo, provider);
     } catch (err) {
       logger.warn(`Failed to generate AI overview for ${ctx.dedupKey}`, { error: String(err) });
-      aiOverview = ctx.reviewMode === "pr" && ctx.prId
-        ? `PR #${ctx.prId}`
-        : `Changes in commit ${ctx.dedupKey.substring(0, 12)}: ${ctx.commit.message}`;
+      aiOverview = ctx.commit.message?.split("\n")[0]?.substring(0, 120) || "";
     }
 
     await insertFindings(reviewId, findings);
