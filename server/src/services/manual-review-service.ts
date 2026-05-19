@@ -22,6 +22,7 @@ interface ReviewContext {
   reviewMode: ReviewMode;
   prId?: string;
   prHeadCommit?: string;
+  llmModel?: string;
 }
 
 function classifyError(error: unknown): string {
@@ -142,6 +143,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     diff_text: ctx.diff ?? null,
     failure_category: null,
     pr_head_commit: ctx.prHeadCommit ?? null,
+    llm_model: ctx.llmModel ?? null,
   });
 
   if (!created) {
@@ -369,7 +371,7 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
   if (dedupResult.action === "cached") return { review: dedupResult.review, findings: dedupResult.findings, cached: true, reviewId: dedupResult.review.id };
   if (dedupResult.action === "in_progress") return { review: dedupResult.review, findings: [], cached: false, message: "Review already in progress" };
 
-  const ctx: ReviewContext = { repo, diff, commit, truncated, dedupKey, reviewMode: "manual" };
+  const ctx: ReviewContext = { repo, diff, commit, truncated, dedupKey, reviewMode: "manual", llmModel: repo.llm_model };
   const result = await executeReview(ctx, createdBy, dedupResult.parentReviewId);
 
   await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);
@@ -407,7 +409,7 @@ export async function runPrReview(repositoryId: string, prId: string, force = fa
     author: { raw: pr.author },
   };
 
-  const ctx: ReviewContext = { repo, diff, commit: syntheticCommit, truncated, dedupKey, reviewMode: "pr", prId, prHeadCommit: pr.commitHash };
+  const ctx: ReviewContext = { repo, diff, commit: syntheticCommit, truncated, dedupKey, reviewMode: "pr", prId, prHeadCommit: pr.commitHash, llmModel: repo.llm_model };
   const result = await executeReview(ctx, createdBy, parentReviewId);
 
   await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);

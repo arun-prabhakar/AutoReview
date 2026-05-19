@@ -24,6 +24,7 @@ export type ReviewRow = {
   commit_author: string | null;
   diff_text: string | null;
   pr_head_commit: string | null;
+  llm_model: string | null;
 };
 
 export type FindingRow = {
@@ -54,11 +55,11 @@ export async function findFindingsByReviewId(reviewId: string): Promise<FindingR
 
 export async function createReview(review: Omit<ReviewRow, "created_at" | "ai_overview">): Promise<{ id: string; created: boolean }> {
   const result = await getPool().query(
-    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author, diff_text, pr_head_commit)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author, diff_text, pr_head_commit, llm_model)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
      ON CONFLICT DO NOTHING
      RETURNING id`,
-    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null, review.diff_text ?? null, review.pr_head_commit ?? null]
+    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null, review.diff_text ?? null, review.pr_head_commit ?? null, review.llm_model ?? null]
   );
   const created = result.rows.length > 0;
   return { id: created ? result.rows[0].id : review.id, created };
@@ -157,6 +158,14 @@ export async function markNotificationRead(notificationId: string, userId: strin
   await run("UPDATE notifications SET read = true WHERE id = $1 AND user_id = $2", [notificationId, userId]);
 }
 
+export async function markReviewNotificationsRead(reviewId: string, userId: string): Promise<string[]> {
+  const result = await getPool().query(
+    "UPDATE notifications SET read = true WHERE user_id = $1 AND entity_type = 'review' AND entity_id = $2 AND read = false RETURNING id",
+    [userId, reviewId]
+  );
+  return result.rows.map((row: { id: string }) => row.id);
+}
+
 export async function markAllNotificationsRead(userId: string): Promise<void> {
   await run("UPDATE notifications SET read = true WHERE user_id = $1 AND read = false", [userId]);
 }
@@ -200,16 +209,45 @@ export async function getFindingDensityPerRepo(): Promise<{ repository_id: strin
   );
 }
 
-export async function getCostSummary(days = 30): Promise<{ total_reviews: string; total_tokens: string; total_cost: string; by_model: string }[]> {
-  return all(
+export async function getCostSummary(days = 30): Promise<{ total_reviews: string; total_tokens: string; total_cost: string; avg_cost: string }> {
+  const result = await get<{ total_reviews: string; total_tokens: string; total_cost: string; avg_cost: string }>(
     `SELECT
        COUNT(*) as total_reviews,
        COALESCE(SUM(tokens_total), 0) as total_tokens,
        COALESCE(SUM(estimated_cost), 0) as total_cost,
-       COALESCE(SUM(estimated_cost), 0) as by_model
+       COALESCE(AVG(estimated_cost), 0) as avg_cost
      FROM reviews
      WHERE status = 'completed' AND created_at >= NOW() - ($1 || ' days')::interval`,
     [days]
+  );
+  return result ?? { total_reviews: "0", total_tokens: "0", total_cost: "0", avg_cost: "0" };
+}
+
+export async function getCostByModel(days = 30): Promise<{ llm_model: string; review_count: string; total_tokens: string; total_cost: string }[]> {
+  return all(
+    `SELECT 
+       COALESCE(r.llm_model, 'unknown') as llm_model,
+       COUNT(*) as review_count,
+       COALESCE(SUM(tokens_total), 0) as total_tokens,
+       COALESCE(SUM(estimated_cost), 0) as total_cost
+     FROM reviews r
+     WHERE r.status = 'completed' AND r.created_at >= NOW() - ($1 || ' days')::interval
+     GROUP BY r.llm_model
+     ORDER BY total_cost DESC`,
+    [days]
+  );
+}
+
+export async function getCostPerReview(days = 30, limit = 50, offset = 0): Promise<{ id: string; repository_name: string; llm_model: string; tokens_total: number; estimated_cost: number; created_at: string }[]> {
+  return all(
+    `SELECT r.id, repo.name as repository_name, COALESCE(r.llm_model, 'unknown') as llm_model,
+       r.tokens_total, r.estimated_cost, r.created_at
+     FROM reviews r
+     JOIN repositories repo ON r.repository_id = repo.id
+     WHERE r.status = 'completed' AND r.created_at >= NOW() - ($1 || ' days')::interval
+     ORDER BY r.created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [days, limit, offset]
   );
 }
 
