@@ -4,6 +4,7 @@ import { api } from "../services/api";
 export interface AuthUser {
   id: string;
   username: string;
+  name: string | null;
   role: "admin" | "user";
   must_change_password?: boolean;
 }

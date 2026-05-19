@@ -187,11 +187,11 @@ export function Layout() {
         <div className="mt-auto border-t border-border p-4">
           <div className="flex items-center gap-3 px-1 mb-3">
             <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold text-foreground flex-shrink-0 hover:ring-2 hover:ring-foreground/10 transition-all duration-150 cursor-default">
-              {user?.username?.substring(0, 2).toUpperCase()}
+              {(user?.name || user?.username)?.substring(0, 2).toUpperCase()}
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate text-foreground">{user?.username}</p>
+                <p className="text-sm font-semibold truncate text-foreground">{user?.name || user?.username}</p>
                 <p className="text-xs uppercase tracking-widest text-muted-foreground">{user?.role}</p>
               </div>
             )}
@@ -231,10 +231,10 @@ export function Layout() {
                 <div className="absolute bottom-0 left-0 right-0 border-t border-border p-6">
                    <div className="flex items-center gap-3 mb-4">
                     <div className="h-10 w-10 rounded-full bg-secondary flex items-center justify-center text-xs font-bold text-foreground">
-                      {user?.username?.substring(0, 2).toUpperCase()}
+                      {(user?.name || user?.username)?.substring(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-ink">{user?.username}</p>
+                      <p className="text-sm font-semibold text-ink">{user?.name || user?.username}</p>
                       <p className="text-xs uppercase tracking-widest text-muted-foreground">{user?.role}</p>
                     </div>
                   </div>

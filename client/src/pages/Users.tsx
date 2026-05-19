@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { api } from "@/services/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,11 +10,15 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Trash2, Pencil } from "lucide-react";
+import { validateSession } from "@/store/authSlice";
+import type { RootState, AppDispatch } from "@/store";
 
 type User = { id: string; username: string; name: string | null; role: string; must_change_password: number; created_at: string };
 
 export default function Users() {
   const { toast } = useToast();
+  const dispatch = useDispatch<AppDispatch>();
+  const currentUser = useSelector((state: RootState) => state.auth.user);
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
@@ -105,6 +110,9 @@ export default function Users() {
       toast({ title: "User updated", variant: "success" });
       setEditTarget(null);
       loadUsers();
+      if (currentUser?.id === editTarget.id) {
+        dispatch(validateSession());
+      }
     } catch (err) {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to update user", variant: "destructive" });
     }
