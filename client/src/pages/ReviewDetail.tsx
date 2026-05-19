@@ -397,7 +397,7 @@ AutoReview`;
                   >
                     <div className="flex items-center gap-3">
                       <Badge variant={item.status === "completed" ? "default" : "destructive"} className="text-xs capitalize">{item.status}</Badge>
-                      <span className="text-muted-foreground">{new Date(item.created_at).toLocaleDateString()} {new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+                      <span className="text-muted-foreground">{new Date(item.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })} {new Date(item.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" })}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                       {Number(item.must_fix_count) > 0 && <span className="text-destructive font-medium">{item.must_fix_count} must-fix</span>}
@@ -429,7 +429,7 @@ AutoReview`;
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {isPrReview ? `Pull Request #${prId}` : "Commit Review"}
                     {review.commit_author && ` · by ${review.commit_author}`}
-                    {review.completed_at && ` · ${new Date(String(review.completed_at)).toLocaleDateString()}`}
+                    {review.completed_at && ` · ${new Date(String(review.completed_at)).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}`}
                   </p>
                 </div>
               </div>

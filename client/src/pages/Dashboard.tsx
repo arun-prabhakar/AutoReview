@@ -153,15 +153,6 @@ export default function Dashboard() {
     return <span title="No issues found"><CheckCircle2 className="h-4 w-4 text-success" /></span>;
   };
 
-  const severityBorder = (review: Review) => {
-    if (review.status === "pending" || review.status === "failed") return "";
-    const mustFix = review.must_fix_count ?? 0;
-    const shouldFix = review.should_fix_count ?? 0;
-    if (mustFix > 0) return "border-l-4 border-l-destructive";
-    if (shouldFix > 0) return "border-l-4 border-l-warning";
-    return "border-l-4 border-l-success";
-  };
-
   const typeBadge = (mode: string, commitHash: string) => {
     const isPr = mode === "pr" || commitHash?.startsWith("pr:");
     return isPr ? (
@@ -187,8 +178,8 @@ export default function Dashboard() {
     const d = new Date(dt);
     return (
       <span>
-        <span className="text-muted-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
-        <span className="text-muted-foreground ml-1.5">{d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+        <span className="text-muted-foreground">{d.toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span>
+        <span className="text-muted-foreground ml-1.5">{d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" })}</span>
       </span>
     );
   };
@@ -406,61 +397,55 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-border">
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground pl-4 w-10" />
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-32 max-w-32">Repository</TableHead>
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-20">Type</TableHead>
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground pl-4 w-8" />
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground">Repository</TableHead>
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-16">Type</TableHead>
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground">Description</TableHead>
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-28">Author</TableHead>
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-28">Run By</TableHead>
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-40">Date</TableHead>
-                    {isAdmin && <TableHead className="w-10" />}
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-7" />
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-36">Date</TableHead>
+                    {isAdmin && <TableHead className="w-8" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {reviews.map((review) => (
                     <TableRow
                       key={review.id}
-                      className={cn("cursor-pointer border-border hover:bg-accent transition-colors group focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset", severityBorder(review))}
+                      className="cursor-pointer border-border hover:bg-accent transition-colors group focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                       role="button"
                       tabIndex={0}
                       onClick={() => navigate(`/reviews/${review.id}`)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/reviews/${review.id}`); } }}
                     >
-                      <TableCell className="pl-4 py-3 w-10">
+                      <TableCell className="pl-4 py-2 w-8">
                         {statusIcon(review)}
                       </TableCell>
-                      <TableCell className="font-medium text-foreground py-3 max-w-32 truncate">
+                      <TableCell className="font-medium text-foreground py-2 max-w-36 truncate text-sm">
                         {review.repository_name || review.repository_id}
                       </TableCell>
-                      <TableCell className="py-3">{typeBadge(review.review_mode, review.commit_hash)}</TableCell>
-                      <TableCell className="py-3 max-w-xs">
+                      <TableCell className="py-2">{typeBadge(review.review_mode, review.commit_hash)}</TableCell>
+                      <TableCell className="py-2 max-w-xs">
                         <span className="text-xs text-muted-foreground line-clamp-1">
                           {review.ai_overview || identifier(review)}
                         </span>
                       </TableCell>
-                      <TableCell className="py-3">
+                      <TableCell className="py-2 w-7">
                         {review.commit_author ? (
-                          <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-secondary text-[10px] font-bold text-foreground" title={review.commit_author}>
+                          <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-muted text-[10px] font-bold text-foreground border border-border" title={review.commit_author}>
                             {initials(review.commit_author)}
                           </span>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="py-3">
-                        <span className="text-xs text-muted-foreground">
-                          {review.created_by || <span className="text-muted-foreground">system</span>}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-3 text-xs">{formatDate(review.created_at)}</TableCell>
+                      <TableCell className="py-2 text-xs">{formatDate(review.created_at)}</TableCell>
                       {isAdmin && (
-                        <TableCell className="py-3 pr-3 text-right">
+                        <TableCell className="py-2 pr-3 text-right">
                           <button
                             onClick={(e) => { e.stopPropagation(); setDeleteTarget(review); }}
                             aria-label={`Delete review for ${review.repository_name || review.repository_id}`}
-                            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 transition-opacity inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100 transition-opacity inline-flex items-center justify-center h-6 w-6 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            <Trash2 className="h-3 w-3" />
                           </button>
                         </TableCell>
                       )}
