@@ -150,7 +150,7 @@ export function Layout() {
         e.preventDefault();
         setCommandOpen((o) => !o);
       }
-      if (mod && e.key === "n") {
+      if (mod && e.shiftKey && e.key === "N") {
         e.preventDefault();
         navigate("/reviews/manual");
       }

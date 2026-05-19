@@ -97,6 +97,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         onOpenChange(false);
         return;
       }
+      if (query.trim()) return;
       const ch = e.key.toLowerCase();
       if (ch.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const target = shortcutMap.get(ch);
@@ -106,7 +107,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         }
       }
     },
-    [shortcutMap, run, onOpenChange],
+    [query, shortcutMap, run, onOpenChange],
   );
 
   return (
