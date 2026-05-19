@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { BarChart3, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, GitCommit, GitPullRequest, Trash2, User, XCircle } from "lucide-react";
+import { BarChart3, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, GitCommit, GitPullRequest, Minus, Search, Trash2, User, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Review } from "@/types";
 
@@ -32,6 +32,7 @@ export default function Dashboard() {
   const [filterAuthors, setFilterAuthors] = useState<string[]>([]);
   const [authorOptions, setAuthorOptions] = useState<string[]>([]);
   const [authorDropdownOpen, setAuthorDropdownOpen] = useState(false);
+  const [authorSearch, setAuthorSearch] = useState("");
   const [page, setPage] = useState(0);
   const [deleteTarget, setDeleteTarget] = useState<Review | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -254,7 +255,7 @@ export default function Dashboard() {
               type="button"
               variant="outline"
               className="h-9 w-48 justify-between bg-card border-border px-3 text-sm font-normal"
-              onClick={() => setAuthorDropdownOpen((open) => !open)}
+              onClick={() => { setAuthorDropdownOpen((open) => !open); setAuthorSearch(""); }}
               aria-haspopup="listbox"
               aria-expanded={authorDropdownOpen}
             >
@@ -262,42 +263,100 @@ export default function Dashboard() {
                 <User className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
                 <span className="truncate">{authorFilterLabel}</span>
               </span>
-              <ChevronDown className="h-4 w-4 flex-shrink-0 opacity-50" />
+              <ChevronDown className={cn("h-4 w-4 flex-shrink-0 opacity-50 transition-transform", authorDropdownOpen && "rotate-180")} />
             </Button>
             {authorDropdownOpen && (
               <div
-                className="absolute left-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+                className="absolute left-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg"
                 role="listbox"
                 aria-label="Filter by author"
               >
-                {authorOptions.length === 0 ? (
-                  <div className="px-3 py-2 text-sm text-muted-foreground">No authors found</div>
-                ) : (
-                  <div className="max-h-64 overflow-y-auto">
-                    {authorOptions.map((author) => {
-                      const selected = filterAuthors.includes(author);
-                      return (
-                        <button
-                          key={author}
-                          type="button"
-                          role="option"
-                          aria-selected={selected}
-                          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus:bg-accent"
-                          onClick={() => toggleAuthor(author)}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            readOnly
-                            tabIndex={-1}
-                            className="h-4 w-4 flex-shrink-0 accent-primary"
-                          />
-                          <span className="truncate">{author}</span>
-                        </button>
-                      );
-                    })}
+                {authorOptions.length > 0 && (
+                  <div className="px-2 pt-2 pb-1">
+                    <div className="relative">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Search authors..."
+                        value={authorSearch}
+                        onChange={(e) => setAuthorSearch(e.target.value)}
+                        className="h-8 w-full rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground"
+                      />
+                    </div>
                   </div>
                 )}
+                {(() => {
+                  const filtered = authorSearch
+                    ? authorOptions.filter((a) => a.toLowerCase().includes(authorSearch.toLowerCase()))
+                    : authorOptions;
+                  const allFilteredSelected = filtered.length > 0 && filtered.every((a) => filterAuthors.includes(a));
+                  const someFilteredSelected = filtered.some((a) => filterAuthors.includes(a)) && !allFilteredSelected;
+
+                  if (authorOptions.length === 0) {
+                    return <div className="px-3 py-2 text-xs text-muted-foreground">No authors found</div>;
+                  }
+
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-accent"
+                        onClick={() => {
+                          if (allFilteredSelected) {
+                            setFilterAuthors((prev) => prev.filter((a) => !filtered.includes(a)));
+                          } else {
+                            const merged = [...new Set([...filterAuthors, ...filtered])];
+                            setFilterAuthors(merged);
+                          }
+                        }}
+                      >
+                        <span className={cn(
+                          "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-[3px] border transition-colors",
+                          allFilteredSelected
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : someFilteredSelected
+                              ? "border-primary bg-primary/10"
+                              : "border-muted-foreground/40"
+                        )}>
+                          {allFilteredSelected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                          {someFilteredSelected && !allFilteredSelected && <Minus className="h-2.5 w-2.5" />}
+                        </span>
+                        <span>{allFilteredSelected ? "Clear all" : "Select all"}</span>
+                        <span className="ml-auto tabular-nums">{filterAuthors.length > 0 ? `${filterAuthors.filter((a) => filtered.includes(a)).length}/${filtered.length}` : `${filtered.length}`}</span>
+                      </button>
+                      <div className="mx-2 border-t border-border" />
+                      <div className="max-h-56 overflow-y-auto py-0.5">
+                        {filtered.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-muted-foreground">No matches</div>
+                        ) : (
+                          filtered.map((author) => {
+                            const selected = filterAuthors.includes(author);
+                            return (
+                              <button
+                                key={author}
+                                type="button"
+                                role="option"
+                                aria-selected={selected}
+                                className="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus:bg-accent"
+                                onClick={() => toggleAuthor(author)}
+                              >
+                                <span className={cn(
+                                  "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-[3px] border transition-colors",
+                                  selected
+                                    ? "bg-primary border-primary text-primary-foreground"
+                                    : "border-muted-foreground/40"
+                                )}>
+                                  {selected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                                </span>
+                                <span className="truncate text-sm">{author}</span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             )}
           </div>
