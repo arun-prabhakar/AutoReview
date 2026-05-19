@@ -179,9 +179,17 @@ export default function Dashboard() {
     return (
       <span>
         <span className="text-muted-foreground">{d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
-        <span className="text-muted-foreground ml-1.5">{d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
+        <span className="text-muted-foreground ml-1.5">{d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
       </span>
     );
+  };
+
+  const initials = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    const first = parts[0] ?? "";
+    const last = parts.length >= 2 ? (parts[parts.length - 1] ?? "") : "";
+    if (first && last) return (first.charAt(0) + last.charAt(0)).toUpperCase();
+    return name.substring(0, 2).toUpperCase();
   };
 
   return (
@@ -422,9 +430,13 @@ export default function Dashboard() {
                         </span>
                       </TableCell>
                       <TableCell className="py-3">
-                        <span className="text-xs text-muted-foreground">
-                          {review.commit_author || "—"}
-                        </span>
+                        {review.commit_author ? (
+                          <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-secondary text-[10px] font-bold text-foreground" title={review.commit_author}>
+                            {initials(review.commit_author)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell className="py-3">
                         <span className="text-xs text-muted-foreground">

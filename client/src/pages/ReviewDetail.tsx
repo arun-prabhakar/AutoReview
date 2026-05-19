@@ -396,7 +396,7 @@ AutoReview`;
                   >
                     <div className="flex items-center gap-3">
                       <Badge variant={item.status === "completed" ? "default" : "destructive"} className="text-xs capitalize">{item.status}</Badge>
-                      <span className="text-muted-foreground">{new Date(item.created_at).toLocaleDateString()} {new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                      <span className="text-muted-foreground">{new Date(item.created_at).toLocaleDateString()} {new Date(item.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                       {Number(item.must_fix_count) > 0 && <span className="text-destructive font-medium">{item.must_fix_count} must-fix</span>}

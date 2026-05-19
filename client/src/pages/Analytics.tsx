@@ -6,7 +6,7 @@ import { DollarSign, Cpu, Zap, FileSearch } from "lucide-react";
 
 type CostSummary = { total_reviews: string; total_tokens: string; total_cost: string; avg_cost: string };
 type ModelCost = { llm_model: string; review_count: string; total_tokens: string; total_cost: string };
-type ReviewCost = { id: string; repository_name: string; llm_model: string; tokens_total: number; estimated_cost: number; created_at: string };
+type ReviewCost = { id: string; repository_name: string; commit_hash: string; review_mode: string; llm_model: string; tokens_total: number; estimated_cost: number; created_at: string };
 
 export default function Analytics() {
   const [summary, setSummary] = useState<CostSummary | null>(null);
@@ -136,6 +136,7 @@ export default function Analytics() {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="text-left py-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Repository</th>
+                    <th className="text-left py-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Target</th>
                     <th className="text-left py-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Model</th>
                     <th className="text-right py-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Tokens</th>
                     <th className="text-right py-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Cost</th>
@@ -143,17 +144,22 @@ export default function Analytics() {
                   </tr>
                 </thead>
                 <tbody>
-                  {reviews.map((r) => (
-                    <tr key={r.id} className="border-b border-border/50 hover:bg-accent/50 transition-colors">
-                      <td className="py-2 pr-4 font-medium text-foreground truncate max-w-40">{r.repository_name}</td>
-                      <td className="py-2 pr-4 font-mono text-muted-foreground">{r.llm_model}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums text-muted-foreground">{Number(r.tokens_total).toLocaleString()}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums font-semibold text-foreground">{fmtCost(Number(r.estimated_cost))}</td>
-                      <td className="py-2 text-right text-muted-foreground">
-                        {new Date(r.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                      </td>
-                    </tr>
-                  ))}
+                  {reviews.map((r) => {
+                    const isPr = r.review_mode === "pr" || r.commit_hash?.startsWith("pr:");
+                    const label = isPr ? `PR #${r.commit_hash.replace("pr:", "").split(":")[0]}` : r.commit_hash.substring(0, 10);
+                    return (
+                      <tr key={r.id} className="border-b border-border/50 hover:bg-accent/50 transition-colors">
+                        <td className="py-2 pr-4 font-medium text-foreground truncate max-w-40">{r.repository_name}</td>
+                        <td className="py-2 pr-4 font-mono text-muted-foreground">{label}</td>
+                        <td className="py-2 pr-4 font-mono text-muted-foreground">{r.llm_model}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums text-muted-foreground">{Number(r.tokens_total).toLocaleString()}</td>
+                        <td className="py-2 pr-4 text-right tabular-nums font-semibold text-foreground">{fmtCost(Number(r.estimated_cost))}</td>
+                        <td className="py-2 text-right text-muted-foreground">
+                          {new Date(r.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
