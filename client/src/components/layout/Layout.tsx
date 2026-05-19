@@ -16,6 +16,7 @@ import { ChangePasswordForm } from "@/components/ChangePasswordForm";
 import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AboutIcon } from "@/components/AboutIcon";
+import { CommandPalette } from "@/components/CommandPalette";
 
 const allNavItems: { to: string; label: string; icon: LucideIcon; roles: string[]; preload: string }[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "user"], preload: "Dashboard" },
@@ -139,7 +140,24 @@ export function Layout() {
     return window.localStorage.getItem("autoreview-sidebar-collapsed") === "true";
   });
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const prefersReducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === "k") {
+        e.preventDefault();
+        setCommandOpen((o) => !o);
+      }
+      if (mod && e.key === "n") {
+        e.preventDefault();
+        navigate("/reviews/manual");
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [navigate]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("theme");
@@ -161,6 +179,7 @@ export function Layout() {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4 focus:bg-background focus:text-foreground">Skip to content</a>
       <ForcedPasswordChange />
       <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
+      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       <motion.aside
         animate={{ width: collapsed ? 64 : 260 }}
         transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
