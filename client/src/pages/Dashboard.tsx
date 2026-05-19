@@ -7,7 +7,6 @@ import { fetchRepositories } from "@/store/repositoriesSlice";
 import { api } from "@/services/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -27,7 +26,6 @@ export default function Dashboard() {
   const isAdmin = user?.role === "admin";
 
   const [filterRepo, setFilterRepo] = useState("all");
-  const [filterStatus, setFilterStatus] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterAuthors, setFilterAuthors] = useState<string[]>([]);
   const [authorOptions, setAuthorOptions] = useState<string[]>([]);
@@ -42,9 +40,8 @@ export default function Dashboard() {
   const PAGE_SIZE = 10;
 
   const activeFilters = () => {
-    const params: { repository_id?: string; status?: string; review_mode?: string; commit_author?: string[] } = {};
+    const params: { repository_id?: string; review_mode?: string; commit_author?: string[] } = {};
     if (filterRepo !== "all") params.repository_id = filterRepo;
-    if (filterStatus !== "all") params.status = filterStatus;
     if (filterType !== "all") params.review_mode = filterType;
     if (filterAuthors.length > 0) params.commit_author = filterAuthors;
     return params;
@@ -58,7 +55,7 @@ export default function Dashboard() {
   useEffect(() => {
     setPage(0);
     dispatch(fetchReviews({ ...activeFilters(), limit: PAGE_SIZE, offset: 0 }));
-  }, [filterRepo, filterStatus, filterType, filterAuthors]); // eslint-disable-line
+  }, [filterRepo, filterType, filterAuthors]); // eslint-disable-line
 
   useEffect(() => {
     if (!pageEffectMounted.current) {
@@ -72,7 +69,6 @@ export default function Dashboard() {
     const fetchAuthors = async () => {
       const query = new URLSearchParams();
       if (filterRepo !== "all") query.set("repository_id", filterRepo);
-      if (filterStatus !== "all") query.set("status", filterStatus);
       if (filterType !== "all") query.set("review_mode", filterType);
       const authors = await api.get<string[]>(`/api/reviews/authors?${query.toString()}`);
       setAuthorOptions(authors);
@@ -82,7 +78,7 @@ export default function Dashboard() {
     fetchAuthors().catch((err) => {
       toast({ title: "Failed to load authors", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     });
-  }, [filterRepo, filterStatus, filterType, toast]);
+  }, [filterRepo, filterType, toast]);
 
   useEffect(() => {
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -142,16 +138,15 @@ export default function Dashboard() {
     internal_error: "Internal Error",
   };
 
-  const statusBadge = (status: string, failureCategory?: string | null) => {
+  const statusIcon = (status: string, failureCategory?: string | null) => {
+    const label = status === "failed" && failureCategory && FAILURE_LABELS[failureCategory]
+      ? FAILURE_LABELS[failureCategory]
+      : status.charAt(0).toUpperCase() + status.slice(1);
     switch (status) {
-      case "completed": return <Badge variant="outline" className="capitalize bg-success/10 text-success border-success/20">Completed</Badge>;
-      case "pending": return <Badge variant="outline" className="capitalize bg-warning/10 text-warning border-warning/20">Pending</Badge>;
-      case "failed": return (
-        <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">
-          {failureCategory && FAILURE_LABELS[failureCategory] ? FAILURE_LABELS[failureCategory] : "Failed"}
-        </Badge>
-      );
-      default: return <Badge variant="outline" className="capitalize">{status}</Badge>;
+      case "completed": return <span title={label}><CheckCircle2 className="h-4 w-4 text-success" /></span>;
+      case "pending": return <span title={label}><Clock className="h-4 w-4 text-warning animate-pulse" /></span>;
+      case "failed": return <span title={label}><XCircle className="h-4 w-4 text-destructive" /></span>;
+      default: return <span title={label}><Clock className="h-4 w-4 text-muted-foreground" /></span>;
     }
   };
 
@@ -235,18 +230,6 @@ export default function Dashboard() {
               <SelectItem value="all">All Types</SelectItem>
               <SelectItem value="pr">Pull Request</SelectItem>
               <SelectItem value="manual">Commit</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-36 bg-card border-border h-9 text-sm">
-              <SelectValue placeholder="All Statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
             </SelectContent>
           </Select>
 
@@ -360,8 +343,8 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-          {(filterRepo !== "all" || filterStatus !== "all" || filterType !== "all" || filterAuthors.length > 0) && (
-            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setFilterRepo("all"); setFilterStatus("all"); setFilterType("all"); setFilterAuthors([]); }}>
+          {(filterRepo !== "all" || filterType !== "all" || filterAuthors.length > 0) && (
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => { setFilterRepo("all"); setFilterType("all"); setFilterAuthors([]); }}>
               Clear filters
             </Button>
           )}
@@ -403,13 +386,13 @@ export default function Dashboard() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent border-border">
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground pl-4 w-36 max-w-36">Repository</TableHead>
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-24">Type</TableHead>
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-32">Identifier</TableHead>
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-28">Status</TableHead>
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground pl-4 w-10" />
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-32 max-w-32">Repository</TableHead>
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-20">Type</TableHead>
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground">Description</TableHead>
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-28">Author</TableHead>
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-28">Run By</TableHead>
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-44">Date</TableHead>
+                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-40">Date</TableHead>
                     {isAdmin && <TableHead className="w-10" />}
                   </TableRow>
                 </TableHeader>
@@ -423,12 +406,18 @@ export default function Dashboard() {
                       onClick={() => navigate(`/reviews/${review.id}`)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/reviews/${review.id}`); } }}
                     >
-                      <TableCell className="font-medium text-foreground pl-4 py-3 max-w-36 truncate">
+                      <TableCell className="pl-4 py-3 w-10">
+                        {statusIcon(review.status, review.failure_category)}
+                      </TableCell>
+                      <TableCell className="font-medium text-foreground py-3 max-w-32 truncate">
                         {review.repository_name || review.repository_id}
                       </TableCell>
                       <TableCell className="py-3">{typeBadge(review.review_mode, review.commit_hash)}</TableCell>
-                      <TableCell className="py-3">{identifier(review)}</TableCell>
-                      <TableCell className="py-3">{statusBadge(review.status, review.failure_category)}</TableCell>
+                      <TableCell className="py-3 max-w-xs">
+                        <span className="text-xs text-muted-foreground line-clamp-1">
+                          {review.ai_overview || identifier(review)}
+                        </span>
+                      </TableCell>
                       <TableCell className="py-3">
                         <span className="text-xs text-muted-foreground">
                           {review.commit_author || "—"}
