@@ -305,7 +305,7 @@ export function Layout() {
           </button>
         </div>
 
-         <main id="main-content" className="flex-1 overflow-auto p-4 md:p-6">
+         <main id="main-content" className="flex-1 overflow-auto px-4 pt-2 pb-4 md:px-6 md:pt-3 md:pb-6">
           <Outlet />
         </main>
       </div>

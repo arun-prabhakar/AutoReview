@@ -183,13 +183,15 @@ export async function generateDiffOverview(
 
   const prompt = `You are writing a one-line summary for a code review.
 
-Given the git diff below, write ONE concise sentence (max 15 words) describing what this change accomplishes.
+Given the git diff below, write ONE complete, concise sentence (max 15 words) describing what this change accomplishes.
 
 Rules:
 - Start with an active verb (Add, Fix, Remove, Refactor, Update, Implement, etc.)
 - Do NOT start with "This changeset", "This PR", "This commit", or similar phrases
 - Focus on WHAT was done, not HOW
 - Plain text only, no markdown
+- The sentence MUST be complete and grammatical — never trail off or end mid-thought
+- End with a period
 
 Commit: ${commit.hash.substring(0, 12)}
 Message: ${commit.message}
@@ -208,7 +210,10 @@ ${snippet}`;
     temperature: 0.2,
   });
 
-  return response.choices?.[0]?.message?.content?.trim() || "";
+  const raw = response.choices?.[0]?.message?.content?.trim() || "";
+  if (!raw) return "";
+  const overview = raw.endsWith(".") ? raw : raw + ".";
+  return overview;
 }
 
 export function extractFilePaths(diff: string): string {

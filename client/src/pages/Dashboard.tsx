@@ -184,18 +184,10 @@ export default function Dashboard() {
     );
   };
 
-  const initials = (name: string) => {
-    const parts = name.trim().split(/\s+/);
-    const first = parts[0] ?? "";
-    const last = parts.length >= 2 ? (parts[parts.length - 1] ?? "") : "";
-    if (first && last) return (first.charAt(0) + last.charAt(0)).toUpperCase();
-    return name.substring(0, 2).toUpperCase();
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold tracking-tight">Dashboard</h2>
+        <h2 className="text-base font-semibold tracking-tight">Dashboard</h2>
         <Link to="/reviews/manual">
           <Button className="font-semibold shadow-sm">New Review</Button>
         </Link>
@@ -401,7 +393,6 @@ export default function Dashboard() {
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground">Repository</TableHead>
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-16">Type</TableHead>
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground">Description</TableHead>
-                    <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-7" />
                     <TableHead className="text-xs uppercase tracking-widest font-bold text-muted-foreground w-36">Date</TableHead>
                     {isAdmin && <TableHead className="w-8" />}
                   </TableRow>
@@ -427,15 +418,6 @@ export default function Dashboard() {
                         <span className="text-xs text-muted-foreground line-clamp-1">
                           {review.ai_overview || identifier(review)}
                         </span>
-                      </TableCell>
-                      <TableCell className="py-2 w-7">
-                        {review.commit_author ? (
-                          <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-muted text-[10px] font-bold text-foreground border border-border" title={review.commit_author}>
-                            {initials(review.commit_author)}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
                       </TableCell>
                       <TableCell className="py-2 text-xs">{formatDate(review.created_at)}</TableCell>
                       {isAdmin && (
