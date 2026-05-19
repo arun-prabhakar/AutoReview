@@ -226,13 +226,14 @@ export async function getCostSummary(days = 30): Promise<{ total_reviews: string
 export async function getCostByModel(days = 30): Promise<{ llm_model: string; review_count: string; total_tokens: string; total_cost: string }[]> {
   return all(
     `SELECT 
-       COALESCE(r.llm_model, 'unknown') as llm_model,
+       COALESCE(r.llm_model, repo.llm_model, 'unknown') as llm_model,
        COUNT(*) as review_count,
-       COALESCE(SUM(tokens_total), 0) as total_tokens,
-       COALESCE(SUM(estimated_cost), 0) as total_cost
+       COALESCE(SUM(r.tokens_total), 0) as total_tokens,
+       COALESCE(SUM(r.estimated_cost), 0) as total_cost
      FROM reviews r
+     JOIN repositories repo ON r.repository_id = repo.id
      WHERE r.status = 'completed' AND r.created_at >= NOW() - ($1 || ' days')::interval
-     GROUP BY r.llm_model
+     GROUP BY COALESCE(r.llm_model, repo.llm_model, 'unknown')
      ORDER BY total_cost DESC`,
     [days]
   );
@@ -240,7 +241,7 @@ export async function getCostByModel(days = 30): Promise<{ llm_model: string; re
 
 export async function getCostPerReview(days = 30, limit = 50, offset = 0): Promise<{ id: string; repository_name: string; llm_model: string; tokens_total: number; estimated_cost: number; created_at: string }[]> {
   return all(
-    `SELECT r.id, repo.name as repository_name, COALESCE(r.llm_model, 'unknown') as llm_model,
+    `SELECT r.id, repo.name as repository_name, COALESCE(r.llm_model, repo.llm_model, 'unknown') as llm_model,
        r.tokens_total, r.estimated_cost, r.created_at
      FROM reviews r
      JOIN repositories repo ON r.repository_id = repo.id
