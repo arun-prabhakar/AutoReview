@@ -147,10 +147,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     llm_model: ctx.llmModel ?? null,
   });
 
-  logger.info(`[executeReview] createReview result: reviewId=${reviewId}, created=${created}, parentReviewId=${parentReviewId || "none"}`);
-
   if (!created) {
-    logger.warn(`[executeReview] BLOCKED — createReview returned created=false for reviewId=${reviewId}, dedupKey=${ctx.dedupKey}. Unique index may be blocking re-review. Check migration 008.`);
     const existing = await findExistingReview(ctx.repo.id, ctx.dedupKey);
     if (existing) {
       const findings = await findFindingsByReviewId(existing.id);
@@ -190,7 +187,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
 
     let aiOverview = "";
     try {
-      aiOverview = await generateDiffOverview(ctx.diff, ctx.commit, ctx.repo, provider, rawFindings);
+      aiOverview = await generateDiffOverview(ctx.diff, ctx.commit, ctx.repo, provider);
     } catch (err) {
       logger.warn(`Failed to generate AI overview for ${ctx.dedupKey}`, { error: String(err) });
       aiOverview = ctx.commit.message?.split("\n")[0]?.substring(0, 120) || "";
@@ -275,7 +272,7 @@ async function sendNotifications(
 
   if (ctx.repo.post_to_bitbucket && ctx.prId) {
     tasks.push(
-      postPrComment(ctx.repo.workspace, ctx.repo.slug, ctx.prId, formatPrComment(findings, aiOverview), password, username).catch((err) => {
+      postPrComment(ctx.repo.workspace, ctx.repo.slug, ctx.prId, formatPrComment(findings), password, username).catch((err) => {
         logger.error(`Failed to post PR comment`, { prId: ctx.prId, error: String(err) });
       })
     );
@@ -297,7 +294,7 @@ async function sendNotifications(
         try {
           const prId = await findPullRequestForCommit(ctx.repo.workspace, ctx.repo.slug, ctx.dedupKey, password, username);
           if (prId) {
-            await postPrComment(ctx.repo.workspace, ctx.repo.slug, prId, formatPrComment(findings, aiOverview), password, username);
+            await postPrComment(ctx.repo.workspace, ctx.repo.slug, prId, formatPrComment(findings), password, username);
             for (const f of findings) {
               if (f.line_number && (f.risk_level === "must_fix" || f.risk_level === "should_fix_soon")) {
                 await postInlinePrComment(
@@ -321,7 +318,7 @@ async function sendNotifications(
   await Promise.all(tasks);
 }
 
-function formatPrComment(findings: RawFinding[], aiOverview?: string): string {
+function formatPrComment(findings: RawFinding[]): string {
   const grouped = {
     must_fix: findings.filter((f) => f.risk_level === "must_fix"),
     should_fix_soon: findings.filter((f) => f.risk_level === "should_fix_soon"),
@@ -329,9 +326,6 @@ function formatPrComment(findings: RawFinding[], aiOverview?: string): string {
   };
 
   let body = `**AutoReview — Code Review Findings**\n\n`;
-  if (aiOverview) {
-    body += `${aiOverview}\n\n---\n\n`;
-  }
   body += `**Must Fix:** ${grouped.must_fix.length} | **Should Fix Soon:** ${grouped.should_fix_soon.length} | **Ignore:** ${grouped.ignore.length}\n\n`;
 
   for (const [level, items] of Object.entries(grouped)) {
@@ -372,9 +366,7 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
   );
 
   const dedupKey = commit.hash;
-  logger.info(`[runManualReview] dedupKey=${dedupKey}, force=${force}, repo=${repo.name}`);
   const dedupResult = await performDedup(repositoryId, dedupKey, force);
-  logger.info(`[runManualReview] dedupResult=${JSON.stringify({ action: dedupResult.action, parentReviewId: dedupResult.parentReviewId })}`);
   if (dedupResult.action === "cached") return { review: dedupResult.review, findings: dedupResult.findings, cached: true, reviewId: dedupResult.review.id };
   if (dedupResult.action === "in_progress") return { review: dedupResult.review, findings: [], cached: false, message: "Review already in progress" };
 
@@ -450,19 +442,15 @@ async function notifyReviewComplete(
 }
 
 export async function rerunReview(reviewId: string, createdBy?: string) {
-  logger.info(`[rerunReview] START — reviewId=${reviewId}, createdBy=${createdBy || "none"}`);
   const review = await get<{ id: string; repository_id: string; commit_hash: string; review_mode: string }>(
     "SELECT id, repository_id, commit_hash, review_mode FROM reviews WHERE id = $1", [reviewId]
   );
   if (!review) throw new NotFoundError("Review not found");
-  logger.info(`[rerunReview] Found review — repo=${review.repository_id}, hash=${review.commit_hash}, mode=${review.review_mode}`);
 
   if (review.review_mode === "pr") {
     const parts = review.commit_hash.split(":");
     const prId = parts[1];
-    logger.info(`[rerunReview] PR mode — prId=${prId}`);
     return runPrReview(review.repository_id, prId, true, createdBy);
   }
-  logger.info(`[rerunReview] Manual mode — commitHash=${review.commit_hash}`);
   return runManualReview(review.repository_id, review.commit_hash, true, createdBy);
 }

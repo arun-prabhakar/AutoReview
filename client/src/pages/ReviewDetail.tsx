@@ -470,23 +470,8 @@ AutoReview`;
 
             {aiOverview && aiOverview !== "Review completed." && (
               <div className="mt-4 rounded-lg border border-border p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">AI Overview</p>
-                <div className="space-y-3">
-                  {aiOverview.split("\n\n").map((block, i) => {
-                    const lines = block.split("\n");
-                    const firstLine = lines[0] ?? "";
-                    const isLabel = firstLine.length > 0 && firstLine.length < 40 && /^[A-Z][A-Z\s]+$/.test(firstLine) && lines.length > 1;
-                    if (isLabel) {
-                      return (
-                        <div key={i}>
-                          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">{firstLine}</p>
-                          <p className="text-sm leading-relaxed text-foreground">{lines.slice(1).join("\n")}</p>
-                        </div>
-                      );
-                    }
-                    return <p key={i} className="text-sm leading-relaxed text-foreground">{block}</p>;
-                  })}
-                </div>
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">AI Overview</p>
+                <p className="text-sm leading-relaxed text-foreground">{aiOverview}</p>
               </div>
             )}
 

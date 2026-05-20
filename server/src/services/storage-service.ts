@@ -46,7 +46,7 @@ export type FindingRow = {
 };
 
 export async function findExistingReview(repositoryId: string, commitHash: string): Promise<ReviewRow | undefined> {
-  return get<ReviewRow>("SELECT * FROM reviews WHERE repository_id = $1 AND commit_hash = $2 AND parent_review_id IS NULL ORDER BY created_at DESC LIMIT 1", [repositoryId, commitHash]);
+  return get<ReviewRow>("SELECT * FROM reviews WHERE repository_id = $1 AND commit_hash = $2", [repositoryId, commitHash]);
 }
 
 export async function findFindingsByReviewId(reviewId: string): Promise<FindingRow[]> {
