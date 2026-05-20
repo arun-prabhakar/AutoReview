@@ -3,10 +3,9 @@ import { useSelector, useDispatch } from "react-redux";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, PanelLeft, PanelLeftClose, Users, KeyRound, BarChart3, Search } from "lucide-react";
+import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, Users, KeyRound, BarChart3, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { logoutUser, changePassword } from "../../store/authSlice";
 import { preloadPage } from "../../App";
@@ -43,17 +42,17 @@ function NavLinks({ onNavigate, collapsed }: { onNavigate?: () => void; collapse
             onMouseEnter={() => preloadPage(item.preload as Parameters<typeof preloadPage>[0])}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 group",
-                collapsed && "justify-center px-0 h-10 w-10 mx-auto",
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 group",
+                collapsed && "justify-center px-0 h-9 w-9 mx-auto",
                 isActive
-                  ? "bg-secondary text-foreground font-semibold border-l-2 border-foreground/20"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground border-l-2 border-transparent"
+                  ? "bg-purple-dim text-purple-accent"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )
             }
             title={collapsed ? item.label : undefined}
           >
-            <Icon className={cn("h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110", collapsed && "h-5 w-5")} />
-            {!collapsed && <span className="tracking-tight">{item.label}</span>}
+            <Icon className={cn("h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110", collapsed && "h-[18px] w-[18px]")} />
+            {!collapsed && <span>{item.label}</span>}
           </NavLink>
         );
       })}
@@ -136,12 +135,8 @@ export function Layout() {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
   const [open, setOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(() => {
-    return window.localStorage.getItem("autoreview-sidebar-collapsed") === "true";
-  });
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
-  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -161,13 +156,8 @@ export function Layout() {
 
   useEffect(() => {
     const stored = window.localStorage.getItem("theme");
-    const prefersDark = stored === "dark" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    document.documentElement.classList.toggle("dark", prefersDark);
+    document.documentElement.classList.toggle("dark", stored !== "light");
   }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("autoreview-sidebar-collapsed", String(collapsed));
-  }, [collapsed]);
 
   function handleLogout() {
     dispatch(logoutUser());
@@ -180,58 +170,37 @@ export function Layout() {
       <ForcedPasswordChange />
       <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-      <motion.aside
-        animate={{ width: collapsed ? 64 : 260 }}
-        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
-        className="hidden flex-shrink-0 border-r border-border bg-card md:flex md:flex-col z-20 shadow-card"
-      >
-        <div className={cn("relative overflow-hidden flex items-center gap-3 p-6 mb-2", collapsed && "flex-col gap-4")}>
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <img src="/favicon.svg" alt="" className="h-8 w-8 flex-shrink-0" />
-            {!collapsed && (
-                <span className="text-xl font-bold tracking-display text-ink truncate">
-                Auto<span className="text-foreground">Review</span>
-              </span>
-            )}
-          </div>
-          <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="h-8 w-8 text-muted-foreground hover:text-ink transition-colors">
-            {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-          </Button>
+      <aside className="hidden flex-shrink-0 w-12 border-r border-border bg-card md:flex md:flex-col z-20 items-center py-4">
+        <img src="/favicon.svg" alt="" className="h-8 w-8 mb-6" />
+
+        <div className="flex-1 flex flex-col items-center gap-1 w-full px-2">
+          <NavLinks collapsed />
         </div>
 
-        <div className="flex-1 px-3 space-y-1 overflow-hidden">
-          <NavLinks collapsed={collapsed} />
+        <div className="flex flex-col items-center gap-1 w-full px-2 mt-auto">
+          <AboutIcon />
+          <NotificationBell placement="top-left" />
+          <button
+            aria-label="Change password"
+            onClick={() => setChangePasswordOpen(true)}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <KeyRound className="h-4 w-4" />
+          </button>
+          <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
+          <button
+            aria-label="Sign out"
+            onClick={handleLogout}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
+      </aside>
 
-        <div className="mt-auto border-t border-border p-4">
-          <div className="flex items-center gap-3 px-1 mb-3">
-            <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold text-foreground flex-shrink-0 hover:ring-2 hover:ring-foreground/10 transition-all duration-150 cursor-default">
-              {(user?.name || user?.username)?.substring(0, 2).toUpperCase()}
-            </div>
-            {!collapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate text-foreground">{user?.name || user?.username}</p>
-                <p className="text-xs uppercase tracking-widest text-muted-foreground">{user?.role}</p>
-              </div>
-            )}
-          </div>
-          <div className={cn("flex items-center gap-1", collapsed ? "flex-col" : "justify-center")}>
-            <AboutIcon />
-            <NotificationBell placement="top-left" />
-            <Button variant="ghost" size="icon" aria-label="Change password" onClick={() => setChangePasswordOpen(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Change Password">
-              <KeyRound className="h-4 w-4" />
-            </Button>
-            <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-md flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
-            <Button variant="ghost" size="icon" aria-label="Sign out" onClick={handleLogout} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Sign out">
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </motion.aside>
+      <div className="flex flex-1 flex-col overflow-hidden dot-grid relative">
 
-      <div className="flex flex-1 flex-col overflow-hidden bg-background relative">
-        
-        <header className="flex items-center justify-between border-b border-muted/20 p-4 md:px-8 h-16 bg-background/50 backdrop-blur-md z-10 md:hidden">
+        <header className="flex items-center justify-between border-b border-border p-4 md:px-8 h-16 bg-background/80 backdrop-blur-md z-10 md:hidden">
           <div className="flex items-center gap-3">
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger asChild>
@@ -280,11 +249,11 @@ export function Layout() {
            </div>
            </header>
 
-        <div className="hidden md:flex items-center justify-center border-b border-border h-12 bg-background/50 backdrop-blur-md z-10">
+        <div className="hidden md:flex items-center justify-center border-b border-border h-12 bg-card/80 backdrop-blur-md z-10">
           <button
             type="button"
             onClick={() => setCommandOpen(true)}
-            className="flex items-center gap-3 h-8 w-full max-w-lg mx-8 rounded-lg border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-accent hover:border-foreground/20 transition-colors cursor-pointer"
+            className="flex items-center gap-3 h-8 w-full max-w-lg mx-8 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground hover:bg-accent hover:border-border transition-colors cursor-pointer"
           >
             <Search className="h-3.5 w-3.5 shrink-0" />
             <span className="flex-1 text-left">Search reviews, navigate...</span>
@@ -305,7 +274,7 @@ export function Layout() {
           </button>
         </div>
 
-         <main id="main-content" className="flex-1 overflow-auto px-4 pt-2 pb-4 md:px-6 md:pt-3 md:pb-6">
+        <main id="main-content" className="flex-1 overflow-auto px-4 pt-2 pb-4 md:px-6 md:pt-3 md:pb-6">
           <Outlet />
         </main>
       </div>
