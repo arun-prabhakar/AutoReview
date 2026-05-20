@@ -187,7 +187,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
 
     let aiOverview = "";
     try {
-      aiOverview = await generateDiffOverview(ctx.diff, ctx.commit, ctx.repo, provider, rawFindings);
+      aiOverview = await generateDiffOverview(ctx.diff, ctx.commit, ctx.repo, provider);
     } catch (err) {
       logger.warn(`Failed to generate AI overview for ${ctx.dedupKey}`, { error: String(err) });
       aiOverview = ctx.commit.message?.split("\n")[0]?.substring(0, 120) || "";
@@ -272,7 +272,7 @@ async function sendNotifications(
 
   if (ctx.repo.post_to_bitbucket && ctx.prId) {
     tasks.push(
-      postPrComment(ctx.repo.workspace, ctx.repo.slug, ctx.prId, formatPrComment(findings, aiOverview), password, username).catch((err) => {
+      postPrComment(ctx.repo.workspace, ctx.repo.slug, ctx.prId, formatPrComment(findings), password, username).catch((err) => {
         logger.error(`Failed to post PR comment`, { prId: ctx.prId, error: String(err) });
       })
     );
@@ -294,7 +294,7 @@ async function sendNotifications(
         try {
           const prId = await findPullRequestForCommit(ctx.repo.workspace, ctx.repo.slug, ctx.dedupKey, password, username);
           if (prId) {
-            await postPrComment(ctx.repo.workspace, ctx.repo.slug, prId, formatPrComment(findings, aiOverview), password, username);
+            await postPrComment(ctx.repo.workspace, ctx.repo.slug, prId, formatPrComment(findings), password, username);
             for (const f of findings) {
               if (f.line_number && (f.risk_level === "must_fix" || f.risk_level === "should_fix_soon")) {
                 await postInlinePrComment(
@@ -318,28 +318,23 @@ async function sendNotifications(
   await Promise.all(tasks);
 }
 
-function formatPrComment(findings: RawFinding[], aiOverview?: string): string {
+function formatPrComment(findings: RawFinding[]): string {
   const grouped = {
     must_fix: findings.filter((f) => f.risk_level === "must_fix"),
     should_fix_soon: findings.filter((f) => f.risk_level === "should_fix_soon"),
     ignore: findings.filter((f) => f.risk_level === "ignore"),
   };
 
-  let body = `**AutoReview — Code Review**\n\n`;
-
-  if (aiOverview) {
-    body += `${aiOverview}\n\n---\n\n`;
-  }
-
-  body += `**Must Fix:** ${grouped.must_fix.length} | **Should Fix Soon:** ${grouped.should_fix_soon.length} | **Informational:** ${grouped.ignore.length}\n\n`;
+  let body = `**AutoReview — Code Review Findings**\n\n`;
+  body += `**Must Fix:** ${grouped.must_fix.length} | **Should Fix Soon:** ${grouped.should_fix_soon.length} | **Ignore:** ${grouped.ignore.length}\n\n`;
 
   for (const [level, items] of Object.entries(grouped)) {
     if (items.length === 0) continue;
-    body += `### ${level.replace(/_/g, " ").toUpperCase()}\n\n`;
+    body += `### ${level.replace("_", " ").toUpperCase()}\n\n`;
     for (const f of items) {
       body += `- **${f.summary}** — \`${f.file_path}${f.line_number ? `:${f.line_number}` : ""}\`\n`;
       body += `  ${f.explanation}\n`;
-      if (f.suggested_fix) body += `  **Suggested fix:** ${f.suggested_fix}\n`;
+      if (f.suggested_fix) body += `  **Fix:** ${f.suggested_fix}\n`;
       body += "\n";
     }
   }

@@ -1,11 +1,12 @@
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, Users, KeyRound, BarChart3, Search, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, PanelLeft, PanelLeftClose, Users, KeyRound, BarChart3, Search } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { logoutUser, changePassword } from "../../store/authSlice";
 import { preloadPage } from "../../App";
@@ -17,47 +18,44 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { AboutIcon } from "@/components/AboutIcon";
 import { CommandPalette } from "@/components/CommandPalette";
 
-const allNavItems: { to: string; label: string; icon: LucideIcon; color: string; roles: string[]; preload: string }[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, color: "text-purple-accent", roles: ["admin", "user"], preload: "Dashboard" },
-  { to: "/reviews/manual", label: "Manual Review", icon: FileSearch, color: "text-blue-400", roles: ["admin", "user"], preload: "ManualReview" },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, color: "text-emerald-400", roles: ["admin"], preload: "Analytics" },
-  { to: "/users", label: "Users", icon: Users, color: "text-amber-400", roles: ["admin"], preload: "Users" },
-  { to: "/settings", label: "Settings", icon: Settings, color: "text-rose-400", roles: ["admin"], preload: "Settings" },
+const allNavItems: { to: string; label: string; icon: LucideIcon; roles: string[]; preload: string }[] = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "user"], preload: "Dashboard" },
+  { to: "/reviews/manual", label: "Manual Review", icon: FileSearch, roles: ["admin", "user"], preload: "ManualReview" },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, roles: ["admin"], preload: "Analytics" },
+  { to: "/users", label: "Users", icon: Users, roles: ["admin"], preload: "Users" },
+  { to: "/settings", label: "Settings", icon: Settings, roles: ["admin"], preload: "Settings" },
 ];
 
 function NavLinks({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const { user } = useSelector((state: RootState) => state.auth);
-  const navigate = useNavigate();
-  const location = window.location;
   const visibleItems = allNavItems.filter((item) => user && item.roles.includes(user.role));
 
   return (
     <nav className="flex flex-col gap-1">
       {visibleItems.map((item) => {
         const Icon = item.icon;
-        const isActive = item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to);
         return (
-            <button
-              key={item.to}
-              onClick={() => { navigate(item.to); onNavigate?.(); }}
-              onMouseEnter={() => preloadPage(item.preload as Parameters<typeof preloadPage>[0])}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 group w-full",
-                collapsed && "justify-center px-0 h-9 w-9 mx-auto",
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === "/"}
+            onClick={onNavigate}
+            onMouseEnter={() => preloadPage(item.preload as Parameters<typeof preloadPage>[0])}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-semibold transition-all duration-200 group",
+                collapsed && "justify-center px-0 h-10 w-10 mx-auto",
                 isActive
-                  ? "bg-purple-dim text-purple-accent"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )}
-              title={collapsed ? item.label : undefined}
-            >
-              <Icon className={cn(
-                "h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110",
-                collapsed && "h-[18px] w-[18px]",
-                !isActive && item.color
-              )} />
-              {!collapsed && <span>{item.label}</span>}
-            </button>
-          );
+                  ? "bg-secondary text-foreground font-semibold border-l-2 border-foreground/20"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground border-l-2 border-transparent"
+              )
+            }
+            title={collapsed ? item.label : undefined}
+          >
+            <Icon className={cn("h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110", collapsed && "h-5 w-5")} />
+            {!collapsed && <span className="tracking-tight">{item.label}</span>}
+          </NavLink>
+        );
       })}
     </nav>
   );
@@ -138,9 +136,12 @@ export function Layout() {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
   const [open, setOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [collapsed, setCollapsed] = useState(() => {
+    return window.localStorage.getItem("autoreview-sidebar-collapsed") === "true";
+  });
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -160,8 +161,13 @@ export function Layout() {
 
   useEffect(() => {
     const stored = window.localStorage.getItem("theme");
-    document.documentElement.classList.toggle("dark", stored !== "light");
+    const prefersDark = stored === "dark" || (!stored && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.classList.toggle("dark", prefersDark);
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("autoreview-sidebar-collapsed", String(collapsed));
+  }, [collapsed]);
 
   function handleLogout() {
     dispatch(logoutUser());
@@ -174,54 +180,58 @@ export function Layout() {
       <ForcedPasswordChange />
       <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-      <aside
-        className={cn(
-          "hidden flex-shrink-0 border-r border-border bg-card md:flex md:flex-col z-20 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
-          sidebarCollapsed ? "w-12 items-center py-4" : "w-56 py-4"
-        )}
+      <motion.aside
+        animate={{ width: collapsed ? 64 : 260 }}
+        transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+        className="hidden flex-shrink-0 border-r border-border bg-card md:flex md:flex-col z-20 shadow-card"
       >
-        <div className={cn("flex items-center w-full px-3 mb-4", sidebarCollapsed ? "justify-center" : "gap-3")}>
-          <img src="/favicon.svg" alt="" className="h-8 w-8 flex-shrink-0" />
-          {!sidebarCollapsed && (
-            <span className="text-lg font-bold tracking-display text-foreground truncate">Auto<span className="text-muted-foreground">Review</span></span>
-          )}
+        <div className={cn("relative overflow-hidden flex items-center gap-3 p-6 mb-2", collapsed && "flex-col gap-4")}>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <img src="/favicon.svg" alt="" className="h-8 w-8 flex-shrink-0" />
+            {!collapsed && (
+                <span className="text-xl font-bold tracking-display text-ink truncate">
+                Auto<span className="text-foreground">Review</span>
+              </span>
+            )}
+          </div>
+          <Button variant="ghost" size="icon" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)} className="h-8 w-8 text-muted-foreground hover:text-ink transition-colors">
+            {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </Button>
         </div>
 
-        <div className={cn("flex-1 flex flex-col gap-1 w-full", sidebarCollapsed ? "items-center px-2" : "px-3")}>
-          <NavLinks collapsed={sidebarCollapsed} />
+        <div className="flex-1 px-3 space-y-1 overflow-hidden">
+          <NavLinks collapsed={collapsed} />
         </div>
 
-        <div className={cn("flex flex-col gap-1 w-full mt-auto", sidebarCollapsed ? "items-center px-2" : "px-3")}>
-          <button
-            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            {sidebarCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-          </button>
-          <AboutIcon />
-          <NotificationBell placement="top-left" />
-          <button
-            aria-label="Change password"
-            onClick={() => setChangePasswordOpen(true)}
-            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            <KeyRound className="h-4 w-4" />
-          </button>
-          <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
-          <button
-            aria-label="Sign out"
-            onClick={handleLogout}
-            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+        <div className="mt-auto border-t border-border p-4">
+          <div className="flex items-center gap-3 px-1 mb-3">
+            <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center text-xs font-bold text-foreground flex-shrink-0 hover:ring-2 hover:ring-foreground/10 transition-all duration-150 cursor-default">
+              {(user?.name || user?.username)?.substring(0, 2).toUpperCase()}
+            </div>
+            {!collapsed && (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate text-foreground">{user?.name || user?.username}</p>
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">{user?.role}</p>
+              </div>
+            )}
+          </div>
+          <div className={cn("flex items-center gap-1", collapsed ? "flex-col" : "justify-center")}>
+            <AboutIcon />
+            <NotificationBell placement="top-left" />
+            <Button variant="ghost" size="icon" aria-label="Change password" onClick={() => setChangePasswordOpen(true)} className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" title="Change Password">
+              <KeyRound className="h-4 w-4" />
+            </Button>
+            <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-md flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
+            <Button variant="ghost" size="icon" aria-label="Sign out" onClick={handleLogout} className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" title="Sign out">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-      </aside>
+      </motion.aside>
 
-      <div className="flex flex-1 flex-col overflow-hidden dot-grid relative">
-
-        <header className="flex items-center justify-between border-b border-border p-4 md:px-8 h-16 bg-background/80 backdrop-blur-md z-10 md:hidden">
+      <div className="flex flex-1 flex-col overflow-hidden bg-background relative">
+        
+        <header className="flex items-center justify-between border-b border-muted/20 p-4 md:px-8 h-16 bg-background/50 backdrop-blur-md z-10 md:hidden">
           <div className="flex items-center gap-3">
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger asChild>
@@ -270,11 +280,11 @@ export function Layout() {
            </div>
            </header>
 
-        <div className="hidden md:flex items-center justify-center border-b border-border h-12 bg-card/80 backdrop-blur-md z-10">
+        <div className="hidden md:flex items-center justify-center border-b border-border h-12 bg-background/50 backdrop-blur-md z-10">
           <button
             type="button"
             onClick={() => setCommandOpen(true)}
-            className="flex items-center gap-3 h-8 w-full max-w-lg mx-8 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground hover:bg-accent hover:border-border transition-colors cursor-pointer"
+            className="flex items-center gap-3 h-8 w-full max-w-lg mx-8 rounded-lg border border-border bg-card px-3 text-sm text-muted-foreground hover:bg-accent hover:border-foreground/20 transition-colors cursor-pointer"
           >
             <Search className="h-3.5 w-3.5 shrink-0" />
             <span className="flex-1 text-left">Search reviews, navigate...</span>
@@ -295,7 +305,7 @@ export function Layout() {
           </button>
         </div>
 
-        <main id="main-content" className="flex-1 overflow-auto px-4 pt-2 pb-4 md:px-6 md:pt-3 md:pb-6">
+         <main id="main-content" className="flex-1 overflow-auto px-4 pt-2 pb-4 md:px-6 md:pt-3 md:pb-6">
           <Outlet />
         </main>
       </div>

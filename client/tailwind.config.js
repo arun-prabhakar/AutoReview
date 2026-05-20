@@ -12,29 +12,12 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: [
-          "-apple-system",
-          "BlinkMacSystemFont",
-          "SF Pro Text",
-          "SF Pro Display",
-          "Helvetica Neue",
-          "Arial",
-          "sans-serif",
-        ],
-        mono: [
-          "ui-monospace",
-          "SF Mono",
-          "SFMono-Regular",
-          "Menlo",
-          "Monaco",
-          "Consolas",
-          "monospace",
-        ],
+        sans: ["Geist", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["Geist Mono", "IBM Plex Mono", "ui-monospace", "monospace"],
       },
       letterSpacing: {
         display: "-0.05em",
         heading: "-0.025em",
-        category: "0.08em",
       },
       colors: {
         border: "hsl(var(--border))",
@@ -76,28 +59,15 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        /* Purple accent system */
-        "purple-accent": "hsl(var(--purple-accent))",
-        "purple-dim": "hsl(var(--purple-dim))",
-        /* Semantic icon colors */
-        "icon-messages": "#60a5fa",
-        "icon-data-sync": "#4ade80",
-        "icon-data-webhook": "#fb923c",
-        "icon-delay-wait": "#f472b6",
-        "icon-delay-time": "#f87171",
-        "icon-flow-branch": "#2dd4bf",
-        "icon-flow-enroll": "#818cf8",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-        badge: "20px",
       },
       boxShadow: {
-        card: "0 0 0 1px hsl(var(--border))",
-        panel: "0 1px 3px rgba(0,0,0,0.4), 0 0 0 1px hsl(var(--border))",
-        "focus-ring": "0 0 0 2px hsl(var(--ring) / 0.5)",
+        card: "oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px",
+        "focus-ring": "lab(100 0 0) 0px 0px 0px 2px",
       },
     },
   },

@@ -8,8 +8,7 @@
       "PowerShell(Get-ChildItem \"D:\\\\Personal\\\\IdeaProjects\\\\AutoReview\\\\client\\\\src\" -Recurse | ForEach-Object { $_.FullName })",
       "Bash(Get-ChildItem -Path \"D:\\\\Personal\\\\IdeaProjects\\\\AutoReview\" -Directory)",
       "Bash(Select-Object Name)",
-      "Bash(xargs grep -l \"status.*failed\\\\|status.*=.*'failed'\\\\|status.*=.*\\\\\"failed\\\\\"\")",
-      "Bash(npm run *)"
+      "Bash(xargs grep -l \"status.*failed\\\\|status.*=.*'failed'\\\\|status.*=.*\\\\\"failed\\\\\"\")"
     ]
   }
 }
