@@ -262,6 +262,14 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS llm_model TEXT`,
     ],
   },
+  {
+    id: "008",
+    description: "Allow re-reviews by making commit uniqueness partial (base reviews only)",
+    sql: [
+      `DROP INDEX IF EXISTS idx_reviews_repo_commit`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_repo_commit ON reviews(repository_id, commit_hash) WHERE parent_review_id IS NULL`,
+    ],
+  },
 ];
 
 function buildTimestampMigrations(): string[] {

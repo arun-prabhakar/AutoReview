@@ -176,27 +176,39 @@ export async function generateDiffOverview(
   diff: string,
   commit: CommitInfo,
   repo: RepositoryConfig,
-  provider: ProviderConfig
+  provider: ProviderConfig,
+  findings?: RawFinding[]
 ): Promise<string> {
   const truncated = diff.length > 8000;
   const snippet = truncated ? diff.slice(0, 8000) : diff;
 
-  const prompt = `You are writing a one-line summary for a code review.
+  const topFindings = (findings ?? [])
+    .filter((f) => f.risk_level === "must_fix" || f.risk_level === "should_fix_soon")
+    .slice(0, 4)
+    .map((f) => `- [${f.risk_level}] ${f.summary} (${f.file_path}${f.line_number ? `:${f.line_number}` : ""})`)
+    .join("\n");
 
-Given the git diff below, write ONE complete, concise sentence (max 15 words) describing what this change accomplishes.
+  const prompt = `You are writing an AI overview section for a code review report.
 
-Rules:
-- Start with an active verb (Add, Fix, Remove, Refactor, Update, Implement, etc.)
-- Do NOT start with "This changeset", "This PR", "This commit", or similar phrases
-- Focus on WHAT was done, not HOW
-- Plain text only, no markdown
-- The sentence MUST be complete and grammatical — never trail off or end mid-thought
-- End with a period
+Given the git diff and review findings below, write a structured overview with exactly three sections. Each section must start with its label on its own line in ALL CAPS, followed by the content on the next line(s). Use plain text only — no markdown, no bullet symbols, no asterisks.
+
+CRITICAL: Every sentence must be COMPLETE. Never truncate or trail off mid-sentence. Each section must end with a complete sentence ending with a period.
+
+Sections:
+CHANGE SUMMARY
+Write 2-3 complete sentences describing what this change does and why. Be specific about files or systems touched.
+
+SAFETY ASSESSMENT
+Write 2-3 complete sentences on the risk level based on the findings. Reference specific issues if present. If no issues, say the change looks safe.
+
+RECOMMENDATION
+Write 1-2 complete sentences with a clear action: approve, approve with minor changes, or block merge. Be direct.
 
 Commit: ${commit.hash.substring(0, 12)}
 Message: ${commit.message}
 Repository: ${repo.name}
 Branch: ${repo.branch}
+${topFindings ? `\nKey Findings:\n${topFindings}` : "\nFindings: None"}
 
 Diff:
 ${snippet}`;
@@ -206,14 +218,11 @@ ${snippet}`;
   const response = await client.chat.completions.create({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 200,
+    max_tokens: 1024,
     temperature: 0.2,
   });
 
-  const raw = response.choices?.[0]?.message?.content?.trim() || "";
-  if (!raw) return "";
-  const overview = raw.endsWith(".") ? raw : raw + ".";
-  return overview;
+  return response.choices?.[0]?.message?.content?.trim() || "";
 }
 
 export function extractFilePaths(diff: string): string {
