@@ -473,10 +473,11 @@ AutoReview`;
                 <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">AI Overview</p>
                 {aiOverview.split(/\n\n+/).map((block, i) => {
                   const lines = block.trim().split("\n");
-                  const isLabel = lines[0] === lines[0].toUpperCase() && lines[0].length < 40;
+                  const firstLine = lines[0] ?? "";
+                  const isLabel = firstLine.length > 0 && firstLine === firstLine.toUpperCase() && firstLine.length < 40;
                   return isLabel && lines.length > 1 ? (
                     <div key={i}>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">{lines[0]}</p>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">{firstLine}</p>
                       <p className="text-sm leading-relaxed text-foreground">{lines.slice(1).join(" ")}</p>
                     </div>
                   ) : (

@@ -138,7 +138,7 @@ export function Layout() {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
   const [open, setOpen] = useState(false);
-  const [sidebarHidden, setSidebarHidden] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -174,51 +174,50 @@ export function Layout() {
       <ForcedPasswordChange />
       <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-      {!sidebarHidden && (
-        <aside className="hidden flex-shrink-0 w-12 border-r border-border bg-card md:flex md:flex-col z-20 items-center py-4">
-          <img src="/favicon.svg" alt="" className="h-8 w-8 mb-6" />
+      <aside
+        className={cn(
+          "hidden flex-shrink-0 border-r border-border bg-card md:flex md:flex-col z-20 transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]",
+          sidebarCollapsed ? "w-12 items-center py-4" : "w-56 py-4"
+        )}
+      >
+        <div className={cn("flex items-center w-full px-3 mb-4", sidebarCollapsed ? "justify-center" : "gap-3")}>
+          <img src="/favicon.svg" alt="" className="h-8 w-8 flex-shrink-0" />
+          {!sidebarCollapsed && (
+            <span className="text-lg font-bold tracking-display text-foreground truncate">Auto<span className="text-muted-foreground">Review</span></span>
+          )}
+        </div>
 
-          <div className="flex-1 flex flex-col items-center gap-1 w-full px-2">
-            <NavLinks collapsed />
-          </div>
+        <div className={cn("flex-1 flex flex-col gap-1 w-full", sidebarCollapsed ? "items-center px-2" : "px-3")}>
+          <NavLinks collapsed={sidebarCollapsed} />
+        </div>
 
-          <div className="flex flex-col items-center gap-1 w-full px-2 mt-auto">
-            <button
-              aria-label="Hide sidebar"
-              onClick={() => setSidebarHidden(true)}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <PanelLeftClose className="h-4 w-4" />
-            </button>
-            <AboutIcon />
-            <NotificationBell placement="top-left" />
-            <button
-              aria-label="Change password"
-              onClick={() => setChangePasswordOpen(true)}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            >
-              <KeyRound className="h-4 w-4" />
-            </button>
-            <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
-            <button
-              aria-label="Sign out"
-              onClick={handleLogout}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </aside>
-      )}
-      {sidebarHidden && (
-        <button
-          aria-label="Show sidebar"
-          onClick={() => setSidebarHidden(false)}
-          className="hidden md:flex items-center justify-center w-8 h-12 border-r border-b border-border bg-card rounded-br-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors absolute top-0 left-0 z-20"
-        >
-          <PanelLeft className="h-4 w-4" />
-        </button>
-      )}
+        <div className={cn("flex flex-col gap-1 w-full mt-auto", sidebarCollapsed ? "items-center px-2" : "px-3")}>
+          <button
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            {sidebarCollapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+          <AboutIcon />
+          <NotificationBell placement="top-left" />
+          <button
+            aria-label="Change password"
+            onClick={() => setChangePasswordOpen(true)}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            <KeyRound className="h-4 w-4" />
+          </button>
+          <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
+          <button
+            aria-label="Sign out"
+            onClick={handleLogout}
+            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+      </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden dot-grid relative">
 
