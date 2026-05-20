@@ -147,8 +147,10 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     llm_model: ctx.llmModel ?? null,
   });
 
+  logger.info(`[executeReview] createReview result: reviewId=${reviewId}, created=${created}, parentReviewId=${parentReviewId || "none"}`);
+
   if (!created) {
-    logger.warn(`Re-review blocked: duplicate review for ${ctx.dedupKey} — unique index may need migration 008`);
+    logger.warn(`[executeReview] BLOCKED — createReview returned created=false for reviewId=${reviewId}, dedupKey=${ctx.dedupKey}. Unique index may be blocking re-review. Check migration 008.`);
     const existing = await findExistingReview(ctx.repo.id, ctx.dedupKey);
     if (existing) {
       const findings = await findFindingsByReviewId(existing.id);
@@ -370,7 +372,9 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
   );
 
   const dedupKey = commit.hash;
+  logger.info(`[runManualReview] dedupKey=${dedupKey}, force=${force}, repo=${repo.name}`);
   const dedupResult = await performDedup(repositoryId, dedupKey, force);
+  logger.info(`[runManualReview] dedupResult=${JSON.stringify({ action: dedupResult.action, parentReviewId: dedupResult.parentReviewId })}`);
   if (dedupResult.action === "cached") return { review: dedupResult.review, findings: dedupResult.findings, cached: true, reviewId: dedupResult.review.id };
   if (dedupResult.action === "in_progress") return { review: dedupResult.review, findings: [], cached: false, message: "Review already in progress" };
 
@@ -446,15 +450,19 @@ async function notifyReviewComplete(
 }
 
 export async function rerunReview(reviewId: string, createdBy?: string) {
+  logger.info(`[rerunReview] START — reviewId=${reviewId}, createdBy=${createdBy || "none"}`);
   const review = await get<{ id: string; repository_id: string; commit_hash: string; review_mode: string }>(
     "SELECT id, repository_id, commit_hash, review_mode FROM reviews WHERE id = $1", [reviewId]
   );
   if (!review) throw new NotFoundError("Review not found");
+  logger.info(`[rerunReview] Found review — repo=${review.repository_id}, hash=${review.commit_hash}, mode=${review.review_mode}`);
 
   if (review.review_mode === "pr") {
     const parts = review.commit_hash.split(":");
     const prId = parts[1];
+    logger.info(`[rerunReview] PR mode — prId=${prId}`);
     return runPrReview(review.repository_id, prId, true, createdBy);
   }
+  logger.info(`[rerunReview] Manual mode — commitHash=${review.commit_hash}`);
   return runManualReview(review.repository_id, review.commit_hash, true, createdBy);
 }

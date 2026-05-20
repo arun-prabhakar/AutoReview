@@ -215,6 +215,8 @@ ${snippet}`;
 
   const client = getOpenAIClient(provider);
 
+  logger.info(`[generateDiffOverview] model=${repo.llm_model}, diffLength=${snippet.length}, findingsCount=${findings?.length ?? 0}`);
+
   const response = await client.chat.completions.create({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
@@ -222,7 +224,12 @@ ${snippet}`;
     temperature: 0.2,
   });
 
-  return response.choices?.[0]?.message?.content?.trim() || "";
+  const raw = response.choices?.[0]?.message?.content?.trim() || "";
+  const usage = response.usage;
+  logger.info(`[generateDiffOverview] response length=${raw.length}, tokens={prompt=${usage?.prompt_tokens}, completion=${usage?.completion_tokens}, total=${usage?.total_tokens}}`);
+  logger.info(`[generateDiffOverview] OUTPUT:\n${raw}`);
+
+  return raw;
 }
 
 export function extractFilePaths(diff: string): string {
