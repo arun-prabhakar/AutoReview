@@ -148,6 +148,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
   });
 
   if (!created) {
+    logger.warn(`Re-review blocked: duplicate review for ${ctx.dedupKey} — unique index may need migration 008`);
     const existing = await findExistingReview(ctx.repo.id, ctx.dedupKey);
     if (existing) {
       const findings = await findFindingsByReviewId(existing.id);

@@ -199,7 +199,7 @@ async function createIndexes(pool: Pool): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_share_tokens_review ON share_tokens(review_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_status ON reviews(repository_id, status)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_created_at ON reviews(created_at)`);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_repo_commit ON reviews(repository_id, commit_hash)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_repo_commit ON reviews(repository_id, commit_hash) WHERE parent_review_id IS NULL`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_risk_disposition ON findings(risk_level, disposition)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
