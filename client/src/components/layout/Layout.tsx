@@ -1,9 +1,9 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, Users, KeyRound, BarChart3, Search } from "lucide-react";
+import { Menu, LogOut, LayoutDashboard, FileSearch, Settings, Users, KeyRound, BarChart3, Search, PanelLeftClose, PanelLeft } from "lucide-react";
 import { useState, useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
@@ -17,44 +17,47 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { AboutIcon } from "@/components/AboutIcon";
 import { CommandPalette } from "@/components/CommandPalette";
 
-const allNavItems: { to: string; label: string; icon: LucideIcon; roles: string[]; preload: string }[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "user"], preload: "Dashboard" },
-  { to: "/reviews/manual", label: "Manual Review", icon: FileSearch, roles: ["admin", "user"], preload: "ManualReview" },
-  { to: "/analytics", label: "Analytics", icon: BarChart3, roles: ["admin"], preload: "Analytics" },
-  { to: "/users", label: "Users", icon: Users, roles: ["admin"], preload: "Users" },
-  { to: "/settings", label: "Settings", icon: Settings, roles: ["admin"], preload: "Settings" },
+const allNavItems: { to: string; label: string; icon: LucideIcon; color: string; roles: string[]; preload: string }[] = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, color: "text-purple-accent", roles: ["admin", "user"], preload: "Dashboard" },
+  { to: "/reviews/manual", label: "Manual Review", icon: FileSearch, color: "text-blue-400", roles: ["admin", "user"], preload: "ManualReview" },
+  { to: "/analytics", label: "Analytics", icon: BarChart3, color: "text-emerald-400", roles: ["admin"], preload: "Analytics" },
+  { to: "/users", label: "Users", icon: Users, color: "text-amber-400", roles: ["admin"], preload: "Users" },
+  { to: "/settings", label: "Settings", icon: Settings, color: "text-rose-400", roles: ["admin"], preload: "Settings" },
 ];
 
 function NavLinks({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const { user } = useSelector((state: RootState) => state.auth);
+  const navigate = useNavigate();
+  const location = window.location;
   const visibleItems = allNavItems.filter((item) => user && item.roles.includes(user.role));
 
   return (
     <nav className="flex flex-col gap-1">
       {visibleItems.map((item) => {
         const Icon = item.icon;
+        const isActive = item.to === "/" ? location.pathname === "/" : location.pathname.startsWith(item.to);
         return (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            onClick={onNavigate}
-            onMouseEnter={() => preloadPage(item.preload as Parameters<typeof preloadPage>[0])}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 group",
+            <button
+              key={item.to}
+              onClick={() => { navigate(item.to); onNavigate?.(); }}
+              onMouseEnter={() => preloadPage(item.preload as Parameters<typeof preloadPage>[0])}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200 group w-full",
                 collapsed && "justify-center px-0 h-9 w-9 mx-auto",
                 isActive
                   ? "bg-purple-dim text-purple-accent"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )
-            }
-            title={collapsed ? item.label : undefined}
-          >
-            <Icon className={cn("h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110", collapsed && "h-[18px] w-[18px]")} />
-            {!collapsed && <span>{item.label}</span>}
-          </NavLink>
-        );
+              )}
+              title={collapsed ? item.label : undefined}
+            >
+              <Icon className={cn(
+                "h-4 w-4 flex-shrink-0 transition-transform group-hover:scale-110",
+                collapsed && "h-[18px] w-[18px]",
+                !isActive && item.color
+              )} />
+              {!collapsed && <span>{item.label}</span>}
+            </button>
+          );
       })}
     </nav>
   );
@@ -135,6 +138,7 @@ export function Layout() {
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
   const [open, setOpen] = useState(false);
+  const [sidebarHidden, setSidebarHidden] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
 
@@ -170,33 +174,51 @@ export function Layout() {
       <ForcedPasswordChange />
       <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-      <aside className="hidden flex-shrink-0 w-12 border-r border-border bg-card md:flex md:flex-col z-20 items-center py-4">
-        <img src="/favicon.svg" alt="" className="h-8 w-8 mb-6" />
+      {!sidebarHidden && (
+        <aside className="hidden flex-shrink-0 w-12 border-r border-border bg-card md:flex md:flex-col z-20 items-center py-4">
+          <img src="/favicon.svg" alt="" className="h-8 w-8 mb-6" />
 
-        <div className="flex-1 flex flex-col items-center gap-1 w-full px-2">
-          <NavLinks collapsed />
-        </div>
+          <div className="flex-1 flex flex-col items-center gap-1 w-full px-2">
+            <NavLinks collapsed />
+          </div>
 
-        <div className="flex flex-col items-center gap-1 w-full px-2 mt-auto">
-          <AboutIcon />
-          <NotificationBell placement="top-left" />
-          <button
-            aria-label="Change password"
-            onClick={() => setChangePasswordOpen(true)}
-            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          >
-            <KeyRound className="h-4 w-4" />
-          </button>
-          <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
-          <button
-            aria-label="Sign out"
-            onClick={handleLogout}
-            className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
-        </div>
-      </aside>
+          <div className="flex flex-col items-center gap-1 w-full px-2 mt-auto">
+            <button
+              aria-label="Hide sidebar"
+              onClick={() => setSidebarHidden(true)}
+              className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+            <AboutIcon />
+            <NotificationBell placement="top-left" />
+            <button
+              aria-label="Change password"
+              onClick={() => setChangePasswordOpen(true)}
+              className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            >
+              <KeyRound className="h-4 w-4" />
+            </button>
+            <AnimatedThemeToggler variant="circle" className="h-8 w-8 hover:bg-accent rounded-lg flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground [&>svg]:h-4 [&>svg]:w-4" />
+            <button
+              aria-label="Sign out"
+              onClick={handleLogout}
+              className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        </aside>
+      )}
+      {sidebarHidden && (
+        <button
+          aria-label="Show sidebar"
+          onClick={() => setSidebarHidden(false)}
+          className="hidden md:flex items-center justify-center w-8 h-12 border-r border-b border-border bg-card rounded-br-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors absolute top-0 left-0 z-20"
+        >
+          <PanelLeft className="h-4 w-4" />
+        </button>
+      )}
 
       <div className="flex flex-1 flex-col overflow-hidden dot-grid relative">
 

@@ -176,27 +176,44 @@ export async function generateDiffOverview(
   diff: string,
   commit: CommitInfo,
   repo: RepositoryConfig,
-  provider: ProviderConfig
+  provider: ProviderConfig,
+  findings?: RawFinding[]
 ): Promise<string> {
   const truncated = diff.length > 8000;
   const snippet = truncated ? diff.slice(0, 8000) : diff;
 
-  const prompt = `You are writing a one-line summary for a code review.
+  const mustFix = findings?.filter((f) => f.risk_level === "must_fix") ?? [];
+  const shouldFix = findings?.filter((f) => f.risk_level === "should_fix_soon") ?? [];
+  const total = findings?.length ?? 0;
 
-Given the git diff below, write ONE complete, concise sentence (max 15 words) describing what this change accomplishes.
+  const findingsSummary = total > 0
+    ? `Findings: ${mustFix.length} must-fix, ${shouldFix.length} should-fix-soon, ${total - mustFix.length - shouldFix.length} informational.\nTop issues:\n${(findings ?? []).slice(0, 4).map((f) => `- [${f.risk_level}] ${f.summary} in ${f.file_path}`).join("\n")}`
+    : "Findings: none — the diff appears clean.";
+
+  const prompt = `You are writing a structured code review summary for an engineering team. Be direct and specific.
+
+Write a review overview with EXACTLY THREE labeled sections separated by blank lines.
+
+Section 1 label: CHANGE SUMMARY
+Content: 2–3 sentences describing what was changed. Start with an active verb (Added, Refactored, Fixed, Removed, etc.). Name specific files, components, or systems. Do NOT start with "This changeset", "This PR", or "This commit".
+
+Section 2 label: SAFETY ASSESSMENT
+Content: 2–3 sentences analyzing risk. If findings exist, reference the most important ones by name and explain their potential impact. If clean, explain why it is safe. Do not just restate the count — reason about severity and scope.
+
+Section 3 label: RECOMMENDATION
+Content: Exactly one sentence. Choose one: "Safe to merge." OR "Fix the must-fix findings before merging." OR "No blockers, but review the should-fix findings before merging."
 
 Rules:
-- Start with an active verb (Add, Fix, Remove, Refactor, Update, Implement, etc.)
-- Do NOT start with "This changeset", "This PR", "This commit", or similar phrases
-- Focus on WHAT was done, not HOW
-- Plain text only, no markdown
-- The sentence MUST be complete and grammatical — never trail off or end mid-thought
-- End with a period
+- Plain text only — no markdown, no asterisks, no bullet points
+- Write the label in ALL CAPS on its own line, then the content on the line(s) below
+- Total response must be under 220 words
+- Be specific, not generic
 
-Commit: ${commit.hash.substring(0, 12)}
-Message: ${commit.message}
 Repository: ${repo.name}
 Branch: ${repo.branch}
+Commit: ${commit.hash.substring(0, 12)}
+Commit message: ${commit.message}
+${findingsSummary}
 
 Diff:
 ${snippet}`;
@@ -206,14 +223,11 @@ ${snippet}`;
   const response = await client.chat.completions.create({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 200,
+    max_tokens: 600,
     temperature: 0.2,
   });
 
-  const raw = response.choices?.[0]?.message?.content?.trim() || "";
-  if (!raw) return "";
-  const overview = raw.endsWith(".") ? raw : raw + ".";
-  return overview;
+  return response.choices?.[0]?.message?.content?.trim() || "";
 }
 
 export function extractFilePaths(diff: string): string {
