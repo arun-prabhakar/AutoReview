@@ -254,4 +254,52 @@ describe("analyzeDiff", () => {
     expect(createMock).toHaveBeenCalledTimes(2);
     expect(createMock.mock.calls[1]?.[0]?.max_tokens).toBe(8192);
   });
+
+  it("should retry once when the first AI response cannot be parsed", async () => {
+    const validFindings = [{ file_index: 1, line_start: 5, title: "Missing guard", explanation: "Value may be undefined.", risk: "must_fix", suggested_fix: "Add a guard.", category: "correctness" }];
+    const createMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        choices: [{ finish_reason: "stop", message: { content: "[{\"file_index\":1,\"line_start\":5," } }],
+        usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
+      })
+      .mockResolvedValueOnce({
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify(validFindings) } }],
+        usage: { prompt_tokens: 11, completion_tokens: 12, total_tokens: 23 },
+      });
+
+    vi.doMock("openai", () => {
+      return {
+        default: class MockOpenAI {
+          chat = {
+            completions: {
+              create: createMock,
+            },
+          };
+        },
+      };
+    });
+
+    const { analyzeDiff } = await import("../services/review-engine.js");
+
+    const commit: CommitInfo = { hash: "abc123", message: "fix bug", author: { raw: "dev" }, date: "2024-01-01" };
+    const repo: RepositoryConfig = {
+      id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
+      branch: "main", strictness: "strict", llm_model: "gemini-flash-latest",
+      llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
+      review_mode: "auto", trigger_on_pr_update: false,
+      auto_review_enabled: true, poll_interval_minutes: 5, trigger_on_commit: true,
+      generate_email: true, post_to_bitbucket: false, notification_recipients: null,
+      include_commit_author: false, llm_provider: "google", llm_provider_id: "prov-1",
+      multi_pass_review: false,
+    };
+
+    const diff = "diff --git a/src/app.ts b/src/app.ts\n@@ -1 +1 @@\n-old\n+new";
+    const result = await analyzeDiff(diff, commit, repo, "Review this: {{diff}}\nFiles:\n{{file_paths}}", { apiBase: "https://api.example.com/v1", apiKey: "test-key" }, false);
+
+    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].file_path).toBe("src/app.ts");
+    expect(result.tokenUsage.total_tokens).toBe(37);
+  });
 });

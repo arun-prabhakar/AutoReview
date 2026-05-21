@@ -66,6 +66,12 @@ export type TokenUsage = {
 const MAX_ANALYSIS_TOKENS = 32768;
 const MIN_RETRY_TOKENS = 8192;
 
+type AnalysisCompletion = {
+  content: string;
+  tokenUsage: TokenUsage;
+  finishReason: string | null | undefined;
+};
+
 export class LlmResponseError extends Error {
   aiResponse: string;
 
@@ -108,16 +114,20 @@ export async function analyzeDiff(
 
   const client = getOpenAIClient(provider);
 
-  let response = await requestAnalysisCompletion(client, repo, prompt, repo.llm_max_tokens);
+  const initialResponse = await requestAnalysisCompletion(client, repo, prompt, repo.llm_max_tokens);
+  let response = initialResponse;
+  let totalUsage = initialResponse.tokenUsage;
 
-  if (response.finishReason === "length" && repo.llm_max_tokens < MAX_ANALYSIS_TOKENS) {
-    const retryTokens = Math.min(
-      Math.max(repo.llm_max_tokens * 2, MIN_RETRY_TOKENS),
-      MAX_ANALYSIS_TOKENS
-    );
+  try {
+    const findings = parseAnalysisFindings(response, changedFiles, repo.excluded_paths);
+    return buildAnalysisResult(findings, truncated, totalUsage, response.content, repo.excluded_paths);
+  } catch (error) {
+    if (!(error instanceof LlmResponseError)) throw error;
 
-    logger.warn("LLM response truncated; retrying with larger token budget", {
+    const retryTokens = retryTokenBudget(repo.llm_max_tokens);
+    logger.warn("LLM response invalid; retrying AI review once", {
       model: repo.llm_model,
+      error: error.message,
       originalMaxTokens: repo.llm_max_tokens,
       retryMaxTokens: retryTokens,
       contentLength: response.content.length,
@@ -127,22 +137,55 @@ export async function analyzeDiff(
     response = await requestAnalysisCompletion(
       client,
       repo,
-      `${prompt}\n\nIMPORTANT: Return complete JSON only. Keep each explanation and suggested_fix concise so the JSON array is not truncated. Use file_index values from Changed Files; do not repeat file paths.`,
+      retryPrompt(prompt),
       retryTokens
     );
+    totalUsage = addTokenUsage(totalUsage, response.tokenUsage);
   }
 
-  const { content, tokenUsage, finishReason } = response;
+  try {
+    const findings = parseAnalysisFindings(response, changedFiles, repo.excluded_paths);
+    return buildAnalysisResult(findings, truncated, totalUsage, response.content, repo.excluded_paths);
+  } catch (error) {
+    if (error instanceof LlmResponseError) {
+      throw new LlmResponseError(
+        error.message,
+        JSON.stringify(
+          [
+            { attempt: 1, response: initialResponse.content },
+            { attempt: 2, response: response.content, error: error.message },
+          ],
+          null,
+          2
+        )
+      );
+    }
+    throw error;
+  }
+}
 
-  if (finishReason === "length") {
+function parseAnalysisFindings(
+  response: AnalysisCompletion,
+  changedFiles: string[],
+  excludedPaths: string | null
+): RawFinding[] {
+  if (response.finishReason === "length") {
     throw new LlmResponseError(
-      `LLM response was truncated before a complete JSON review could be parsed. Increase max tokens for ${repo.llm_model} or reduce the diff size.`,
-      content
+      "LLM response was truncated before a complete JSON review could be parsed.",
+      response.content
     );
   }
 
-  const findings = filterExcludedPaths(parseFindingsStrict(content, changedFiles), repo.excluded_paths);
+  return filterExcludedPaths(parseFindingsStrict(response.content, changedFiles), excludedPaths);
+}
 
+function buildAnalysisResult(
+  findings: RawFinding[],
+  incomplete: boolean,
+  tokenUsage: TokenUsage,
+  aiResponse: string,
+  excludedPaths: string | null
+): { findings: RawFinding[]; incomplete: boolean; tokenUsage: TokenUsage; aiResponse: string } {
   logger.info("Findings parsed", {
     total: findings.length,
     riskBreakdown: {
@@ -150,10 +193,29 @@ export async function analyzeDiff(
       should_fix_soon: findings.filter(f => f.risk_level === "should_fix_soon").length,
       ignore: findings.filter(f => f.risk_level === "ignore").length,
     },
-    excludedPaths: repo.excluded_paths,
+    excludedPaths,
   });
 
-  return { findings, incomplete: truncated, tokenUsage, aiResponse: content };
+  return { findings, incomplete, tokenUsage, aiResponse };
+}
+
+function retryTokenBudget(currentMaxTokens: number): number {
+  return Math.min(
+    Math.max(currentMaxTokens * 2, MIN_RETRY_TOKENS),
+    MAX_ANALYSIS_TOKENS
+  );
+}
+
+function retryPrompt(prompt: string): string {
+  return `${prompt}\n\nIMPORTANT RETRY: The previous AI review response could not be parsed. Return one complete valid JSON array only. No markdown outside JSON. Keep explanation and suggested_fix concise. Use file_index values from Changed Files; do not repeat file paths.`;
+}
+
+function addTokenUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  return {
+    prompt_tokens: a.prompt_tokens + b.prompt_tokens,
+    completion_tokens: a.completion_tokens + b.completion_tokens,
+    total_tokens: a.total_tokens + b.total_tokens,
+  };
 }
 
 async function requestAnalysisCompletion(
@@ -161,7 +223,7 @@ async function requestAnalysisCompletion(
   repo: RepositoryConfig,
   prompt: string,
   maxTokens: number
-): Promise<{ content: string; tokenUsage: TokenUsage; finishReason: string | null | undefined }> {
+): Promise<AnalysisCompletion> {
   const response = await client.chat.completions.create({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],

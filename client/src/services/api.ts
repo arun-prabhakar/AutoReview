@@ -5,11 +5,23 @@ export function setOnUnauthorized(callback: () => void): void {
 }
 
 const TIMEOUT_MS = 30_000;
+const REVIEW_TIMEOUT_MS = 180_000;
 
-function fetchWithTimeout(path: string, init: RequestInit): Promise<Response> {
+type ApiRequestOptions = {
+  timeoutMs?: number;
+};
+
+function fetchWithTimeout(path: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  return fetch(path, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(path, { ...init, signal: controller.signal })
+    .catch((err) => {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new Error("Request timed out. The review may still be running; refresh the dashboard in a moment.");
+      }
+      throw err;
+    })
+    .finally(() => clearTimeout(timer));
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -31,46 +43,48 @@ async function handleResponse<T>(response: Response): Promise<T> {
 }
 
 export const api = {
-  async get<T = unknown>(path: string): Promise<T> {
-    const response = await fetchWithTimeout(path, { credentials: "include" });
+  async get<T = unknown>(path: string, options?: ApiRequestOptions): Promise<T> {
+    const response = await fetchWithTimeout(path, { credentials: "include" }, options?.timeoutMs);
     return handleResponse<T>(response);
   },
 
-  async post<T = unknown>(path: string, body: unknown): Promise<T> {
+  async post<T = unknown>(path: string, body: unknown, options?: ApiRequestOptions): Promise<T> {
     const response = await fetchWithTimeout(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify(body),
-    });
+    }, options?.timeoutMs);
     return handleResponse<T>(response);
   },
 
-  async put<T = unknown>(path: string, body: unknown): Promise<T> {
+  async put<T = unknown>(path: string, body: unknown, options?: ApiRequestOptions): Promise<T> {
     const response = await fetchWithTimeout(path, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify(body),
-    });
+    }, options?.timeoutMs);
     return handleResponse<T>(response);
   },
 
-  async patch<T = unknown>(path: string, body?: unknown): Promise<T> {
+  async patch<T = unknown>(path: string, body?: unknown, options?: ApiRequestOptions): Promise<T> {
     const response = await fetchWithTimeout(path, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: body ? JSON.stringify(body) : undefined,
-    });
+    }, options?.timeoutMs);
     return handleResponse<T>(response);
   },
 
-  async del<T = unknown>(path: string): Promise<T> {
+  async del<T = unknown>(path: string, options?: ApiRequestOptions): Promise<T> {
     const response = await fetchWithTimeout(path, {
       method: "DELETE",
       credentials: "include",
-    });
+    }, options?.timeoutMs);
     return handleResponse<T>(response);
   },
+
+  reviewTimeoutMs: REVIEW_TIMEOUT_MS,
 };

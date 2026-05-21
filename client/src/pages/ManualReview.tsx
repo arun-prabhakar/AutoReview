@@ -102,13 +102,13 @@ export default function ManualReview() {
           repository_id: repoId,
           commit_hash: commitHash,
           force,
-        });
+        }, { timeoutMs: api.reviewTimeoutMs });
       } else {
         data = await api.post<ReviewResult>("/api/reviews/pr", {
           repository_id: repoId,
           pr_id: prId,
           force,
-        });
+        }, { timeoutMs: api.reviewTimeoutMs });
       }
 
       if (data.cached && !force) {

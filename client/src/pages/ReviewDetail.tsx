@@ -57,7 +57,7 @@ export default function ReviewDetail() {
     if (!id) return;
     setRereviewing(true);
     try {
-      const result = await api.post<{ reviewId: string }>(`/api/reviews/${id}/rereview`, {});
+      const result = await api.post<{ reviewId: string }>(`/api/reviews/${id}/rereview`, {}, { timeoutMs: api.reviewTimeoutMs });
       toast({ title: "Re-review completed", description: "The new review is ready.", variant: "success" });
       navigate(`/reviews/${result.reviewId}`);
     } catch (err) {
