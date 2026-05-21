@@ -15,6 +15,7 @@ export type ReviewRow = {
   completed_at: string | null;
   created_by: string | null;
   ai_overview: string | null;
+  ai_response: string | null;
   parent_review_id: string | null;
   tokens_prompt: number | null;
   tokens_completion: number | null;
@@ -53,7 +54,7 @@ export async function findFindingsByReviewId(reviewId: string): Promise<FindingR
   return all<FindingRow>("SELECT * FROM findings WHERE review_id = $1 ORDER BY CASE risk_level WHEN 'must_fix' THEN 0 WHEN 'should_fix_soon' THEN 1 ELSE 2 END", [reviewId]);
 }
 
-export async function createReview(review: Omit<ReviewRow, "created_at" | "ai_overview">): Promise<{ id: string; created: boolean }> {
+export async function createReview(review: Omit<ReviewRow, "created_at" | "ai_overview" | "ai_response">): Promise<{ id: string; created: boolean }> {
   const result = await getPool().query(
     `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author, diff_text, pr_head_commit, llm_model)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
@@ -62,7 +63,10 @@ export async function createReview(review: Omit<ReviewRow, "created_at" | "ai_ov
     [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null, review.diff_text ?? null, review.pr_head_commit ?? null, review.llm_model ?? null]
   );
   const created = result.rows.length > 0;
-  return { id: created ? result.rows[0].id : review.id, created };
+  if (!created) {
+    throw new Error(`Failed to create review row for ${review.commit_hash}; a database conflict blocked insertion.`);
+  }
+  return { id: result.rows[0].id, created };
 }
 
 export async function updateReviewStatus(
@@ -71,12 +75,13 @@ export async function updateReviewStatus(
   errorMessage?: string,
   aiOverview?: string,
   tokenData?: { tokens_prompt: number; tokens_completion: number; tokens_total: number; estimated_cost: number },
-  failureCategory?: string
+  failureCategory?: string,
+  aiResponse?: string
 ): Promise<void> {
   const completedAt = status === "completed" || status === "failed" ? new Date().toISOString() : null;
   await run(
-    "UPDATE reviews SET status = $1, error_message = $2, completed_at = COALESCE($3, completed_at), ai_overview = COALESCE($4, ai_overview), tokens_prompt = COALESCE($5, tokens_prompt), tokens_completion = COALESCE($6, tokens_completion), tokens_total = COALESCE($7, tokens_total), estimated_cost = COALESCE($8, estimated_cost), failure_category = COALESCE($9, failure_category) WHERE id = $10",
-    [status, errorMessage || null, completedAt, aiOverview || null, tokenData?.tokens_prompt ?? null, tokenData?.tokens_completion ?? null, tokenData?.tokens_total ?? null, tokenData?.estimated_cost ?? null, failureCategory || null, id]
+    "UPDATE reviews SET status = $1, error_message = $2, completed_at = COALESCE($3, completed_at), ai_overview = COALESCE($4, ai_overview), ai_response = COALESCE($5, ai_response), tokens_prompt = COALESCE($6, tokens_prompt), tokens_completion = COALESCE($7, tokens_completion), tokens_total = COALESCE($8, tokens_total), estimated_cost = COALESCE($9, estimated_cost), failure_category = COALESCE($10, failure_category) WHERE id = $11",
+    [status, errorMessage || null, completedAt, aiOverview || null, aiResponse || null, tokenData?.tokens_prompt ?? null, tokenData?.tokens_completion ?? null, tokenData?.tokens_total ?? null, tokenData?.estimated_cost ?? null, failureCategory || null, id]
   );
 }
 

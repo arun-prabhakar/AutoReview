@@ -116,6 +116,7 @@ async function createTables(pool: Pool): Promise<void> {
       completed_at TIMESTAMPTZ,
       created_by TEXT,
       ai_overview TEXT,
+      ai_response TEXT,
       parent_review_id TEXT,
       tokens_prompt INTEGER,
       tokens_completion INTEGER,
@@ -199,7 +200,21 @@ async function createIndexes(pool: Pool): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_share_tokens_review ON share_tokens(review_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_status ON reviews(repository_id, status)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_created_at ON reviews(created_at)`);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_reviews_repo_commit ON reviews(repository_id, commit_hash)`);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = current_schema()
+          AND tablename = 'reviews'
+          AND indexname = 'idx_reviews_repo_commit'
+          AND indexdef ILIKE 'CREATE UNIQUE INDEX%'
+      ) THEN
+        DROP INDEX idx_reviews_repo_commit;
+      END IF;
+    END$$
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_reviews_repo_commit ON reviews(repository_id, commit_hash)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_review ON findings(review_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_findings_risk_disposition ON findings(risk_level, disposition)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_prompt_templates_strictness ON prompt_templates(strictness)`);
@@ -260,6 +275,39 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
     description: "Add llm_model to reviews",
     sql: [
       `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS llm_model TEXT`,
+    ],
+  },
+  {
+    id: "008",
+    description: "Drop unique index on reviews(repo, commit) to allow re-reviews",
+    sql: [
+      `DROP INDEX IF EXISTS idx_reviews_repo_commit`,
+      `CREATE INDEX IF NOT EXISTS idx_reviews_repo_commit ON reviews(repository_id, commit_hash)`,
+    ],
+  },
+  {
+    id: "008b",
+    description: "Ensure reviews(repo, commit) index is non-unique",
+    sql: [
+      `DROP INDEX IF EXISTS idx_reviews_repo_commit`,
+      `CREATE INDEX IF NOT EXISTS idx_reviews_repo_commit ON reviews(repository_id, commit_hash)`,
+    ],
+  },
+  {
+    id: "008c",
+    description: "Drop unique reviews(repo, commit) constraint",
+    sql: [
+      `ALTER TABLE reviews DROP CONSTRAINT IF EXISTS reviews_repository_id_commit_hash_key`,
+      `DROP INDEX IF EXISTS reviews_repository_id_commit_hash_key`,
+      `DROP INDEX IF EXISTS idx_reviews_repo_commit`,
+      `CREATE INDEX IF NOT EXISTS idx_reviews_repo_commit ON reviews(repository_id, commit_hash)`,
+    ],
+  },
+  {
+    id: "009",
+    description: "Add raw AI response storage to reviews",
+    sql: [
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS ai_response TEXT`,
     ],
   },
 ];

@@ -127,6 +127,7 @@ export default function Dashboard() {
 
   const FAILURE_LABELS: Record<string, string> = {
     llm_context_exceeded: "Context Exceeded",
+    llm_response_invalid: "Invalid LLM Response",
     llm_rate_limited: "LLM Rate Limited",
     llm_auth_failed: "LLM Auth Failed",
     llm_unavailable: "LLM Unavailable",

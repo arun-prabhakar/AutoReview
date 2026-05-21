@@ -58,9 +58,12 @@ authRouter.post("/login", async (req, res) => {
     const token = generateToken(user);
     logger.audit("user_login", { userId: user.id, username: user.username, role: user.role });
 
+    const forwardedProto = req.headers["x-forwarded-proto"];
+    const isHttps = req.secure || forwardedProto === "https" || (Array.isArray(forwardedProto) && forwardedProto.includes("https"));
+
     res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: isHttps,
       sameSite: "lax",
       maxAge: COOKIE_MAX_AGE,
       path: "/api",

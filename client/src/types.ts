@@ -13,6 +13,7 @@ export interface Review {
   created_by: string | null;
   repository_name?: string;
   ai_overview?: string | null;
+  ai_response?: string | null;
   findings?: Finding[];
   parent_review_id?: string | null;
   tokens_prompt?: number | null;

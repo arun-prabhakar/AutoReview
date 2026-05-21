@@ -10,13 +10,13 @@ export const FIXED_OUTPUT_FORMAT = `
 
 Respond with a single valid JSON array of findings only. Do NOT include any other text, markdown, or explanation outside the JSON array. Sort findings by risk: \`must_fix\` first, then \`should_fix_soon\`, then \`ignore\`.
 
+Use the 1-based \`file_index\` from the Changed Files list in the prompt. Do not repeat file paths, finding ids, repository, branch, commit hash, or line end values in the response.
+
 \`\`\`json
 [
   {
-    "id": "F001",
-    "file": "<file path>",
+    "file_index": <integer from Changed Files>,
     "line_start": <integer or null>,
-    "line_end": <integer or null>,
     "category": "<security | performance | correctness | maintainability | style>",
     "risk": "<must_fix | should_fix_soon | ignore>",
     "title": "<concise one-line summary>",
@@ -63,6 +63,19 @@ export type TokenUsage = {
   total_tokens: number;
 };
 
+const MAX_ANALYSIS_TOKENS = 32768;
+const MIN_RETRY_TOKENS = 8192;
+
+export class LlmResponseError extends Error {
+  aiResponse: string;
+
+  constructor(message: string, aiResponse: string) {
+    super(message);
+    this.name = "LlmResponseError";
+    this.aiResponse = aiResponse;
+  }
+}
+
 export async function analyzeDiff(
   diff: string,
   commit: CommitInfo,
@@ -71,10 +84,11 @@ export async function analyzeDiff(
   provider: ProviderConfig,
   truncated = false,
   projectContext?: string
-): Promise<{ findings: RawFinding[]; incomplete: boolean; tokenUsage: TokenUsage }> {
+): Promise<{ findings: RawFinding[]; incomplete: boolean; tokenUsage: TokenUsage; aiResponse: string }> {
+  const changedFiles = extractFilePathList(diff);
   let prompt = promptTemplate
     .replace("{{diff}}", diff)
-    .replace("{{file_paths}}", extractFilePaths(diff))
+    .replace("{{file_paths}}", formatChangedFilesForPrompt(changedFiles))
     .replace("{{strictness_level}}", repo.strictness)
     .replace("{{excluded_paths}}", repo.excluded_paths || "none")
     .replace("{{commit_hash}}", commit.hash)
@@ -94,30 +108,40 @@ export async function analyzeDiff(
 
   const client = getOpenAIClient(provider);
 
-  const response = await client.chat.completions.create({
-    model: repo.llm_model,
-    messages: [{ role: "user", content: prompt }],
-    max_tokens: repo.llm_max_tokens,
-    temperature: repo.llm_temperature,
-  });
+  let response = await requestAnalysisCompletion(client, repo, prompt, repo.llm_max_tokens);
 
-  const content = response.choices?.[0]?.message?.content || "[]";
+  if (response.finishReason === "length" && repo.llm_max_tokens < MAX_ANALYSIS_TOKENS) {
+    const retryTokens = Math.min(
+      Math.max(repo.llm_max_tokens * 2, MIN_RETRY_TOKENS),
+      MAX_ANALYSIS_TOKENS
+    );
 
-  const tokenUsage: TokenUsage = {
-    prompt_tokens: response.usage?.prompt_tokens ?? 0,
-    completion_tokens: response.usage?.completion_tokens ?? 0,
-    total_tokens: response.usage?.total_tokens ?? 0,
-  };
+    logger.warn("LLM response truncated; retrying with larger token budget", {
+      model: repo.llm_model,
+      originalMaxTokens: repo.llm_max_tokens,
+      retryMaxTokens: retryTokens,
+      contentLength: response.content.length,
+      tokens: response.tokenUsage.total_tokens,
+    });
 
-  logger.info("LLM response received", {
-    model: repo.llm_model,
-    contentLength: content.length,
-    tokens: tokenUsage.total_tokens,
-    finishReason: response.choices?.[0]?.finish_reason,
-    contentPreview: content.substring(0, 300),
-  });
+    response = await requestAnalysisCompletion(
+      client,
+      repo,
+      `${prompt}\n\nIMPORTANT: Return complete JSON only. Keep each explanation and suggested_fix concise so the JSON array is not truncated. Use file_index values from Changed Files; do not repeat file paths.`,
+      retryTokens
+    );
+  }
 
-  const findings = filterExcludedPaths(parseFindings(content), repo.excluded_paths);
+  const { content, tokenUsage, finishReason } = response;
+
+  if (finishReason === "length") {
+    throw new LlmResponseError(
+      `LLM response was truncated before a complete JSON review could be parsed. Increase max tokens for ${repo.llm_model} or reduce the diff size.`,
+      content
+    );
+  }
+
+  const findings = filterExcludedPaths(parseFindingsStrict(content, changedFiles), repo.excluded_paths);
 
   logger.info("Findings parsed", {
     total: findings.length,
@@ -129,7 +153,40 @@ export async function analyzeDiff(
     excludedPaths: repo.excluded_paths,
   });
 
-  return { findings, incomplete: truncated, tokenUsage };
+  return { findings, incomplete: truncated, tokenUsage, aiResponse: content };
+}
+
+async function requestAnalysisCompletion(
+  client: OpenAI,
+  repo: RepositoryConfig,
+  prompt: string,
+  maxTokens: number
+): Promise<{ content: string; tokenUsage: TokenUsage; finishReason: string | null | undefined }> {
+  const response = await client.chat.completions.create({
+    model: repo.llm_model,
+    messages: [{ role: "user", content: prompt }],
+    max_tokens: maxTokens,
+    temperature: repo.llm_temperature,
+  });
+
+  const content = response.choices?.[0]?.message?.content || "[]";
+  const tokenUsage: TokenUsage = {
+    prompt_tokens: response.usage?.prompt_tokens ?? 0,
+    completion_tokens: response.usage?.completion_tokens ?? 0,
+    total_tokens: response.usage?.total_tokens ?? 0,
+  };
+  const finishReason = response.choices?.[0]?.finish_reason;
+
+  logger.info("LLM response received", {
+    model: repo.llm_model,
+    maxTokens,
+    contentLength: content.length,
+    tokens: tokenUsage.total_tokens,
+    finishReason,
+    contentPreview: content.substring(0, 300),
+  });
+
+  return { content, tokenUsage, finishReason };
 }
 
 const DEFAULT_EXCLUSIONS = [
@@ -189,9 +246,10 @@ Rules:
 - Start with an active verb (Add, Fix, Remove, Refactor, Update, Implement, etc.)
 - Do NOT start with "This changeset", "This PR", "This commit", or similar phrases
 - Focus on WHAT was done, not HOW
-- Plain text only, no markdown
+- Plain text only, no markdown, no quotes around the sentence
 - The sentence MUST be complete and grammatical — never trail off or end mid-thought
 - End with a period
+- Output ONLY the summary sentence, nothing else
 
 Commit: ${commit.hash.substring(0, 12)}
 Message: ${commit.message}
@@ -206,41 +264,152 @@ ${snippet}`;
   const response = await client.chat.completions.create({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 200,
+    max_tokens: 100,
     temperature: 0.2,
   });
 
   const raw = response.choices?.[0]?.message?.content?.trim() || "";
-  if (!raw) return "";
-  const overview = raw.endsWith(".") ? raw : raw + ".";
-  return overview;
+  if (!raw) return fallbackOverview(commit, diff);
+
+  const finishReason = response.choices?.[0]?.finish_reason;
+
+  const cleaned = cleanOverviewText(raw, finishReason === "length");
+  return isUsableOverview(cleaned) ? cleaned : fallbackOverview(commit, diff);
+}
+
+/** Handles truncated LLM responses, strips formatting artifacts, and ensures clean sentence endings. */
+export function cleanOverviewText(raw: string, wasTruncated: boolean): string {
+  let text = raw.trim().replace(/\s+/g, " ");
+
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+    text = text.slice(1, -1).trim();
+  }
+
+  text = text.replace(/^\*{1,2}(.+)\*{1,2}$/, "$1").trim();
+  text = text.replace(/^\s*(?:[-*]|\d+[.)])\s+/, "").trim();
+
+  const prefixes = [
+    /^(?:here(?:'s| is) (?:the |a )?(?:summary|overview|description)[,:]?\s*)/i,
+    /^(?:summary|overview)[,:]?\s*/i,
+  ];
+  for (const prefix of prefixes) {
+    text = text.replace(prefix, "").trim();
+  }
+
+  if (wasTruncated || !/[.!?]$/.test(text)) {
+    const lastPeriod = text.lastIndexOf(".");
+    if (lastPeriod > 0) {
+      text = text.substring(0, lastPeriod + 1).trim();
+    } else {
+      text = compactToWordBoundary(text, 140);
+      if (text && !/[.!?]$/.test(text)) {
+        text += ".";
+      }
+    }
+  }
+
+  return text;
+}
+
+export function isUsableOverview(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  if (!/[.!?]$/.test(normalized)) return false;
+  if (/[-,;:]\.?$/.test(normalized)) return false;
+
+  const withoutPunctuation = normalized.replace(/[.!?]+$/, "");
+  const words = withoutPunctuation.match(/[A-Za-z0-9][A-Za-z0-9']*/g) || [];
+  if (words.length < 4) return false;
+
+  const lastWord = words[words.length - 1] || "";
+  if (lastWord.length < 3) return false;
+  if (/\b(?:and|or|to|for|with|from|by|in|on|of|the|a|an)$/i.test(withoutPunctuation)) {
+    return false;
+  }
+
+  return true;
+}
+
+export function fallbackOverview(commit: CommitInfo, diff: string): string {
+  const subject = cleanCommitSubject(commit.message);
+  if (subject) return subject;
+
+  const files = extractFilePathList(diff);
+  if (files.length === 0) return "Update repository changes.";
+  if (files.length === 1) return `Update ${files[0]}.`;
+  return `Update ${files.length} files across the repository.`;
+}
+
+function cleanCommitSubject(message: string): string {
+  const subject = message.split("\n")[0]?.trim().replace(/\s+/g, " ") || "";
+  if (!subject) return "";
+
+  const cleaned = compactToWordBoundary(subject.replace(/[.!?]+$/, ""), 140);
+  if (!cleaned || /[-,;:]$/.test(cleaned)) return "";
+
+  const words = cleaned.match(/[A-Za-z0-9][A-Za-z0-9']*/g) || [];
+  if (words.length < 4) return "";
+
+  return `${cleaned}.`;
+}
+
+function compactToWordBoundary(text: string, maxLen: number): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+
+  const cutAt = trimmed.lastIndexOf(" ", maxLen);
+  return (cutAt > 0 ? trimmed.substring(0, cutAt) : trimmed.substring(0, maxLen)).trim();
 }
 
 export function extractFilePaths(diff: string): string {
+  return extractFilePathList(diff).join("\n");
+}
+
+function extractFilePathList(diff: string): string[] {
   const matches = diff.match(/^diff --git a\/(.+?) b\/(.+?)$/gm) || [];
-  return matches.map((m) => m.replace("diff --git a/", "").split(" b/")[0]).join("\n");
+  return matches.map((m) => m.replace("diff --git a/", "").split(" b/")[0]);
+}
+
+function formatChangedFilesForPrompt(files: string[]): string {
+  if (files.length === 0) return "none";
+  return files.map((file, index) => `${index + 1}. ${file}`).join("\n");
 }
 
 const RISK_ORDER: Record<string, number> = { must_fix: 0, should_fix_soon: 1, ignore: 2 };
 
-export function parseFindings(content: string): RawFinding[] {
-  const jsonStr = extractJsonArray(content);
-  if (!jsonStr) {
-    logger.warn("parseFindings: no JSON array found in LLM response", {
+export function parseFindings(content: string, changedFiles: string[] = []): RawFinding[] {
+  try {
+    return parseFindingsStrict(content, changedFiles);
+  } catch (err) {
+    if (err instanceof LlmResponseError) {
+      logger.warn("parseFindings: invalid LLM response", {
+        error: err.message,
+        contentPreview: err.aiResponse.substring(0, 500),
+      });
+      return [];
+    }
+    logger.warn("parseFindings: failed to parse LLM response", {
+      error: err instanceof Error ? err.message : String(err),
       contentPreview: content.substring(0, 500),
     });
     return [];
+  }
+}
+
+function parseFindingsStrict(content: string, changedFiles: string[]): RawFinding[] {
+  const jsonStr = extractJsonArray(content);
+  if (!jsonStr) {
+    throw new LlmResponseError("LLM response did not contain a JSON findings array.", content);
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(jsonStr);
   } catch (err) {
-    logger.warn("parseFindings: JSON.parse failed", {
-      error: err instanceof Error ? err.message : String(err),
-      matchedJson: jsonStr.substring(0, 300),
-    });
-    return [];
+    throw new LlmResponseError(
+      `LLM response contained invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      content
+    );
   }
 
   if (!Array.isArray(parsed)) {
@@ -252,8 +421,7 @@ export function parseFindings(content: string): RawFinding[] {
       }
     }
     if (!Array.isArray(parsed)) {
-      logger.warn("parseFindings: parsed result is not an array", { type: typeof parsed });
-      return [];
+      throw new LlmResponseError("LLM response JSON was not a findings array.", content);
     }
   }
 
@@ -263,26 +431,55 @@ export function parseFindings(content: string): RawFinding[] {
   }
 
   try {
-    const mapped: RawFinding[] = parsed.map((item: Record<string, unknown>) => ({
-      file_path: String(item.file ?? item.file_path ?? ""),
-      line_number: (item.line_start ?? item.line_number ?? null) as number | null,
-      summary: String(item.title ?? item.summary ?? ""),
-      explanation: String(item.explanation ?? ""),
-      risk_level: String(item.risk ?? item.risk_level ?? "ignore"),
-      suggested_fix: (item.suggested_fix as string | null) ?? null,
-      category: (item.category as string | null) ?? null,
-    }));
+    const mapped: RawFinding[] = parsed.map((item: Record<string, unknown>) => {
+      const filePath = resolveFindingFilePath(item, changedFiles);
+      if (!filePath) {
+        throw new Error("finding did not reference a valid changed file");
+      }
+
+      return {
+        file_path: filePath,
+        line_number: normalizeLineNumber(item.line_start ?? item.line_number),
+        summary: String(item.title ?? item.summary ?? ""),
+        explanation: String(item.explanation ?? ""),
+        risk_level: String(item.risk ?? item.risk_level ?? "ignore"),
+        suggested_fix: normalizeNullableString(item.suggested_fix),
+        category: normalizeNullableString(item.category),
+      };
+    });
 
     return mapped.sort(
       (a, b) => (RISK_ORDER[a.risk_level] ?? 3) - (RISK_ORDER[b.risk_level] ?? 3)
     );
   } catch (err) {
-    logger.warn("parseFindings: field mapping failed", {
-      error: err instanceof Error ? err.message : String(err),
-      firstItem: JSON.stringify(parsed[0]).substring(0, 300),
-    });
-    return [];
+    throw new LlmResponseError(
+      `LLM response findings could not be mapped: ${err instanceof Error ? err.message : String(err)}`,
+      content
+    );
   }
+}
+
+function resolveFindingFilePath(item: Record<string, unknown>, changedFiles: string[]): string {
+  const fileIndexValue = item.file_index ?? item.changed_file_index;
+  const fileIndex = typeof fileIndexValue === "number" ? fileIndexValue : Number(fileIndexValue);
+  if (Number.isInteger(fileIndex) && fileIndex >= 1 && fileIndex <= changedFiles.length) {
+    return changedFiles[fileIndex - 1];
+  }
+
+  // Backward compatibility for older stored prompts or providers that still echo a path.
+  return String(item.file ?? item.file_path ?? "");
+}
+
+function normalizeLineNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(n) ? n : null;
+}
+
+function normalizeNullableString(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value).trim();
+  return text ? text : null;
 }
 
 /**
@@ -345,6 +542,7 @@ const SPECIALIZED_PROMPTS: Record<string, string> = {
 export type MultiPassResult = {
   findings: RawFinding[];
   tokenUsage: TokenUsage;
+  aiResponse: string;
   passes: { focus: string; findings: number }[];
 };
 
@@ -359,6 +557,7 @@ export async function multiPassReview(
 ): Promise<MultiPassResult> {
   const passes: { focus: string; findings: number }[] = [];
   const allFindings: RawFinding[] = [];
+  const allResponses: { focus: string; response: string }[] = [];
   let totalUsage: TokenUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
   const focuses = Object.keys(SPECIALIZED_PROMPTS);
@@ -368,14 +567,14 @@ export async function multiPassReview(
       const specializedSuffix = `\n\n## Specialized Focus\n\n${SPECIALIZED_PROMPTS[focus]}\n\nOnly report findings relevant to this focus area. If no ${focus}-related issues exist, return an empty array [].`;
       const template = baseTemplate + specializedSuffix;
 
-      const { findings, tokenUsage } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext);
-      return { focus, findings, tokenUsage };
+      const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext);
+      return { focus, findings, tokenUsage, aiResponse };
     })
   );
 
   for (const result of results) {
     if (result.status === "fulfilled") {
-      const { focus, findings, tokenUsage } = result.value;
+      const { focus, findings, tokenUsage, aiResponse } = result.value;
       allFindings.push(...findings);
       totalUsage = {
         prompt_tokens: totalUsage.prompt_tokens + tokenUsage.prompt_tokens,
@@ -383,16 +582,27 @@ export async function multiPassReview(
         total_tokens: totalUsage.total_tokens + tokenUsage.total_tokens,
       };
       passes.push({ focus, findings: findings.length });
+      allResponses.push({ focus, response: aiResponse });
     } else {
       const focus = focuses[results.indexOf(result)];
       logger.warn(`Multi-pass ${focus} review failed`, { error: String(result.reason) });
+      if (result.reason instanceof LlmResponseError) {
+        const failedResponses = [
+          ...allResponses,
+          { focus, response: result.reason.aiResponse, error: result.reason.message },
+        ];
+        throw new LlmResponseError(
+          `Multi-pass ${focus} review returned invalid JSON and could not be parsed.`,
+          JSON.stringify(failedResponses, null, 2)
+        );
+      }
       passes.push({ focus, findings: 0 });
     }
   }
 
   const deduplicated = deduplicateFindings(allFindings);
 
-  return { findings: deduplicated, tokenUsage: totalUsage, passes };
+  return { findings: deduplicated, tokenUsage: totalUsage, passes, aiResponse: JSON.stringify(allResponses, null, 2) };
 }
 
 function deduplicateFindings(findings: RawFinding[]): RawFinding[] {

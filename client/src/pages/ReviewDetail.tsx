@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode } from "lucide-react";
+import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ReviewDetail() {
@@ -35,6 +35,9 @@ export default function ReviewDetail() {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [diffVisible, setDiffVisible] = useState(false);
+  const [aiResponseOpen, setAiResponseOpen] = useState(false);
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [aiResponseLoading, setAiResponseLoading] = useState(false);
 
   useEffect(() => {
     if (id) dispatch(fetchReviewDetail(id));
@@ -55,7 +58,7 @@ export default function ReviewDetail() {
     setRereviewing(true);
     try {
       const result = await api.post<{ reviewId: string }>(`/api/reviews/${id}/rereview`, {});
-      toast({ title: "Re-review started", description: "A new review is being generated.", variant: "success" });
+      toast({ title: "Re-review completed", description: "The new review is ready.", variant: "success" });
       navigate(`/reviews/${result.reviewId}`);
     } catch (err) {
       toast({ title: "Re-review failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
@@ -103,6 +106,23 @@ export default function ReviewDetail() {
     setTimeout(() => setShareCopied(false), 2000);
   };
 
+  const handleOpenAiResponse = async () => {
+    if (!id) return;
+    setAiResponseOpen(true);
+    if (aiResponse !== null) return;
+
+    setAiResponseLoading(true);
+    try {
+      const result = await api.get<{ ai_response: string }>(`/api/reviews/${id}/ai-response`);
+      setAiResponse(result.ai_response || "");
+    } catch (err) {
+      toast({ title: "Failed to load AI response", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+      setAiResponseOpen(false);
+    } finally {
+      setAiResponseLoading(false);
+    }
+  };
+
   if (loading) return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>;
   if (!review) return (
     <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -124,6 +144,14 @@ export default function ReviewDetail() {
   const repoName = String(review.repository_name || review.repository_id);
   const branch = String(review.branch || "N/A");
   const aiOverview = String(review.ai_overview || "Review completed.");
+  const formattedAiResponse = (() => {
+    if (!aiResponse) return "";
+    try {
+      return JSON.stringify(JSON.parse(aiResponse), null, 2);
+    } catch {
+      return aiResponse;
+    }
+  })();
 
   const totalFindings = findings.length;
   const worstRisk = grouped.must_fix.length > 0 ? "critical" : grouped.should_fix_soon.length > 0 ? "warning" : "clean";
@@ -165,6 +193,7 @@ export default function ReviewDetail() {
 
   const FAILURE_LABELS: Record<string, string> = {
     llm_context_exceeded: "LLM Context Exceeded",
+    llm_response_invalid: "Invalid LLM Response",
     llm_rate_limited: "LLM Rate Limited",
     llm_auth_failed: "LLM Auth Failed",
     llm_unavailable: "LLM Unavailable",
@@ -274,7 +303,14 @@ AutoReview`;
             {rereviewing ? "Re-reviewing..." : "Re-review"}
           </Button>
 
-      {user?.role === "admin" && (
+          {user?.role === "admin" && (
+            <Button variant="outline" size="sm" onClick={handleOpenAiResponse}>
+              <FileCode className="h-3.5 w-3.5 mr-1.5" />
+              AI Response
+            </Button>
+          )}
+
+          {user?.role === "admin" && (
             <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
               <Trash2 className="h-3.5 w-3.5 mr-1.5" />
               Delete
@@ -594,6 +630,47 @@ AutoReview`;
         </Card>
       )}
 
+      <Dialog open={aiResponseOpen} onOpenChange={setAiResponseOpen}>
+        <DialogContent className="sm:max-w-5xl h-[86vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileCode className="h-4 w-4" />
+              AI Response
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              Raw model output captured for this review. Only admins can view it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-secondary/50">
+            {aiResponseLoading ? (
+              <div className="p-4 space-y-2">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            ) : formattedAiResponse ? (
+              <div className="h-full max-h-full overflow-auto">
+                <pre className="min-w-max whitespace-pre p-4 text-xs font-mono leading-relaxed text-foreground">{formattedAiResponse}</pre>
+              </div>
+            ) : (
+              <p className="p-4 text-sm text-muted-foreground">No AI response was stored for this review.</p>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setAiResponseOpen(false)}>Close</Button>
+            <Button
+              onClick={() => {
+                navigator.clipboard.writeText(formattedAiResponse);
+                toast({ title: "AI response copied", variant: "success" });
+              }}
+              disabled={!formattedAiResponse}
+            >
+              Copy
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={shareOpen} onOpenChange={setShareOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -659,21 +736,41 @@ AutoReview`;
         </DialogContent>
       </Dialog>
 
-      <Dialog open={rereviewOpen} onOpenChange={setRereviewOpen}>
+      <Dialog open={rereviewOpen} onOpenChange={(open) => {
+        if (!rereviewing) setRereviewOpen(open);
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-4 w-4" />
-              Re-review
+              {rereviewing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+              {rereviewing ? (isPrReview ? "Reviewing PR" : "Reviewing Commit") : "Re-review"}
             </DialogTitle>
             <DialogDescription className="pt-1">
-              Trigger a new review for the same commit/PR. The previous review will be preserved in the history chain.
+              {rereviewing
+                ? `AutoReview is analyzing the latest ${isPrReview ? "PR" : "commit"} diff. This dialog will stay open until the review finishes.`
+                : "Trigger a new review for the same commit/PR. The previous review will be preserved in the history chain."}
             </DialogDescription>
           </DialogHeader>
+          {rereviewing && (
+            <div className="rounded-lg border border-border bg-secondary/60 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Review in progress</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Please keep this page open while the request completes.</p>
+                </div>
+              </div>
+            </div>
+          )}
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setRereviewOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRereviewOpen(false)} disabled={rereviewing}>Cancel</Button>
             <Button onClick={handleRereview} disabled={rereviewing}>
-              {rereviewing ? "Starting..." : "Start Re-review"}
+              {rereviewing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Reviewing...
+                </>
+              ) : "Start Re-review"}
             </Button>
           </DialogFooter>
         </DialogContent>

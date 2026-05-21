@@ -3,7 +3,7 @@ import { fetchCommitDiff, fetchPrDiff, fetchPrInfo, findPullRequestForCommit, po
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
-import { analyzeDiff, extractFilePaths, generateDiffOverview, multiPassReview, type RawFinding, type ProviderConfig } from "./review-engine.js";
+import { analyzeDiff, extractFilePaths, fallbackOverview, generateDiffOverview, LlmResponseError, multiPassReview, type RawFinding, type ProviderConfig } from "./review-engine.js";
 import { sendReviewEmail, type ReviewMetadata } from "./email-draft-service.js";
 import { all, get } from "../db/queries.js";
 import { v4 as uuid } from "uuid";
@@ -39,6 +39,14 @@ function classifyError(error: unknown): string {
     (msg.includes("context") && (msg.includes("length") || msg.includes("window"))) ||
     (msg.includes("token") && msg.includes("exceed"))
   ) return "llm_context_exceeded";
+
+  if (
+    msg.includes("invalid json") ||
+    msg.includes("json review") ||
+    msg.includes("json findings") ||
+    msg.includes("could not be parsed") ||
+    msg.includes("llm response was truncated")
+  ) return "llm_response_invalid";
 
   if (msg.includes("rate limit") || msg.includes("too many requests") || msg.includes("ratelimit")) return "llm_rate_limited";
 
@@ -162,17 +170,20 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     let rawFindings: RawFinding[];
     let incomplete: boolean;
     let tokenUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+    let aiResponse: string;
 
     if (ctx.repo.multi_pass_review) {
       const multiResult = await multiPassReview(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext);
       rawFindings = multiResult.findings;
       incomplete = ctx.truncated;
       tokenUsage = multiResult.tokenUsage;
+      aiResponse = multiResult.aiResponse;
     } else {
       const singleResult = await analyzeDiff(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext);
       rawFindings = singleResult.findings;
       incomplete = singleResult.incomplete;
       tokenUsage = singleResult.tokenUsage;
+      aiResponse = singleResult.aiResponse;
     }
 
     const findings = rawFindings.map((f) => ({
@@ -190,7 +201,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       aiOverview = await generateDiffOverview(ctx.diff, ctx.commit, ctx.repo, provider);
     } catch (err) {
       logger.warn(`Failed to generate AI overview for ${ctx.dedupKey}`, { error: String(err) });
-      aiOverview = ctx.commit.message?.split("\n")[0]?.substring(0, 120) || "";
+      aiOverview = fallbackOverview(ctx.commit, ctx.diff);
     }
 
     await insertFindings(reviewId, findings);
@@ -211,14 +222,17 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
         tokens_completion: tokenUsage.completion_tokens,
         tokens_total: tokenUsage.total_tokens,
         estimated_cost: modelCostPerToken,
-      }
+      },
+      undefined,
+      aiResponse
     );
 
     return { reviewId, findings, cached: false, incomplete, aiOverview, tokenUsage };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     const category = classifyError(error);
-    await updateReviewStatus(reviewId, "failed", message, undefined, undefined, category);
+    const aiResponse = error instanceof LlmResponseError ? error.aiResponse : undefined;
+    await updateReviewStatus(reviewId, "failed", message, undefined, undefined, category, aiResponse);
     if (category === "vcs_auth_failed" || message.includes("CREDENTIAL_EXPIRED")) {
       logger.error(`ALERT: Credential expired for repo ${ctx.repo.name}`, { repoId: ctx.repo.id });
     }
