@@ -10,8 +10,8 @@ import { jwtAuth } from "../middleware/jwt-auth.js";
 export const authRouter = Router();
 export const usersRouter = Router();
 
-const JWT_EXPIRES_IN = "24h";
-const COOKIE_MAX_AGE = 24 * 60 * 60 * 1000;
+const JWT_EXPIRES_IN = "30d";
+const COOKIE_MAX_AGE = 30 * 24 * 60 * 60 * 1000;
 const MIN_PASSWORD_LENGTH = 8;
 const BCRYPT_ROUNDS = 12;
 
@@ -127,6 +127,65 @@ authRouter.get("/me", async (req, res) => {
     });
   } catch {
     res.status(401).json({ error: "Token expired or invalid" });
+  }
+});
+
+authRouter.post("/refresh", async (req, res) => {
+  const cookieToken = req.cookies?.token;
+
+  if (!cookieToken) {
+    res.status(401).json({ error: "No session to refresh" });
+    return;
+  }
+
+  try {
+    const payload = jwt.verify(cookieToken, getJwtSecret()) as {
+      id: string;
+      username: string;
+      role: string;
+      tokenVersion?: number;
+    };
+
+    const user = await get<{ id: string; username: string; name: string | null; role: string; token_version: number }>(
+      "SELECT id, username, name, role, token_version FROM users WHERE id = $1",
+      [payload.id],
+    );
+    if (!user) {
+      res.clearCookie("token", { path: "/api" });
+      res.status(401).json({ error: "User not found" });
+      return;
+    }
+
+    if (payload.tokenVersion !== undefined && payload.tokenVersion !== user.token_version) {
+      res.clearCookie("token", { path: "/api" });
+      res.status(401).json({ error: "Token revoked" });
+      return;
+    }
+
+    const newToken = generateToken(user);
+
+    const forwardedProto = req.headers["x-forwarded-proto"];
+    const isHttps = req.secure || forwardedProto === "https" || (Array.isArray(forwardedProto) && forwardedProto.includes("https"));
+
+    res.cookie("token", newToken, {
+      httpOnly: true,
+      secure: isHttps,
+      sameSite: "lax",
+      maxAge: COOKIE_MAX_AGE,
+      path: "/api",
+    });
+
+    res.json({
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name,
+        role: user.role,
+      },
+    });
+  } catch {
+    res.clearCookie("token", { path: "/api" });
+    res.status(401).json({ error: "Session expired" });
   }
 });
 
