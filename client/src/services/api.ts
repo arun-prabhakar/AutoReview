@@ -24,8 +24,42 @@ function fetchWithTimeout(path: string, init: RequestInit, timeoutMs = TIMEOUT_M
     .finally(() => clearTimeout(timer));
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefreshSession(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "include",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+async function handleResponse<T>(response: Response, init?: RequestInit): Promise<T> {
   if (response.status === 401) {
+    // Attempt silent refresh once before forcing logout
+    if (init?.method !== "POST" || !response.url.endsWith("/api/auth/refresh")) {
+      const refreshed = await tryRefreshSession();
+      if (refreshed) {
+        const retryInit = { ...init, headers: undefined, body: init?.body };
+        const retryRes = await fetch(response.url, { ...retryInit, credentials: "include" });
+        if (retryRes.ok) {
+          if (retryRes.status === 204) return undefined as T;
+          return retryRes.json();
+        }
+      }
+    }
     localStorage.removeItem("autoreview_user");
     onUnauthorized?.();
     throw new Error("Session expired");
@@ -44,46 +78,51 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export const api = {
   async get<T = unknown>(path: string, options?: ApiRequestOptions): Promise<T> {
-    const response = await fetchWithTimeout(path, { credentials: "include" }, options?.timeoutMs);
-    return handleResponse<T>(response);
+    const init: RequestInit = { credentials: "include" };
+    const response = await fetchWithTimeout(path, init, options?.timeoutMs);
+    return handleResponse<T>(response, init);
   },
 
   async post<T = unknown>(path: string, body: unknown, options?: ApiRequestOptions): Promise<T> {
-    const response = await fetchWithTimeout(path, {
+    const init: RequestInit = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify(body),
-    }, options?.timeoutMs);
-    return handleResponse<T>(response);
+    };
+    const response = await fetchWithTimeout(path, init, options?.timeoutMs);
+    return handleResponse<T>(response, init);
   },
 
   async put<T = unknown>(path: string, body: unknown, options?: ApiRequestOptions): Promise<T> {
-    const response = await fetchWithTimeout(path, {
+    const init: RequestInit = {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify(body),
-    }, options?.timeoutMs);
-    return handleResponse<T>(response);
+    };
+    const response = await fetchWithTimeout(path, init, options?.timeoutMs);
+    return handleResponse<T>(response, init);
   },
 
   async patch<T = unknown>(path: string, body?: unknown, options?: ApiRequestOptions): Promise<T> {
-    const response = await fetchWithTimeout(path, {
+    const init: RequestInit = {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: body ? JSON.stringify(body) : undefined,
-    }, options?.timeoutMs);
-    return handleResponse<T>(response);
+    };
+    const response = await fetchWithTimeout(path, init, options?.timeoutMs);
+    return handleResponse<T>(response, init);
   },
 
   async del<T = unknown>(path: string, options?: ApiRequestOptions): Promise<T> {
-    const response = await fetchWithTimeout(path, {
+    const init: RequestInit = {
       method: "DELETE",
       credentials: "include",
-    }, options?.timeoutMs);
-    return handleResponse<T>(response);
+    };
+    const response = await fetchWithTimeout(path, init, options?.timeoutMs);
+    return handleResponse<T>(response, init);
   },
 
   reviewTimeoutMs: REVIEW_TIMEOUT_MS,

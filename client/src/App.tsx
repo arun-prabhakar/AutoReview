@@ -7,7 +7,7 @@ import { RequireAuth } from "./components/RequireAuth";
 import { setOnUnauthorized } from "./services/api";
 import { store } from "./store";
 import type { AppDispatch } from "./store";
-import { validateSession, logoutUser } from "./store/authSlice";
+import { validateSession, logoutUser, startRefreshTimer, stopRefreshTimer } from "./store/authSlice";
 import { Button } from "@/components/ui/button";
 import Login from "./pages/Login";
 
@@ -94,7 +94,14 @@ export default function App() {
   const dispatch = useDispatch<AppDispatch>();
 
   useEffect(() => {
-    dispatch(validateSession()).finally(prefetchAllPages);
+    const result = dispatch(validateSession());
+    result.then((action) => {
+      prefetchAllPages();
+      if (validateSession.fulfilled.match(action)) {
+        startRefreshTimer(dispatch);
+      }
+    });
+    return () => { stopRefreshTimer(); };
   }, [dispatch]);
   return (
     <>

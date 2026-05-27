@@ -17,6 +17,7 @@ interface AuthState {
 }
 
 const USER_KEY = "autoreview_user";
+const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 function loadPersistedUser(): AuthUser | null {
   try {
@@ -33,10 +34,33 @@ const initialState: AuthState = {
   error: null,
 };
 
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
+
+function startRefreshTimer(dispatch: (action: unknown) => void) {
+  stopRefreshTimer();
+  refreshTimer = setInterval(() => {
+    dispatch(refreshSession());
+  }, REFRESH_INTERVAL_MS);
+}
+
+function stopRefreshTimer() {
+  if (refreshTimer !== null) {
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
 export const validateSession = createAsyncThunk(
   "auth/validateSession",
   async () => {
     return await api.get<AuthUser>("/api/auth/me");
+  }
+);
+
+export const refreshSession = createAsyncThunk(
+  "auth/refreshSession",
+  async () => {
+    return await api.post<{ user: AuthUser }>("/api/auth/refresh", {});
   }
 );
 
@@ -98,6 +122,19 @@ const authSlice = createSlice({
         state.isAuthenticated = false;
         localStorage.removeItem(USER_KEY);
       })
+      .addCase(refreshSession.fulfilled, (state, action) => {
+        if (action.payload?.user) {
+          state.user = action.payload.user;
+          state.isAuthenticated = true;
+          localStorage.setItem(USER_KEY, JSON.stringify(action.payload.user));
+        }
+      })
+      .addCase(refreshSession.rejected, (state) => {
+        state.user = null;
+        state.isAuthenticated = false;
+        localStorage.removeItem(USER_KEY);
+        stopRefreshTimer();
+      })
       .addCase(loginUser.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -118,6 +155,7 @@ const authSlice = createSlice({
         state.loading = false;
         state.error = null;
         localStorage.removeItem(USER_KEY);
+        stopRefreshTimer();
       })
       .addCase(changePassword.fulfilled, (state) => {
         if (state.user) {
@@ -129,4 +167,5 @@ const authSlice = createSlice({
 });
 
 export const { clearError } = authSlice.actions;
+export { startRefreshTimer, stopRefreshTimer };
 export default authSlice.reducer;
