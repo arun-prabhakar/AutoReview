@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock": "^3.1063.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1063.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
     "@types/pg": "^8.20.0",
