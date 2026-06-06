@@ -3,7 +3,8 @@ import { fetchCommitDiff, fetchPrDiff, fetchPrInfo, findPullRequestForCommit, po
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
-import { analyzeDiff, extractFilePaths, fallbackOverview, generateDiffOverview, LlmResponseError, multiPassReview, type RawFinding, type ProviderConfig } from "./review-engine.js";
+import { analyzeDiff, extractFilePaths, fallbackOverview, generateDiffOverview, LlmResponseError, multiPassReview, type RawFinding } from "./review-engine.js";
+import { type ProviderConfig } from "./llm/index.js";
 import { sendReviewEmail, type ReviewMetadata } from "./email-draft-service.js";
 import { all, get } from "../db/queries.js";
 import { v4 as uuid } from "uuid";
@@ -87,7 +88,12 @@ async function resolveProvider(repo: RepositoryConfig): Promise<ProviderConfig> 
     throw new NotFoundError(`LLM provider ${repo.llm_provider_id} not found`);
   }
   const apiKey = await getDecryptedApiKey(repo.llm_provider_id);
-  return { apiBase: provider.api_base, apiKey };
+  return {
+    providerType: provider.provider_type || "openai_compatible",
+    apiBase: provider.api_base,
+    apiKey,
+    awsRegion: provider.aws_region || undefined,
+  };
 }
 
 async function getPromptTemplate(strictness: string): Promise<string> {
