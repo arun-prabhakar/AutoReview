@@ -1,7 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import OpenAI from "openai";
-import { getAllProviders, createProvider, updateProvider, deleteProvider, getDecryptedApiKey } from "../services/provider-service.js";
-import { get } from "../db/queries.js";
+import { getAllProviders, createProvider, updateProvider, deleteProvider, getDecryptedApiKey, getProviderById } from "../services/provider-service.js";
+import { createAdapter } from "../services/llm/index.js";
 import { logger } from "../middleware/index.js";
 import { NotFoundError } from "../errors.js";
 
@@ -17,15 +16,15 @@ providersRouter.get("/", async (_req: Request, res: Response, next: NextFunction
 });
 
 providersRouter.post("/", async (req: Request, res: Response, next: NextFunction) => {
-  const { name, api_base, api_key } = req.body;
+  const { name, api_base, api_key, provider_type, aws_region } = req.body;
 
-  if (!name || !api_base || !api_key) {
-    res.status(400).json({ error: "name, api_base, and api_key are required" });
+  if (!name || !api_key) {
+    res.status(400).json({ error: "name and api_key are required" });
     return;
   }
 
   try {
-    const provider = await createProvider(name, api_base, api_key);
+    const provider = await createProvider(name, api_base || "https://api.openai.com/v1", api_key, provider_type, aws_region);
     res.status(201).json(provider);
   } catch (err) {
     next(err);
@@ -33,10 +32,10 @@ providersRouter.post("/", async (req: Request, res: Response, next: NextFunction
 });
 
 providersRouter.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
-  const { name, api_base, api_key } = req.body;
+  const { name, api_base, api_key, provider_type, aws_region } = req.body;
 
   try {
-    await updateProvider(String(req.params.id), name, api_base, api_key);
+    await updateProvider(String(req.params.id), name, api_base, api_key, provider_type, aws_region);
     res.json({ updated: true });
   } catch (err) {
     next(err);
@@ -54,15 +53,18 @@ providersRouter.delete("/:id", async (req: Request, res: Response, next: NextFun
 
 providersRouter.post("/:id/test", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const provider = await get<{ api_base: string; name: string }>(
-      "SELECT api_base, name FROM llm_providers WHERE id = $1", [req.params.id]
-    );
+    const provider = await getProviderById(String(req.params.id));
     if (!provider) throw new NotFoundError("Provider not found");
 
     const apiKey = await getDecryptedApiKey(String(req.params.id));
-    const client = new OpenAI({ apiKey, baseURL: provider.api_base });
+    const adapter = createAdapter({
+      providerType: provider.provider_type || "openai_compatible",
+      apiBase: provider.api_base,
+      apiKey,
+      awsRegion: provider.aws_region || undefined,
+    });
 
-    await client.models.list();
+    await adapter.testConnection();
     res.json({ success: true, message: "Connection successful" });
   } catch (err) {
     if (err instanceof NotFoundError) { next(err); return; }
@@ -73,16 +75,18 @@ providersRouter.post("/:id/test", async (req: Request, res: Response, next: Next
 
 providersRouter.get("/:id/models", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const provider = await get<{ api_base: string; name: string }>(
-      "SELECT api_base, name FROM llm_providers WHERE id = $1", [req.params.id]
-    );
+    const provider = await getProviderById(String(req.params.id));
     if (!provider) throw new NotFoundError("Provider not found");
 
     const apiKey = await getDecryptedApiKey(String(req.params.id));
-    const client = new OpenAI({ apiKey, baseURL: provider.api_base });
+    const adapter = createAdapter({
+      providerType: provider.provider_type || "openai_compatible",
+      apiBase: provider.api_base,
+      apiKey,
+      awsRegion: provider.aws_region || undefined,
+    });
 
-    const response = await client.models.list();
-    const models = (response.data || []).map((m) => m.id).sort();
+    const models = await adapter.listModels();
 
     logger.info("Fetched models from provider", { provider: provider.name, count: models.length });
     res.json({ models });

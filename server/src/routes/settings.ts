@@ -1,8 +1,8 @@
 import { Router } from "express";
-import OpenAI from "openai";
 import { all, run, get } from "../db/queries.js";
 import { encrypt } from "../services/encryption-service.js";
-import { getDecryptedApiKey } from "../services/provider-service.js";
+import { getDecryptedApiKey, getProviderById } from "../services/provider-service.js";
+import { createAdapter } from "../services/llm/index.js";
 import { logger } from "../middleware/index.js";
 
 export const settingsRouter = Router();
@@ -59,27 +59,30 @@ settingsRouter.post("/llm/test", async (req, res) => {
 
   try {
     const apiKey = await getDecryptedApiKey(provider_id);
-    const provider = await get<{ api_base: string; name: string }>(
-      "SELECT api_base, name FROM llm_providers WHERE id = $1", [provider_id]
-    );
+    const provider = await getProviderById(provider_id);
     if (!provider) {
       res.status(404).json({ error: "Provider not found" });
       return;
     }
 
-    const client = new OpenAI({ apiKey, baseURL: provider.api_base });
+    const adapter = createAdapter({
+      providerType: provider.provider_type || "openai_compatible",
+      apiBase: provider.api_base,
+      apiKey,
+      awsRegion: provider.aws_region || undefined,
+    });
     const modelName = model || "gpt-4";
 
     const start = Date.now();
-    const response = await client.chat.completions.create({
+    const result = await adapter.complete({
       model: modelName,
       messages: [{ role: "user", content: "Reply with exactly: OK" }],
-      max_tokens: 10,
+      maxTokens: 10,
       temperature: 0,
     });
     const latencyMs = Date.now() - start;
 
-    const reply = response.choices?.[0]?.message?.content || "";
+    const reply = result.content || "";
     logger.info("LLM test success", { provider: provider.name, model: modelName, latencyMs });
 
     res.json({ success: true, reply, model: modelName, latencyMs });
