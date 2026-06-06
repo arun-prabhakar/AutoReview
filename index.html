@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoReview — AI-Powered Code Reviews for Bitbucket</title>
+  <meta name="description" content="Self-hosted AI code review tool for Bitbucket Cloud. Supports OpenAI, Anthropic, Gemini, and AWS Bedrock." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            heading: ['"Space Grotesk"', 'sans-serif'],
+            body: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            surface: { 0: '#050505', 1: '#0a0a0a', 2: '#111111', 3: '#1a1a1a', 4: '#222222' },
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; background: #050505; }
+    body { font-family: 'Plus Jakarta Sans', sans-serif; background: #050505; color: #e4e4e7; overflow-x: hidden; }
+
+    .gradient-mesh {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 20%, rgba(99, 52, 255, 0.08), transparent),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(16, 185, 129, 0.06), transparent),
+        radial-gradient(ellipse 50% 30% at 50% 50%, rgba(99, 52, 255, 0.03), transparent);
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(20px);
+    }
+
+    .reveal { opacity: 0; transform: translateY(32px); transition: opacity 0.8s cubic-bezier(0.32, 0.72, 0, 1), transform 0.8s cubic-bezier(0.32, 0.72, 0, 1); }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+    .reveal-delay-1 { transition-delay: 0.1s; }
+    .reveal-delay-2 { transition-delay: 0.2s; }
+    .reveal-delay-3 { transition-delay: 0.3s; }
+    .reveal-delay-4 { transition-delay: 0.4s; }
+
+    .code-block {
+      background: #0d0d0d;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.8125rem;
+      line-height: 1.7;
+      overflow-x: auto;
+      color: #a1a1aa;
+    }
+    .code-block .cmd { color: #10b981; }
+    .code-block .flag { color: #6366f1; }
+    .code-block .str { color: #f59e0b; }
+    .code-block .cmt { color: #52525b; }
+
+    .pill { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.875rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.05em; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #a1a1aa; transition: all 0.5s cubic-bezier(0.32,0.72,0,1); }
+    .pill:hover { background: rgba(255,255,255,0.08); color: #e4e4e7; }
+
+    .nav-glass {
+      background: rgba(5, 5, 5, 0.6);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.75rem 1.5rem; border-radius: 9999px;
+      background: #fff; color: #050505; font-weight: 600; font-size: 0.875rem;
+      transition: all 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 32px rgba(255,255,255,0.1); }
+    .btn-primary:active { transform: scale(0.98); }
+
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.75rem 1.5rem; border-radius: 9999px;
+      background: rgba(255,255,255,0.05); color: #e4e4e7; font-weight: 500; font-size: 0.875rem;
+      border: 1px solid rgba(255,255,255,0.08);
+      transition: all 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+
+    .feature-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 1.5rem;
+      padding: 2rem;
+      transition: all 0.6s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    .feature-card:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); transform: translateY(-2px); }
+
+    .section-eyebrow {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.375rem 1rem; border-radius: 9999px;
+      font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase;
+      background: rgba(99, 52, 255, 0.08); color: rgb(139, 92, 246); border: 1px solid rgba(99, 52, 255, 0.15);
+    }
+
+    .hamburger-line { display: block; width: 20px; height: 1.5px; background: #e4e4e7; transition: all 0.4s cubic-bezier(0.32, 0.72, 0, 1); }
+    .menu-open .hamburger-line:nth-child(1) { transform: rotate(45deg) translate(4px, 4px); }
+    .menu-open .hamburger-line:nth-child(2) { opacity: 0; transform: scaleX(0); }
+    .menu-open .hamburger-line:nth-child(3) { transform: rotate(-45deg) translate(4px, -4px); }
+
+    .mobile-menu { opacity: 0; pointer-events: none; transition: opacity 0.4s cubic-bezier(0.32,0.72,0,1); }
+    .mobile-menu.open { opacity: 1; pointer-events: auto; }
+    .mobile-menu a { opacity: 0; transform: translateY(16px); transition: all 0.4s cubic-bezier(0.32,0.72,0,1); }
+    .mobile-menu.open a { opacity: 1; transform: translateY(0); }
+    .mobile-menu.open a:nth-child(1) { transition-delay: 0.1s; }
+    .mobile-menu.open a:nth-child(2) { transition-delay: 0.15s; }
+    .mobile-menu.open a:nth-child(3) { transition-delay: 0.2s; }
+    .mobile-menu.open a:nth-child(4) { transition-delay: 0.25s; }
+    .mobile-menu.open a:nth-child(5) { transition-delay: 0.3s; }
+    .mobile-menu.open a:nth-child(6) { transition-delay: 0.35s; }
+
+    table { border-collapse: separate; border-spacing: 0; }
+    th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 0.8125rem; }
+    th { color: #71717a; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { color: #a1a1aa; }
+    code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.8em; background: rgba(255,255,255,0.06); padding: 0.15em 0.4em; border-radius: 4px; }
+
+    .flow-step { position: relative; padding-left: 2.5rem; }
+    .flow-step::before { content: attr(data-step); position: absolute; left: 0; top: 0.25rem; width: 1.75rem; height: 1.75rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.6875rem; font-weight: 600; background: rgba(99,52,255,0.12); color: rgb(139,92,246); border: 1px solid rgba(99,52,255,0.2); }
+    .flow-step::after { content: ''; position: absolute; left: 0.875rem; top: 2.5rem; bottom: -0.75rem; width: 1px; background: rgba(255,255,255,0.06); }
+    .flow-step:last-child::after { display: none; }
+  </style>
+</head>
+<body>
+  <div class="gradient-mesh"></div>
+
+  <!-- NAVBAR -->
+  <nav class="fixed top-0 left-0 right-0 z-50 flex justify-center mt-4 md:mt-6 px-4">
+    <div class="nav-glass rounded-full px-2 py-1.5 flex items-center gap-1 max-w-2xl w-full">
+      <a href="#" class="flex items-center gap-2 px-3 py-1.5 font-heading font-semibold text-white text-sm tracking-tight">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        AutoReview
+      </a>
+      <div class="hidden md:flex items-center gap-0.5 ml-auto">
+        <a href="#features" class="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors duration-300 rounded-full hover:bg-white/5">Features</a>
+        <a href="#quickstart" class="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors duration-300 rounded-full hover:bg-white/5">Quick Start</a>
+        <a href="#configuration" class="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors duration-300 rounded-full hover:bg-white/5">Config</a>
+        <a href="#architecture" class="px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors duration-300 rounded-full hover:bg-white/5">Architecture</a>
+        <a href="https://github.com/arun-prabhakar/AutoReview" target="_blank" rel="noopener" class="ml-2 px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition-colors duration-300 rounded-full hover:bg-white/5 flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+      <button id="menuToggle" class="md:hidden ml-auto p-2 flex flex-col gap-1.5 items-center justify-center" aria-label="Toggle menu">
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+        <span class="hamburger-line"></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- MOBILE MENU -->
+  <div id="mobileMenu" class="mobile-menu fixed inset-0 z-40 bg-black/90 backdrop-blur-3xl flex flex-col items-center justify-center gap-8">
+    <a href="#features" class="text-2xl font-heading font-medium text-white" onclick="closeMobileMenu()">Features</a>
+    <a href="#quickstart" class="text-2xl font-heading font-medium text-white" onclick="closeMobileMenu()">Quick Start</a>
+    <a href="#configuration" class="text-2xl font-heading font-medium text-white" onclick="closeMobileMenu()">Config</a>
+    <a href="#architecture" class="text-2xl font-heading font-medium text-white" onclick="closeMobileMenu()">Architecture</a>
+    <a href="#docker" class="text-2xl font-heading font-medium text-white" onclick="closeMobileMenu()">Docker</a>
+    <a href="https://github.com/arun-prabhakar/AutoReview" target="_blank" rel="noopener" class="text-2xl font-heading font-medium text-white">GitHub</a>
+  </div>
+
+  <!-- HERO -->
+  <section class="relative z-10 min-h-[100dvh] flex items-center justify-center px-4 pt-24 pb-16">
+    <div class="max-w-4xl mx-auto text-center">
+      <div class="reveal">
+        <span class="section-eyebrow mb-6 inline-block">Open Source &middot; Self-Hosted</span>
+      </div>
+      <h1 class="reveal reveal-delay-1 font-heading text-5xl sm:text-6xl md:text-8xl font-bold text-white tracking-tight leading-[0.95] mt-6">
+        Auto<span class="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-emerald-400">Review</span>
+      </h1>
+      <p class="reveal reveal-delay-2 mt-6 text-lg md:text-xl text-zinc-400 max-w-xl mx-auto leading-relaxed">
+        AI-powered code reviews for Bitbucket Cloud.<br class="hidden sm:block" />
+        Self-hosted. Privacy-first. Your code never leaves your infrastructure.
+      </p>
+      <div class="reveal reveal-delay-3 flex flex-col sm:flex-row items-center justify-center gap-3 mt-10">
+        <a href="#quickstart" class="btn-primary">
+          Get Started
+          <span class="w-6 h-6 rounded-full bg-black/5 flex items-center justify-center">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7"/><path d="M7 7h10v10"/></svg>
+          </span>
+        </a>
+        <a href="https://github.com/arun-prabhakar/AutoReview" target="_blank" rel="noopener" class="btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+      <div class="reveal reveal-delay-4 mt-16 flex flex-wrap items-center justify-center gap-2">
+        <span class="pill">React 19</span>
+        <span class="pill">Express</span>
+        <span class="pill">TypeScript</span>
+        <span class="pill">PostgreSQL</span>
+        <span class="pill">Tailwind CSS</span>
+        <span class="pill">Docker</span>
+        <span class="pill">OpenAI</span>
+        <span class="pill">Anthropic</span>
+        <span class="pill">Gemini</span>
+        <span class="pill">AWS Bedrock</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" class="relative z-10 px-4 py-24 md:py-40">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-16">
+        <span class="reveal section-eyebrow">Features</span>
+        <h2 class="reveal reveal-delay-1 font-heading text-3xl md:text-5xl font-bold text-white mt-4 tracking-tight">Everything you need for<br class="hidden md:block" /> automated code review</h2>
+        <p class="reveal reveal-delay-2 text-zinc-400 mt-4 max-w-lg mx-auto">From on-demand commit analysis to scheduled PR reviews — AutoReview covers the entire review lifecycle.</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="reveal feature-card">
+          <div class="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(139,92,246)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Manual &amp; PR Reviews</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Review individual commits or full pull requests on demand from the web UI.</p>
+        </div>
+        <div class="reveal reveal-delay-1 feature-card">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(16,185,129)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Automatic Reviews</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Configure polling to detect new commits and PR updates. Reviews run automatically in the background.</p>
+        </div>
+        <div class="reveal reveal-delay-2 feature-card">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(245,158,11)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Structured Findings</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Findings classified as Must Fix, Should Fix Soon, or Ignore — with file, line, category, explanation, and suggested fix.</p>
+        </div>
+        <div class="reveal feature-card">
+          <div class="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(14,165,233)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="rgb(14,165,233)"/><circle cx="6" cy="18" r="1" fill="rgb(14,165,233)"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Multi-Provider LLM</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Supports OpenAI, Anthropic, Google Gemini, AWS Bedrock, and any OpenAI-compatible API. Per-repository provider and model configuration.</p>
+        </div>
+        <div class="reveal reveal-delay-1 feature-card">
+          <div class="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(244,63,94)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Multi-Pass Review</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Optionally run specialized passes for security, performance, and maintainability, then deduplicate findings.</p>
+        </div>
+        <div class="reveal reveal-delay-2 feature-card">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(99,102,241)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Review History</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Re-run reviews while preserving earlier results in a linked history chain. Full audit trail.</p>
+        </div>
+        <div class="reveal feature-card">
+          <div class="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(20,184,166)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Sharing</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Create public share links with optional expiry for external stakeholders.</p>
+        </div>
+        <div class="reveal reveal-delay-1 feature-card">
+          <div class="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(59,130,246)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Bitbucket Integration</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Post PR comments and inline findings back to Bitbucket. Automatic or manual.</p>
+        </div>
+        <div class="reveal reveal-delay-2 feature-card">
+          <div class="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(249,115,22)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Email Notifications</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Generate review email drafts and send via SMTP. Configurable per repository.</p>
+        </div>
+        <div class="reveal feature-card">
+          <div class="w-10 h-10 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(6,182,212)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Cost Analytics</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Track token usage, estimated costs by model, and per-review spending with detailed dashboards.</p>
+        </div>
+        <div class="reveal reveal-delay-1 feature-card">
+          <div class="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(168,85,247)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Prompt Templates</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">Customizable prompt editor with variable placeholders, AI enhancement, and strictness-level tabs.</p>
+        </div>
+        <div class="reveal reveal-delay-2 feature-card">
+          <div class="w-10 h-10 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center justify-center mb-4">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(34,197,94)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          </div>
+          <h3 class="font-heading font-semibold text-white text-base mb-2">Enterprise Security</h3>
+          <p class="text-sm text-zinc-400 leading-relaxed">AES-256-GCM encryption for all secrets. JWT auth with HTTP-only cookies. Role-based access.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUICK START -->
+  <section id="quickstart" class="relative z-10 px-4 py-24 md:py-40">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-16">
+        <span class="reveal section-eyebrow">Quick Start</span>
+        <h2 class="reveal reveal-delay-1 font-heading text-3xl md:text-5xl font-bold text-white mt-4 tracking-tight">Up and running in minutes</h2>
+      </div>
+
+      <div class="reveal space-y-12">
+        <!-- Prerequisites -->
+        <div>
+          <h3 class="font-heading font-semibold text-white text-lg mb-4 flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-violet-500/15 text-violet-400 text-xs font-bold flex items-center justify-center border border-violet-500/20">0</span>
+            Prerequisites
+          </h3>
+          <div class="glass-card rounded-2xl p-6">
+            <ul class="space-y-2 text-sm text-zinc-400">
+              <li class="flex items-start gap-2"><span class="text-zinc-600 mt-0.5">&rsaquo;</span> Node.js 20+</li>
+              <li class="flex items-start gap-2"><span class="text-zinc-600 mt-0.5">&rsaquo;</span> PostgreSQL database</li>
+              <li class="flex items-start gap-2"><span class="text-zinc-600 mt-0.5">&rsaquo;</span> Bitbucket Cloud app password</li>
+              <li class="flex items-start gap-2"><span class="text-zinc-600 mt-0.5">&rsaquo;</span> An LLM provider API key (OpenAI, Anthropic, Gemini, or AWS Bedrock credentials)</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Server -->
+        <div>
+          <h3 class="font-heading font-semibold text-white text-lg mb-4 flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-violet-500/15 text-violet-400 text-xs font-bold flex items-center justify-center border border-violet-500/20">1</span>
+            Server Setup
+          </h3>
+          <div class="code-block"><span class="cmd">cd</span> server
+<span class="cmd">cp</span> .env.example .env
+<span class="cmt"># Edit .env with DATABASE_URL, ENCRYPTION_KEY, JWT_SECRET</span>
+<span class="cmd">npm</span> install
+<span class="cmd">npm</span> run db:init
+<span class="cmd">npm</span> run dev</div>
+          <p class="text-xs text-zinc-500 mt-3">The API runs on <code>http://localhost:3001</code></p>
+        </div>
+
+        <!-- Client -->
+        <div>
+          <h3 class="font-heading font-semibold text-white text-lg mb-4 flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-violet-500/15 text-violet-400 text-xs font-bold flex items-center justify-center border border-violet-500/20">2</span>
+            Client Setup
+          </h3>
+          <div class="code-block"><span class="cmd">cd</span> client
+<span class="cmd">npm</span> install
+<span class="cmd">npm</span> run dev</div>
+          <p class="text-xs text-zinc-500 mt-3">The client runs on <code>http://localhost:5173</code> and proxies <code>/api</code> to the server.</p>
+        </div>
+
+        <!-- Login -->
+        <div>
+          <h3 class="font-heading font-semibold text-white text-lg mb-4 flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-violet-500/15 text-violet-400 text-xs font-bold flex items-center justify-center border border-violet-500/20">3</span>
+            Default Login
+          </h3>
+          <div class="glass-card rounded-2xl p-6">
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <div><span class="text-zinc-600">Username</span></div><div class="text-white font-mono">admin</div>
+              <div><span class="text-zinc-600">Password</span></div><div class="text-white font-mono">admin</div>
+            </div>
+            <p class="text-xs text-zinc-500 mt-4">Seeded only when <code>NODE_ENV</code> is not <code>production</code></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOCKER -->
+  <section id="docker" class="relative z-10 px-4 py-24 md:py-40">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-12">
+        <span class="reveal section-eyebrow">Deployment</span>
+        <h2 class="reveal reveal-delay-1 font-heading text-3xl md:text-5xl font-bold text-white mt-4 tracking-tight">Docker Deployment</h2>
+        <p class="reveal reveal-delay-2 text-zinc-400 mt-4 max-w-lg mx-auto">Single-command deployment with Docker Compose. The built client and API are served together.</p>
+      </div>
+      <div class="reveal code-block mt-8"><span class="cmd">export</span> <span class="flag">ENCRYPTION_KEY</span>=<span class="str">your_64_character_hex_key</span>
+<span class="cmd">export</span> <span class="flag">JWT_SECRET</span>=<span class="str">your_jwt_secret</span>
+<span class="cmd">export</span> <span class="flag">DATABASE_URL</span>=<span class="str">postgresql://user:password@host:5432/database</span>
+
+<span class="cmd">docker</span> compose up <span class="flag">-d</span> <span class="flag">--build</span></div>
+      <div class="reveal glass-card rounded-2xl p-6 mt-6">
+        <p class="text-sm text-zinc-400">The Docker setup uses a multi-stage build. The client is built during the <code>builder</code> stage and served as static files by the Express server. Port <code>3000</code> maps to internal port <code>3001</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONFIGURATION -->
+  <section id="configuration" class="relative z-10 px-4 py-24 md:py-40">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-12">
+        <span class="reveal section-eyebrow">Configuration</span>
+        <h2 class="reveal reveal-delay-1 font-heading text-3xl md:text-5xl font-bold text-white mt-4 tracking-tight">Environment Variables</h2>
+      </div>
+      <div class="reveal glass-card rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-white/5">
+                <th class="text-zinc-500">Variable</th>
+                <th class="text-zinc-500">Description</th>
+                <th class="text-zinc-500">Required</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><code>PORT</code></td><td>Server port</td><td class="text-zinc-600">No (3001)</td></tr>
+              <tr><td><code>DATABASE_URL</code></td><td>PostgreSQL connection string</td><td class="text-emerald-400">Yes</td></tr>
+              <tr><td><code>NODE_ENV</code></td><td><code>development</code> or <code>production</code></td><td class="text-zinc-600">No</td></tr>
+              <tr><td><code>ENCRYPTION_KEY</code></td><td>64-char hex string for AES-256-GCM</td><td class="text-emerald-400">Yes</td></tr>
+              <tr><td><code>JWT_SECRET</code></td><td>JWT signing secret</td><td class="text-amber-400">Yes in prod</td></tr>
+              <tr><td><code>CORS_ORIGIN</code></td><td>Allowed browser origin</td><td class="text-zinc-600">No</td></tr>
+              <tr><td><code>STATIC_DIR</code></td><td>React build output directory</td><td class="text-zinc-600">No</td></tr>
+              <tr><td><code>LOG_DIR</code></td><td>Server log directory</td><td class="text-zinc-600">No</td></tr>
+              <tr><td><code>DEPLOYED_AT</code></td><td>Build/deploy timestamp for versioning</td><td class="text-zinc-600">No</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="reveal mt-10">
+        <h3 class="font-heading font-semibold text-white text-lg mb-4">.env Example</h3>
+        <div class="code-block"><span class="flag">PORT</span>=<span class="str">3001</span>
+<span class="flag">DATABASE_URL</span>=<span class="str">postgresql://user:password@host:5432/autoreview</span>
+<span class="flag">ENCRYPTION_KEY</span>=<span class="str">0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef</span>
+<span class="flag">JWT_SECRET</span>=<span class="str">your-secret-key-here</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="architecture" class="relative z-10 px-4 py-24 md:py-40">
+    <div class="max-w-4xl mx-auto">
+      <div class="text-center mb-16">
+        <span class="reveal section-eyebrow">How It Works</span>
+        <h2 class="reveal reveal-delay-1 font-heading text-3xl md:text-5xl font-bold text-white mt-4 tracking-tight">Review Lifecycle</h2>
+        <p class="reveal reveal-delay-2 text-zinc-400 mt-4 max-w-lg mx-auto">From diff to delivered findings — every step is automated, auditable, and configurable.</p>
+      </div>
+
+      <div class="reveal space-y-6">
+        <div class="flow-step" data-step="1">
+          <h4 class="font-heading font-medium text-white text-sm">Fetch Diff</h4>
+          <p class="text-sm text-zinc-500 mt-1">AutoReview fetches the commit or PR diff from Bitbucket Cloud using configured credentials.</p>
+        </div>
+        <div class="flow-step" data-step="2">
+          <h4 class="font-heading font-medium text-white text-sm">Build Prompt</h4>
+          <p class="text-sm text-zinc-500 mt-1">The review prompt is assembled from the configured template, repository strictness, and optional <code>.autoreview.md</code> project context.</p>
+        </div>
+        <div class="flow-step" data-step="3">
+          <h4 class="font-heading font-medium text-white text-sm">LLM Analysis</h4>
+          <p class="text-sm text-zinc-500 mt-1">The prompt is sent to the configured LLM provider — OpenAI, Anthropic, Gemini, AWS Bedrock, or any OpenAI-compatible endpoint.</p>
+        </div>
+        <div class="flow-step" data-step="4">
+          <h4 class="font-heading font-medium text-white text-sm">Parse &amp; Store</h4>
+          <p class="text-sm text-zinc-500 mt-1">Structured JSON findings are parsed, validated, deduplicated, and stored in PostgreSQL with full audit history.</p>
+        </div>
+        <div class="flow-step" data-step="5">
+          <h4 class="font-heading font-medium text-white text-sm">Generate Overview</h4>
+          <p class="text-sm text-zinc-500 mt-1">A compact, validated AI overview sentence is generated for dashboards and email drafts.</p>
+        </div>
+        <div class="flow-step" data-step="6">
+          <h4 class="font-heading font-medium text-white text-sm">Notify &amp; Deliver</h4>
+          <p class="text-sm text-zinc-500 mt-1">Findings are delivered via email, Bitbucket PR comments, shareable links, and in-app notifications.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TECH STACK -->
+  <section class="relative z-10 px-4 py-24 md:py-32">
+    <div class="max-w-4xl mx-auto text-center">
+      <span class="reveal section-eyebrow">Tech Stack</span>
+      <h2 class="reveal reveal-delay-1 font-heading text-2xl md:text-3xl font-bold text-white mt-4 tracking-tight">Built with modern, proven tools</h2>
+      <div class="reveal reveal-delay-2 flex flex-wrap items-center justify-center gap-2 mt-10">
+        <span class="pill">Node.js</span>
+        <span class="pill">Express</span>
+        <span class="pill">TypeScript</span>
+        <span class="pill">React 19</span>
+        <span class="pill">Vite 6</span>
+        <span class="pill">Redux Toolkit</span>
+        <span class="pill">Tailwind CSS</span>
+        <span class="pill">Radix UI</span>
+        <span class="pill">PostgreSQL</span>
+        <span class="pill">OpenAI SDK</span>
+        <span class="pill">AWS Bedrock SDK</span>
+        <span class="pill">Bitbucket Cloud API</span>
+        <span class="pill">JWT</span>
+        <span class="pill">AES-256-GCM</span>
+        <span class="pill">Docker</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="relative z-10 px-4 py-24 md:py-40">
+    <div class="max-w-3xl mx-auto text-center">
+      <div class="reveal glass-card rounded-3xl p-12 md:p-16">
+        <h2 class="font-heading text-3xl md:text-4xl font-bold text-white tracking-tight">Start reviewing code with AI</h2>
+        <p class="text-zinc-400 mt-4 max-w-md mx-auto">Self-hosted. Privacy-first. Works with your existing Bitbucket Cloud workflow.</p>
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
+          <a href="https://github.com/arun-prabhakar/AutoReview" target="_blank" rel="noopener" class="btn-primary">
+            View on GitHub
+            <span class="w-6 h-6 rounded-full bg-black/5 flex items-center justify-center">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7"/><path d="M7 7h10v10"/></svg>
+            </span>
+          </a>
+          <a href="#quickstart" class="btn-secondary">Read the Docs</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="relative z-10 border-t border-white/5 px-4 py-12">
+    <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-2 text-sm text-zinc-600">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        <span class="font-heading font-medium text-zinc-500">AutoReview</span>
+        <span class="text-zinc-700">&middot;</span>
+        <span>Built for teams that ship quality code.</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <a href="https://github.com/arun-prabhakar/AutoReview" target="_blank" rel="noopener" class="text-zinc-600 hover:text-white transition-colors duration-300">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        </a>
+        <span class="text-xs text-zinc-700">MIT License</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const menuToggle = document.getElementById('menuToggle');
+    const mobileMenu = document.getElementById('mobileMenu');
+
+    menuToggle.addEventListener('click', () => {
+      menuToggle.classList.toggle('menu-open');
+      mobileMenu.classList.toggle('open');
+    });
+
+    function closeMobileMenu() {
+      menuToggle.classList.remove('menu-open');
+      mobileMenu.classList.remove('open');
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>
