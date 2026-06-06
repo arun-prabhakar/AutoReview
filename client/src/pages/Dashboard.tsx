@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { FAILURE_LABELS } from "@/lib/constants";
+import { formatDateTime } from "@/lib/format";
 import { BarChart3, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSearch, GitCommit, GitPullRequest, Minus, Search, Trash2, User, XCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Review } from "@/types";
@@ -125,20 +127,6 @@ export default function Dashboard() {
       ? filterAuthors[0]
       : `${filterAuthors.length} Authors`;
 
-  const FAILURE_LABELS: Record<string, string> = {
-    llm_context_exceeded: "Context Exceeded",
-    llm_response_invalid: "Invalid LLM Response",
-    llm_rate_limited: "LLM Rate Limited",
-    llm_auth_failed: "LLM Auth Failed",
-    llm_unavailable: "LLM Unavailable",
-    vcs_rate_limited: "VCS Rate Limited",
-    vcs_auth_failed: "VCS Auth Failed",
-    vcs_not_found: "Not Found",
-    no_provider: "No LLM Provider",
-    no_credential: "No Credential",
-    internal_error: "Internal Error",
-  };
-
   const statusIcon = (review: Review) => {
     if (review.status === "pending") {
       return <span title="In progress"><div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 border-t-foreground animate-spin" /></span>;
@@ -173,16 +161,6 @@ export default function Dashboard() {
       return <span className="font-mono text-xs text-muted-foreground">#{review.commit_hash?.replace("pr:", "")}</span>;
     }
     return <span className="font-mono text-xs text-muted-foreground">{review.commit_hash?.substring(0, 10)}</span>;
-  };
-
-  const formatDate = (dt: string) => {
-    const d = new Date(dt);
-    return (
-      <span>
-        <span className="text-muted-foreground">{d.toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</span>
-        <span className="text-muted-foreground ml-1.5">{d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" })}</span>
-      </span>
-    );
   };
 
   return (
@@ -402,7 +380,14 @@ export default function Dashboard() {
                   {reviews.map((review) => (
                     <TableRow
                       key={review.id}
-                      className="cursor-pointer border-border hover:bg-accent transition-colors group focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                      className={cn(
+                        "cursor-pointer border-border hover:bg-accent transition-colors group focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                        review.status === "completed" && (review.must_fix_count ?? 0) > 0 && "border-l-2 border-l-destructive",
+                        review.status === "completed" && (review.must_fix_count ?? 0) === 0 && (review.should_fix_count ?? 0) > 0 && "border-l-2 border-l-warning",
+                        review.status === "completed" && (review.must_fix_count ?? 0) === 0 && (review.should_fix_count ?? 0) === 0 && "border-l-2 border-l-success",
+                        review.status === "failed" && "border-l-2 border-l-destructive",
+                        review.status === "pending" && "border-l-2 border-l-warning"
+                      )}
                       role="button"
                       tabIndex={0}
                       onClick={() => navigate(`/reviews/${review.id}`)}
@@ -427,7 +412,7 @@ export default function Dashboard() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="py-2 text-xs">{formatDate(review.created_at)}</TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">{formatDateTime(review.created_at)}</TableCell>
                       {isAdmin && (
                         <TableCell className="py-2 pr-3 text-right">
                           <button

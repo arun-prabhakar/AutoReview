@@ -12,6 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { FAILURE_LABELS } from "@/lib/constants";
+import { formatDate } from "@/lib/format";
+import { FindingCard } from "@/components/review/FindingCard";
 import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -191,20 +194,6 @@ export default function ReviewDetail() {
         .join("\n")
     : "     (none)";
 
-  const FAILURE_LABELS: Record<string, string> = {
-    llm_context_exceeded: "LLM Context Exceeded",
-    llm_response_invalid: "Invalid LLM Response",
-    llm_rate_limited: "LLM Rate Limited",
-    llm_auth_failed: "LLM Auth Failed",
-    llm_unavailable: "LLM Unavailable",
-    vcs_rate_limited: "VCS Rate Limited",
-    vcs_auth_failed: "VCS Auth Failed",
-    vcs_not_found: "Commit / PR Not Found",
-    no_provider: "No LLM Provider Configured",
-    no_credential: "No Credential Configured",
-    internal_error: "Internal Error",
-  };
-
   const riskAssessment = grouped.must_fix.length > 0
     ? "⛔ HIGH RISK — Action required before merge"
     : grouped.should_fix_soon.length > 0
@@ -283,7 +272,7 @@ AutoReview`;
   };
 
   return (
-    <div className="space-y-4 max-w-5xl mx-auto">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <h2 className="text-lg font-bold tracking-tight">Review Detail</h2>
@@ -343,57 +332,6 @@ AutoReview`;
         </Card>
       )}
 
-      {review.diff_text && (
-        <Card className="border-border">
-          <button
-            onClick={() => setDiffVisible(!diffVisible)}
-            aria-expanded={diffVisible}
-            aria-controls="diff-content"
-            className="w-full flex items-center justify-between px-6 py-4 hover:bg-accent transition-colors rounded-t-lg"
-          >
-            <div className="flex items-center gap-2.5">
-              <FileCode className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold text-foreground">Diff</span>
-              {!diffVisible && <span className="text-xs text-muted-foreground">Click to view the reviewed changes</span>}
-            </div>
-            <div className="flex items-center gap-3">
-              {diffVisible && (
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(review.diff_text!); toast({ title: "Diff copied to clipboard", variant: "success" }); }}>
-                  Copy
-                </Button>
-              )}
-              {diffVisible ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-            </div>
-          </button>
-          {diffVisible && (
-            <CardContent id="diff-content" className="pt-0 pb-4 border-t border-border">
-              <div className="overflow-x-auto mt-4 rounded-md border border-border bg-secondary/50">
-                <div className="text-xs font-mono leading-relaxed whitespace-pre">
-                  {review.diff_text.split("\n").map((line, i) => (
-                    <div
-                      key={i}
-                      className={cn(
-                        "flex",
-                        line.startsWith("+") && !line.startsWith("++")
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                          : line.startsWith("-") && !line.startsWith("--")
-                            ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                            : line.startsWith("@@")
-                              ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                              : ""
-                      )}
-                    >
-                      <span className="inline-block w-10 shrink-0 select-none text-right pr-3 text-muted-foreground/40 border-r border-border/50 mr-3">{i + 1}</span>
-                      <span className="px-1 flex-1">{line}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          )}
-        </Card>
-      )}
-
       {review.status === "failed" && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 flex items-start gap-3">
           <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
@@ -434,7 +372,7 @@ AutoReview`;
                   >
                     <div className="flex items-center gap-3">
                       <Badge variant={item.status === "completed" ? "default" : "destructive"} className="text-xs capitalize">{item.status}</Badge>
-                      <span className="text-muted-foreground">{new Date(item.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })} {new Date(item.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" })}</span>
+                      <span className="text-muted-foreground">{formatDate(item.created_at)} {new Date(item.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
                       {Number(item.must_fix_count) > 0 && <span className="text-destructive font-medium">{item.must_fix_count} must-fix</span>}
@@ -448,187 +386,216 @@ AutoReview`;
         </Card>
       )}
 
-      <Card className="border-border bg-card">
-        <CardContent className="pt-6 pb-5">
-            <div className="flex items-start justify-between gap-6 mb-4">
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "h-10 w-10 rounded-lg flex items-center justify-center",
-                  worstRisk === "critical" ? "bg-destructive/10" : worstRisk === "warning" ? "bg-warning/10" : "bg-success/10"
-                )}>
-                  <Shield className={cn(
-                    "h-5 w-5",
-                    worstRisk === "critical" ? "text-destructive" : worstRisk === "warning" ? "text-warning" : "text-success"
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="w-full lg:w-[30%] min-w-0 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl border border-border bg-card text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-destructive">Must Fix</p>
+              <span className="text-2xl font-bold tabular-nums text-destructive">{grouped.must_fix.length}</span>
+            </div>
+            <div className="p-3 rounded-xl border border-border bg-card text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-warning">Should Fix</p>
+              <span className="text-2xl font-bold tabular-nums text-warning">{grouped.should_fix_soon.length}</span>
+            </div>
+            <div className="p-3 rounded-xl border border-border bg-card text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Ignored</p>
+              <span className="text-xl font-bold tabular-nums text-foreground">{grouped.ignore.length}</span>
+            </div>
+            <div className="p-3 rounded-xl border border-border bg-card text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total</p>
+              <span className="text-xl font-bold tabular-nums text-foreground">{totalFindings}</span>
+            </div>
+          </div>
+
+          {(["must_fix", "should_fix_soon", "ignore"] as const).map((level) => {
+            const items = grouped[level];
+            if (items.length === 0) return null;
+            return (
+              <div key={level} className="space-y-3">
+                <div className="flex items-center gap-3 pt-2">
+                  <div className={cn(
+                    "h-3 w-3 rounded-full",
+                    level === "must_fix" ? "bg-destructive" : level === "should_fix_soon" ? "bg-warning" : "bg-muted-foreground"
                   )} />
+                  <h3 className="text-lg font-bold tracking-tight capitalize text-foreground">{level.replace(/_/g, " ")}</h3>
+                  <span className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "finding" : "findings"}</span>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground">{repoName}</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {isPrReview ? `Pull Request #${prId}` : "Commit Review"}
-                    {review.commit_author && ` · by ${review.commit_author}`}
-                    {review.completed_at && ` · ${new Date(String(review.completed_at)).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}`}
-                  </p>
-                </div>
+                {items.map((finding) => (
+                  <FindingCard key={finding.id} {...finding} />
+                ))}
               </div>
-              <Badge variant={review.status === "completed" ? "default" : "destructive"} className="capitalize">{String(review.status)}</Badge>
-            </div>
+            );
+          })}
+        </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
-                <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Branch</p>
-                  <p className="text-sm font-medium text-foreground">{branch}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
-                <GitCommitHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Commit</p>
-                  <p className="text-sm font-mono text-foreground">{isPrReview ? `PR #${prId}` : String(review.commit_hash).substring(0, 8)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
-                <FileSearch className="h-3.5 w-3.5 text-muted-foreground" />
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode</p>
-                  <p className="text-sm font-medium capitalize text-foreground">{String(review.review_mode)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
-                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Strictness</p>
-                  <p className="text-sm font-medium capitalize text-foreground">{String(review.strictness)}</p>
-                </div>
-              </div>
-            </div>
-
-            {aiOverview && aiOverview !== "Review completed." && (
-              <div className="mt-4 rounded-lg border border-border p-4">
-                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">AI Overview</p>
-                <p className="text-sm leading-relaxed text-foreground">{aiOverview}</p>
-              </div>
-            )}
-
-            {(review.tokens_total != null || review.project_context) && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {review.tokens_total != null && (
-                  <div className="flex items-center gap-1.5 rounded-md bg-secondary px-2.5 py-1 text-xs">
-                    <Coins className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">{review.tokens_total.toLocaleString()} tokens</span>
-                    {review.estimated_cost != null && review.estimated_cost > 0 && (
-                      <span className="text-muted-foreground">· ${review.estimated_cost.toFixed(4)}</span>
-                    )}
+        <div className="flex-1 min-w-0 space-y-4">
+          <Card className="border-border bg-card">
+            <CardContent className="pt-6 pb-5">
+              <div className="flex items-start justify-between gap-6 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "h-10 w-10 rounded-lg flex items-center justify-center",
+                    worstRisk === "critical" ? "bg-destructive/10" : worstRisk === "warning" ? "bg-warning/10" : "bg-success/10"
+                  )}>
+                    <Shield className={cn(
+                      "h-5 w-5",
+                      worstRisk === "critical" ? "text-destructive" : worstRisk === "warning" ? "text-warning" : "text-success"
+                    )} />
                   </div>
-                )}
-                {review.project_context && (
-                  <div className="flex items-center gap-1.5 rounded-md bg-secondary px-2.5 py-1 text-xs">
-                    <FileText className="h-3 w-3 text-muted-foreground" />
-                    <span className="text-muted-foreground">.autoreview.md loaded</span>
+                  <div>
+                    <h3 className="font-semibold text-foreground">{repoName}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {isPrReview ? `Pull Request #${prId}` : "Commit Review"}
+                      {review.commit_author && ` · by ${review.commit_author}`}
+                      {review.completed_at && ` · ${formatDate(String(review.completed_at))}`}
+                    </p>
                   </div>
-                )}
+                </div>
+                <Badge variant={review.status === "completed" ? "default" : "destructive"} className="capitalize">{String(review.status)}</Badge>
               </div>
-            )}
-          </CardContent>
-      </Card>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="p-4 rounded-xl border border-border bg-card text-center">
-          <p className="text-xs font-bold uppercase tracking-wider text-destructive">Must Fix</p>
-          <span className="text-2xl font-bold tabular-nums text-destructive">{grouped.must_fix.length}</span>
-        </div>
-        <div className="p-4 rounded-xl border border-border bg-card text-center">
-          <p className="text-xs font-bold uppercase tracking-wider text-warning">Should Fix</p>
-          <span className="text-2xl font-bold tabular-nums text-warning">{grouped.should_fix_soon.length}</span>
-        </div>
-        <div className="p-4 rounded-xl border border-border bg-card text-center">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Ignored</p>
-          <span className="text-2xl font-bold tabular-nums text-foreground">{grouped.ignore.length}</span>
-        </div>
-        <div className="p-4 rounded-xl border border-border bg-card text-center">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total</p>
-          <span className="text-2xl font-bold tabular-nums text-foreground">{totalFindings}</span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
+                  <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Branch</p>
+                    <p className="text-sm font-medium text-foreground">{branch}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
+                  <GitCommitHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Commit</p>
+                    <p className="text-sm font-mono text-foreground">{isPrReview ? `PR #${prId}` : String(review.commit_hash).substring(0, 8)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
+                  <FileSearch className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Mode</p>
+                    <p className="text-sm font-medium capitalize text-foreground">{String(review.review_mode)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Strictness</p>
+                    <p className="text-sm font-medium capitalize text-foreground">{String(review.strictness)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {aiOverview && aiOverview !== "Review completed." && (
+                <div className="mt-4 rounded-lg border border-border p-4">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">AI Overview</p>
+                  <p className="text-sm leading-relaxed text-foreground">{aiOverview}</p>
+                </div>
+              )}
+
+              {(review.tokens_total != null || review.project_context) && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {review.tokens_total != null && (
+                    <div className="flex items-center gap-1.5 rounded-md bg-secondary px-2.5 py-1 text-xs">
+                      <Coins className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">{review.tokens_total.toLocaleString()} tokens</span>
+                      {review.estimated_cost != null && review.estimated_cost > 0 && (
+                        <span className="text-muted-foreground">· ${review.estimated_cost.toFixed(4)}</span>
+                      )}
+                    </div>
+                  )}
+                  {review.project_context && (
+                    <div className="flex items-center gap-1.5 rounded-md bg-secondary px-2.5 py-1 text-xs">
+                      <FileText className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">.autoreview.md loaded</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {review.diff_text && (
+            <Card className="border-border">
+              <button
+                onClick={() => setDiffVisible(!diffVisible)}
+                aria-expanded={diffVisible}
+                aria-controls="diff-content"
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-accent transition-colors rounded-t-lg"
+              >
+                <div className="flex items-center gap-2.5">
+                  <FileCode className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold text-foreground">Diff</span>
+                  {!diffVisible && <span className="text-xs text-muted-foreground">Click to view the reviewed changes</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  {diffVisible && (
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(review.diff_text!); toast({ title: "Diff copied to clipboard", variant: "success" }); }}>
+                      Copy
+                    </Button>
+                  )}
+                  {diffVisible ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </div>
+              </button>
+              {diffVisible && (
+                <CardContent id="diff-content" className="pt-0 pb-4 border-t border-border">
+                  <div className="overflow-x-auto mt-4 rounded-md border border-border bg-secondary/50">
+                    <div className="text-xs font-mono leading-relaxed whitespace-pre">
+                      {review.diff_text.split("\n").map((line, i) => (
+                        <div
+                          key={i}
+                          className={cn(
+                            "flex",
+                            line.startsWith("+") && !line.startsWith("++")
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                              : line.startsWith("-") && !line.startsWith("--")
+                                ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                                : line.startsWith("@@")
+                                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                                  : ""
+                          )}
+                        >
+                          <span className="inline-block w-10 shrink-0 select-none text-right pr-3 text-muted-foreground/40 border-r border-border/50 mr-3">{i + 1}</span>
+                          <span className="px-1 flex-1">{line}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          )}
+
+          {user?.role === "admin" && (
+            <Card className="border-border">
+              <button
+                onClick={() => setEmailVisible(!emailVisible)}
+                aria-expanded={emailVisible}
+                aria-controls="email-draft-content"
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-accent transition-colors rounded-t-lg"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold text-foreground">Email Draft</span>
+                  {!emailVisible && <span className="text-xs text-muted-foreground">Click to preview</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  {emailVisible && (
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(emailBody); toast({ title: "Copied to clipboard", variant: "success" }); }}>
+                      Copy
+                    </Button>
+                  )}
+                  {emailVisible ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                </div>
+              </button>
+              {emailVisible && (
+                <CardContent id="email-draft-content" className="pt-0 pb-4 border-t border-border">
+                  <pre className="whitespace-pre-wrap rounded-md bg-secondary p-4 text-xs font-mono leading-relaxed mt-4">{emailBody}</pre>
+                </CardContent>
+              )}
+            </Card>
+          )}
         </div>
       </div>
-
-      {(["must_fix", "should_fix_soon", "ignore"] as const).map((level) => {
-        const items = grouped[level];
-        if (items.length === 0) return null;
-        return (
-          <div key={level} className="space-y-3">
-              <div className="flex items-center gap-3 pt-2">
-                <div className={cn(
-                  "h-3 w-3 rounded-full",
-                  level === "must_fix" ? "bg-destructive" : level === "should_fix_soon" ? "bg-warning" : "bg-muted-foreground"
-                )} />
-                <h3 className="text-lg font-bold tracking-tight capitalize text-foreground">{level.replace("_", " ")}</h3>
-                <span className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "finding" : "findings"}</span>
-              </div>
-            {items.map((finding) => (
-              <Card key={finding.id} className={cn(
-                    "border-border shadow-sm overflow-hidden",
-                    level === "must_fix" ? "border-l-4 border-l-destructive" : level === "should_fix_soon" ? "border-l-4 border-l-warning" : "border-l-4 border-l-border"
-                  )}>
-                  <CardContent className="pt-4 space-y-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1.5">
-                        <p className="font-semibold text-foreground">{finding.summary}</p>
-                        <p className="text-xs text-muted-foreground font-mono bg-secondary px-2 py-0.5 rounded inline-block">
-                          {finding.file_path}{finding.line_number ? `:${finding.line_number}` : ""}
-                        </p>
-                      </div>
-                      <div className="flex gap-2 flex-shrink-0 mt-0.5 flex-wrap justify-end">
-                        <Badge variant={level === "must_fix" ? "critical" : level === "should_fix_soon" ? "moderate" : "low"} className="capitalize text-xs">{level.replace("_", " ")}</Badge>
-                        {finding.category != null && <Badge variant="outline" className="text-xs border-border">{finding.category}</Badge>}
-                      </div>
-                    </div>
-                    <p className="text-sm leading-relaxed text-muted-foreground">{finding.explanation}</p>
-                    {finding.suggested_fix != null && (
-                      <div className="rounded-lg bg-secondary p-3 border border-border">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs font-bold uppercase tracking-wider text-foreground">Suggested Fix</span>
-                          <div className="h-px flex-1 bg-border" />
-                        </div>
-                        <code className="text-xs font-mono block text-foreground leading-relaxed whitespace-pre-wrap">{finding.suggested_fix}</code>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-            ))}
-          </div>
-        );
-      })}
-
-      {user?.role === "admin" && (
-        <Card className="border-border">
-          <button
-            onClick={() => setEmailVisible(!emailVisible)}
-            aria-expanded={emailVisible}
-            aria-controls="email-draft-content"
-            className="w-full flex items-center justify-between px-6 py-4 hover:bg-accent transition-colors rounded-t-lg"
-          >
-            <div className="flex items-center gap-2.5">
-              <Mail className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold text-foreground">Email Draft</span>
-              {!emailVisible && <span className="text-xs text-muted-foreground">Click to preview</span>}
-            </div>
-            <div className="flex items-center gap-3">
-              {emailVisible && (
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(emailBody); toast({ title: "Copied to clipboard", variant: "success" }); }}>
-                  Copy
-                </Button>
-              )}
-              {emailVisible ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-            </div>
-          </button>
-          {emailVisible && (
-            <CardContent id="email-draft-content" className="pt-0 pb-4 border-t border-border">
-              <pre className="whitespace-pre-wrap rounded-md bg-secondary p-4 text-xs font-mono leading-relaxed mt-4">{emailBody}</pre>
-            </CardContent>
-          )}
-        </Card>
-      )}
 
       <Dialog open={aiResponseOpen} onOpenChange={setAiResponseOpen}>
         <DialogContent className="sm:max-w-5xl h-[86vh] overflow-hidden flex flex-col">

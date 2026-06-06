@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/format";
+import { FindingCard } from "@/components/review/FindingCard";
 import {
   Shield,
   GitCommitHorizontal,
@@ -71,14 +73,6 @@ const PRINT_STYLES = `
 }
 `;
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
 export default function SharedReview() {
   const { token } = useParams<{ token: string }>();
   const [data, setData] = useState<SharedReviewData | null>(null);
@@ -130,7 +124,7 @@ export default function SharedReview() {
             </div>
           </header>
           <main className="mx-auto max-w-5xl px-6 py-8 space-y-6">
-            <Skeleton className="h-40 w-full rounded-lg" />
+            <Skeleton className="h-140 w-full rounded-lg" />
             <Skeleton className="h-24 w-full rounded-lg" />
             <Skeleton className="h-64 w-full rounded-lg" />
             <Skeleton className="h-48 w-full rounded-lg" />
@@ -262,7 +256,7 @@ export default function SharedReview() {
                         ? `Pull Request #${prId}`
                         : "Commit Review"}
                       {data.completed_at &&
-                        ` · ${new Date(String(data.completed_at)).toLocaleDateString()}`}
+                        ` · ${formatDate(String(data.completed_at))}`}
                     </p>
                   </div>
                 </div>
@@ -391,7 +385,7 @@ export default function SharedReview() {
                       )}
                     />
                     <h3 className="text-lg font-bold tracking-tight capitalize text-foreground">
-                      {level.replace("_", " ")}
+                      {level.replace(/_/g, " ")}
                     </h3>
                     <span className="text-xs text-muted-foreground">
                       {items.length}{" "}
@@ -399,71 +393,11 @@ export default function SharedReview() {
                     </span>
                   </div>
                   {items.map((finding) => (
-                    <Card
+                    <FindingCard
                       key={finding.id}
-                      className={cn(
-                        "border-border shadow-sm overflow-hidden print-card",
-                        level === "must_fix"
-                          ? "border-l-4 border-l-destructive"
-                          : level === "should_fix_soon"
-                            ? "border-l-4 border-l-warning"
-                            : "border-l-4 border-l-border"
-                      )}
-                    >
-                      <CardContent className="pt-4 space-y-3">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1.5 min-w-0 flex-1">
-                            <p className="font-semibold text-foreground">
-                              {finding.summary}
-                            </p>
-                            <p className="text-xs text-muted-foreground font-mono bg-secondary px-2 py-0.5 rounded inline-block max-w-full truncate">
-                              {finding.file_path}
-                              {finding.line_number
-                                ? `:${finding.line_number}`
-                                : ""}
-                            </p>
-                          </div>
-                          <div className="flex gap-2 mt-0.5 flex-wrap justify-end shrink-0 max-w-[50%]">
-                            <Badge
-                              variant={
-                                level === "must_fix"
-                                  ? "critical"
-                                  : level === "should_fix_soon"
-                                    ? "moderate"
-                                    : "low"
-                              }
-                              className="capitalize text-xs"
-                            >
-                              {level.replace("_", " ")}
-                            </Badge>
-                            {finding.category != null && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs border-border"
-                              >
-                                {finding.category}
-                              </Badge>
-                            )}
-                           </div>
-                        </div>
-                        <p className="text-sm leading-relaxed text-muted-foreground">
-                          {finding.explanation}
-                        </p>
-                        {finding.suggested_fix != null && (
-                          <div className="rounded-lg bg-secondary p-3 border border-border">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-xs font-bold uppercase tracking-wider text-foreground">
-                                Suggested Fix
-                              </span>
-                              <div className="h-px flex-1 bg-border" />
-                            </div>
-                            <code className="text-xs font-mono block text-foreground leading-relaxed whitespace-pre-wrap">
-                              {finding.suggested_fix}
-                            </code>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                      {...finding}
+                      className="print-card"
+                    />
                   ))}
                 </div>
               );
