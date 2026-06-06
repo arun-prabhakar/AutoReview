@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseFindings, filterExcludedPaths, extractFilePaths, analyzeDiff, cleanOverviewText, fallbackOverview, isUsableOverview } from "../services/review-engine.js";
+import { parseFindings, filterExcludedPaths, extractFilePaths, cleanOverviewText, fallbackOverview, isUsableOverview } from "../services/review-engine.js";
 import type { RawFinding } from "../services/review-engine.js";
 import type { CommitInfo } from "../services/bitbucket-client.js";
 import type { RepositoryConfig } from "../services/repository-service.js";
@@ -170,28 +170,19 @@ describe("analyzeDiff", () => {
     vi.resetModules();
   });
 
-  it("should call OpenAI SDK and return findings", async () => {
+  it("should call adapter and return findings", async () => {
     const mockFindings = [{ id: "F001", file: "src/app.ts", line_start: 1, line_end: 1, title: "SQL injection", explanation: "e", risk: "must_fix", suggested_fix: "use param", category: "security" }];
 
-    vi.doMock("openai", () => {
-      return {
-        default: class MockOpenAI {
-          baseURL: string;
-          apiKey: string;
-          constructor(opts: { apiKey: string; baseURL: string }) {
-            this.apiKey = opts.apiKey;
-            this.baseURL = opts.baseURL;
-          }
-          chat = {
-            completions: {
-              create: async () => ({
-                choices: [{ message: { content: JSON.stringify(mockFindings) } }],
-              }),
-            },
-          };
-        },
-      };
-    });
+    vi.doMock("../services/llm/index.js", () => ({
+      createAdapter: () => ({
+        complete: async () => ({
+          content: JSON.stringify(mockFindings),
+          finishReason: "stop",
+          tokenUsage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }),
+      }),
+      ProviderConfig: {},
+    }));
 
     const { analyzeDiff } = await import("../services/review-engine.js");
 
@@ -207,33 +198,29 @@ describe("analyzeDiff", () => {
       multi_pass_review: false,
     };
 
-    const provider = { apiBase: "https://api.example.com/v1", apiKey: "test-key" };
+    const provider = { providerType: "openai_compatible", apiBase: "https://api.example.com/v1", apiKey: "test-key" };
 
     const result = await analyzeDiff("fake diff", commit, repo, "Review this: {{diff}}", provider, false);
     expect(result.findings).toHaveLength(1);
-    expect(result.findings[0].file_path).toBe("src/app.ts"); // mapped from `file`
+    expect(result.findings[0].file_path).toBe("src/app.ts");
     expect(result.incomplete).toBe(false);
     expect(result.aiResponse).toBe(JSON.stringify(mockFindings));
   });
 
   it("should fail instead of returning no findings for partial JSON responses", async () => {
     const partialResponse = '```json\n[\n  {\n    "id": "F001",\n    "file": "docker-compose.yml",\n    "line_start": 246,\n    "explanation": "ReportService/';
-    const createMock = vi.fn(async (_request: { max_tokens?: number }) => ({
-      choices: [{ finish_reason: "length", message: { content: partialResponse } }],
-      usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+    const completeMock = vi.fn(async (_request: { maxTokens?: number }) => ({
+      content: partialResponse,
+      finishReason: "length",
+      tokenUsage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
     }));
 
-    vi.doMock("openai", () => {
-      return {
-        default: class MockOpenAI {
-          chat = {
-            completions: {
-              create: createMock,
-            },
-          };
-        },
-      };
-    });
+    vi.doMock("../services/llm/index.js", () => ({
+      createAdapter: () => ({
+        complete: completeMock,
+      }),
+      ProviderConfig: {},
+    }));
 
     const { analyzeDiff, LlmResponseError } = await import("../services/review-engine.js");
 
@@ -249,36 +236,33 @@ describe("analyzeDiff", () => {
       multi_pass_review: false,
     };
 
-    await expect(analyzeDiff("fake diff", commit, repo, "Review this: {{diff}}", { apiBase: "https://api.example.com/v1", apiKey: "test-key" }, false))
+    await expect(analyzeDiff("fake diff", commit, repo, "Review this: {{diff}}", { providerType: "openai_compatible", apiBase: "https://api.example.com/v1", apiKey: "test-key" }, false))
       .rejects.toBeInstanceOf(LlmResponseError);
-    expect(createMock).toHaveBeenCalledTimes(2);
-    expect(createMock.mock.calls[1]?.[0]?.max_tokens).toBe(8192);
+    expect(completeMock).toHaveBeenCalledTimes(2);
+    expect(completeMock.mock.calls[1]?.[0]?.maxTokens).toBe(8192);
   });
 
   it("should retry once when the first AI response cannot be parsed", async () => {
     const validFindings = [{ file_index: 1, line_start: 5, title: "Missing guard", explanation: "Value may be undefined.", risk: "must_fix", suggested_fix: "Add a guard.", category: "correctness" }];
-    const createMock = vi
+    const completeMock = vi
       .fn()
       .mockResolvedValueOnce({
-        choices: [{ finish_reason: "stop", message: { content: "[{\"file_index\":1,\"line_start\":5," } }],
-        usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
+        content: "[{\"file_index\":1,\"line_start\":5,",
+        finishReason: "stop",
+        tokenUsage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14 },
       })
       .mockResolvedValueOnce({
-        choices: [{ finish_reason: "stop", message: { content: JSON.stringify(validFindings) } }],
-        usage: { prompt_tokens: 11, completion_tokens: 12, total_tokens: 23 },
+        content: JSON.stringify(validFindings),
+        finishReason: "stop",
+        tokenUsage: { prompt_tokens: 11, completion_tokens: 12, total_tokens: 23 },
       });
 
-    vi.doMock("openai", () => {
-      return {
-        default: class MockOpenAI {
-          chat = {
-            completions: {
-              create: createMock,
-            },
-          };
-        },
-      };
-    });
+    vi.doMock("../services/llm/index.js", () => ({
+      createAdapter: () => ({
+        complete: completeMock,
+      }),
+      ProviderConfig: {},
+    }));
 
     const { analyzeDiff } = await import("../services/review-engine.js");
 
@@ -295,9 +279,9 @@ describe("analyzeDiff", () => {
     };
 
     const diff = "diff --git a/src/app.ts b/src/app.ts\n@@ -1 +1 @@\n-old\n+new";
-    const result = await analyzeDiff(diff, commit, repo, "Review this: {{diff}}\nFiles:\n{{file_paths}}", { apiBase: "https://api.example.com/v1", apiKey: "test-key" }, false);
+    const result = await analyzeDiff(diff, commit, repo, "Review this: {{diff}}\nFiles:\n{{file_paths}}", { providerType: "openai_compatible", apiBase: "https://api.example.com/v1", apiKey: "test-key" }, false);
 
-    expect(createMock).toHaveBeenCalledTimes(2);
+    expect(completeMock).toHaveBeenCalledTimes(2);
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0].file_path).toBe("src/app.ts");
     expect(result.tokenUsage.total_tokens).toBe(37);
