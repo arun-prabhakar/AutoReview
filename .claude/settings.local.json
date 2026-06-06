@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest *)",
+      "Bash(node scripts/update-default-template.mjs)",
+      "Bash(npm install *)",
+      "PowerShell(Get-ChildItem \"D:\\\\Personal\\\\IdeaProjects\\\\AutoReview\\\\client\\\\src\" -Force | ForEach-Object { $_.Name })",
+      "PowerShell(Get-ChildItem \"D:\\\\Personal\\\\IdeaProjects\\\\AutoReview\\\\client\\\\src\" -Recurse | ForEach-Object { $_.FullName })",
+      "Bash(Get-ChildItem -Path \"D:\\\\Personal\\\\IdeaProjects\\\\AutoReview\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(xargs grep -l \"status.*failed\\\\|status.*=.*'failed'\\\\|status.*=.*\\\\\"failed\\\\\"\")"
+    ]
+  }
+}
