@@ -8,3 +8,4 @@ cloud-run/service.yaml
 server/.env
 server/data/
 login-page.png
+.playwright-mcp/
