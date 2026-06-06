@@ -1,6 +1,7 @@
-import OpenAI from "openai";
 import type { CommitInfo } from "./bitbucket-client.js";
 import type { RepositoryConfig } from "./repository-service.js";
+import { createAdapter, type ProviderConfig } from "./llm/index.js";
+import type { LlmAdapter } from "./llm/types.js";
 import { logger } from "../middleware/index.js";
 
 export const FIXED_OUTPUT_FORMAT = `
@@ -36,26 +37,7 @@ export type RawFinding = {
   category: string | null;
 };
 
-export type ProviderConfig = {
-  apiBase: string;
-  apiKey: string;
-};
-
-const openAIClientCache = new Map<string, OpenAI>();
-
-function getOpenAIClient(provider: ProviderConfig): OpenAI {
-  const cacheKey = `${provider.apiBase}:${provider.apiKey.substring(0, 8)}`;
-  let client = openAIClientCache.get(cacheKey);
-  if (!client) {
-    client = new OpenAI({ apiKey: provider.apiKey, baseURL: provider.apiBase });
-    openAIClientCache.set(cacheKey, client);
-    if (openAIClientCache.size > 20) {
-      const firstKey = openAIClientCache.keys().next().value;
-      if (firstKey) openAIClientCache.delete(firstKey);
-    }
-  }
-  return client;
-}
+export type { ProviderConfig } from "./llm/index.js";
 
 export type TokenUsage = {
   prompt_tokens: number;
@@ -112,9 +94,9 @@ export async function analyzeDiff(
     prompt += "\n\nNOTE: The diff was truncated due to size. Your review may be incomplete. Focus on the available changes.";
   }
 
-  const client = getOpenAIClient(provider);
+  const adapter = createAdapter(provider);
 
-  const initialResponse = await requestAnalysisCompletion(client, repo, prompt, repo.llm_max_tokens);
+  const initialResponse = await requestAnalysisCompletion(adapter, repo, prompt, repo.llm_max_tokens);
   let response = initialResponse;
   let totalUsage = initialResponse.tokenUsage;
 
@@ -135,7 +117,7 @@ export async function analyzeDiff(
     });
 
     response = await requestAnalysisCompletion(
-      client,
+      adapter,
       repo,
       retryPrompt(prompt),
       retryTokens
@@ -219,25 +201,21 @@ function addTokenUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
 }
 
 async function requestAnalysisCompletion(
-  client: OpenAI,
+  adapter: LlmAdapter,
   repo: RepositoryConfig,
   prompt: string,
   maxTokens: number
 ): Promise<AnalysisCompletion> {
-  const response = await client.chat.completions.create({
+  const result = await adapter.complete({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
-    max_tokens: maxTokens,
+    maxTokens,
     temperature: repo.llm_temperature,
   });
 
-  const content = response.choices?.[0]?.message?.content || "[]";
-  const tokenUsage: TokenUsage = {
-    prompt_tokens: response.usage?.prompt_tokens ?? 0,
-    completion_tokens: response.usage?.completion_tokens ?? 0,
-    total_tokens: response.usage?.total_tokens ?? 0,
-  };
-  const finishReason = response.choices?.[0]?.finish_reason;
+  const content = result.content;
+  const tokenUsage: TokenUsage = result.tokenUsage;
+  const finishReason = result.finishReason;
 
   logger.info("LLM response received", {
     model: repo.llm_model,
@@ -321,21 +299,19 @@ Branch: ${repo.branch}
 Diff:
 ${snippet}`;
 
-  const client = getOpenAIClient(provider);
+  const adapter = createAdapter(provider);
 
-  const response = await client.chat.completions.create({
+  const result = await adapter.complete({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
-    max_tokens: 100,
+    maxTokens: 100,
     temperature: 0.2,
   });
 
-  const raw = response.choices?.[0]?.message?.content?.trim() || "";
+  const raw = result.content.trim() || "";
   if (!raw) return fallbackOverview(commit, diff);
 
-  const finishReason = response.choices?.[0]?.finish_reason;
-
-  const cleaned = cleanOverviewText(raw, finishReason === "length");
+  const cleaned = cleanOverviewText(raw, result.finishReason === "length");
   return isUsableOverview(cleaned) ? cleaned : fallbackOverview(commit, diff);
 }
 
