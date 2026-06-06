@@ -49,6 +49,8 @@ async function createTables(pool: Pool): Promise<void> {
       name TEXT NOT NULL UNIQUE,
       api_base TEXT NOT NULL,
       api_key_encrypted TEXT NOT NULL,
+      provider_type TEXT NOT NULL DEFAULT 'openai_compatible',
+      aws_region TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -308,6 +310,14 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
     description: "Add raw AI response storage to reviews",
     sql: [
       `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS ai_response TEXT`,
+    ],
+  },
+  {
+    id: "010",
+    description: "Add provider_type and aws_region to llm_providers",
+    sql: [
+      `ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS provider_type TEXT NOT NULL DEFAULT 'openai_compatible'`,
+      `ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS aws_region TEXT`,
     ],
   },
 ];
