@@ -82,6 +82,8 @@ export interface Provider {
   id: string;
   name: string;
   api_base: string;
+  provider_type: string;
+  aws_region: string | null;
   created_at: string;
   updated_at: string;
 }

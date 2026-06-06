@@ -9,7 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Trash2, Pencil, Cpu, Loader2, Zap } from "lucide-react";
 import type { Provider } from "./types";
-import { PROVIDER_PRESETS, detectProviderPreset } from "./types";
+import { PROVIDER_PRESETS } from "./types";
+
+const BEDROCK_REGIONS = [
+  { value: "us-east-1", label: "US East (N. Virginia)" },
+  { value: "us-west-2", label: "US West (Oregon)" },
+  { value: "eu-west-1", label: "Europe (Ireland)" },
+  { value: "eu-central-1", label: "Europe (Frankfurt)" },
+  { value: "ap-southeast-1", label: "Asia Pacific (Singapore)" },
+  { value: "ap-northeast-1", label: "Asia Pacific (Tokyo)" },
+];
 
 export function ProvidersTab({
   providers,
@@ -30,6 +39,8 @@ export function ProvidersTab({
   const [deleteTarget, setDeleteTarget] = useState<Provider | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [testing, setTesting] = useState<string | null>(null);
+  const [bedrockRegion, setBedrockRegion] = useState("us-east-1");
+  const [editBedrockRegion, setEditBedrockRegion] = useState("us-east-1");
 
   const handleTest = async (provider: Provider) => {
     setTesting(provider.id);
@@ -50,14 +61,29 @@ export function ProvidersTab({
     setSaving(true);
     const fd = new FormData(e.currentTarget);
     try {
-      await api.post("/api/providers", {
-        name: fd.get("name"),
-        api_base: fd.get("api_base"),
-        api_key: fd.get("api_key"),
-      });
+      const isBedrock = providerPreset === "bedrock";
+      const body: Record<string, string> = {
+        name: fd.get("name") as string,
+        provider_type: isBedrock ? "aws_bedrock" : "openai_compatible",
+      };
+
+      if (isBedrock) {
+        body.api_base = "aws-bedrock";
+        body.aws_region = bedrockRegion;
+        body.api_key = JSON.stringify({
+          accessKeyId: fd.get("access_key_id") as string,
+          secretAccessKey: fd.get("secret_access_key") as string,
+        });
+      } else {
+        body.api_base = fd.get("api_base") as string;
+        body.api_key = fd.get("api_key") as string;
+      }
+
+      await api.post("/api/providers", body);
       toast({ title: "Provider added", variant: "success" });
       setDialogOpen(false);
       setProviderPreset("custom");
+      setBedrockRegion("us-east-1");
       onRefresh();
     } catch (err) {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to add provider", variant: "destructive" });
@@ -71,10 +97,30 @@ export function ProvidersTab({
     if (!editingProvider) return;
     setEditing(true);
     const fd = new FormData(e.currentTarget);
-    const body: Record<string, string> = { name: fd.get("name") as string, api_base: fd.get("api_base") as string };
-    const apiKey = fd.get("api_key") as string;
-    if (apiKey) body.api_key = apiKey;
     try {
+      const isBedrock = editingProvider.provider_type === "aws_bedrock" || editProviderPreset === "bedrock";
+      const body: Record<string, string> = {
+        name: fd.get("name") as string,
+        provider_type: isBedrock ? "aws_bedrock" : "openai_compatible",
+      };
+
+      if (isBedrock) {
+        body.api_base = "aws-bedrock";
+        body.aws_region = editBedrockRegion;
+        const accessKeyId = fd.get("access_key_id") as string;
+        const secretAccessKey = fd.get("secret_access_key") as string;
+        if (accessKeyId || secretAccessKey) {
+          body.api_key = JSON.stringify({
+            accessKeyId: accessKeyId || "",
+            secretAccessKey: secretAccessKey || "",
+          });
+        }
+      } else {
+        body.api_base = fd.get("api_base") as string;
+        const apiKey = fd.get("api_key") as string;
+        if (apiKey) body.api_key = apiKey;
+      }
+
       await api.put(`/api/providers/${editingProvider.id}`, body);
       toast({ title: "Provider updated", variant: "success" });
       setEditingProvider(null);
@@ -101,11 +147,16 @@ export function ProvidersTab({
     }
   };
 
+  const getProviderPresetForEdit = (p: Provider) => {
+    if (p.provider_type === "aws_bedrock") return "bedrock";
+    return "custom";
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">OpenAI-compatible LLM providers</p>
-        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) setProviderPreset("custom"); }}>
+        <p className="text-sm text-muted-foreground">LLM providers (OpenAI-compatible & AWS Bedrock)</p>
+        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setProviderPreset("custom"); setBedrockRegion("us-east-1"); } }}>
           <DialogTrigger asChild><Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Provider</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Add LLM Provider</DialogTitle></DialogHeader>
@@ -122,8 +173,26 @@ export function ProvidersTab({
                 </Select>
               </div>
               <div className="space-y-2"><Label>Name</Label><Input name="name" required placeholder={PROVIDER_PRESETS[providerPreset]?.label || "Provider name"} defaultValue={PROVIDER_PRESETS[providerPreset]?.label} /></div>
-              <div className="space-y-2"><Label>API Base URL</Label><Input name="api_base" required placeholder="https://api.openai.com/v1" defaultValue={PROVIDER_PRESETS[providerPreset]?.apiBase || ""} /></div>
-              <div className="space-y-2"><Label>API Key</Label><Input name="api_key" type="password" required /></div>
+              {providerPreset === "bedrock" ? (
+                <>
+                  <div className="space-y-2">
+                    <Label>AWS Region</Label>
+                    <Select value={bedrockRegion} onValueChange={setBedrockRegion}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {BEDROCK_REGIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2"><Label>Access Key ID</Label><Input name="access_key_id" type="password" required /></div>
+                  <div className="space-y-2"><Label>Secret Access Key</Label><Input name="secret_access_key" type="password" required /></div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-2"><Label>API Base URL</Label><Input name="api_base" required placeholder="https://api.openai.com/v1" defaultValue={PROVIDER_PRESETS[providerPreset]?.apiBase || ""} /></div>
+                  <div className="space-y-2"><Label>API Key</Label><Input name="api_key" type="password" required /></div>
+                </>
+              )}
               <Button type="submit" className="w-full" disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{saving ? "Saving..." : "Save"}</Button>
             </form>
           </DialogContent>
@@ -136,13 +205,15 @@ export function ProvidersTab({
           <CardContent className="flex items-center justify-between pt-6">
             <div>
               <p className="font-medium">{p.name}</p>
-              <p className="text-sm text-muted-foreground font-mono">{p.api_base}</p>
+              <p className="text-sm text-muted-foreground font-mono">
+                {p.provider_type === "aws_bedrock" ? `AWS Bedrock — ${p.aws_region || "us-east-1"}` : p.api_base}
+              </p>
             </div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" aria-label="Test connection" onClick={() => handleTest(p)} disabled={testing === p.id}>
                 {testing === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
               </Button>
-              <Button variant="ghost" size="icon" aria-label="Edit provider" onClick={() => { setEditProviderPreset(detectProviderPreset(p.api_base)); setEditingProvider(p); }}><Pencil className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" aria-label="Edit provider" onClick={() => { const preset = getProviderPresetForEdit(p); setEditProviderPreset(preset); setEditBedrockRegion(p.aws_region || "us-east-1"); setEditingProvider(p); }}><Pencil className="h-4 w-4" /></Button>
               <Button variant="ghost" size="icon" aria-label="Delete provider" onClick={() => setDeleteTarget(p)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
             </div>
           </CardContent>
@@ -157,7 +228,7 @@ export function ProvidersTab({
         </div>
       )}
 
-      <Dialog open={!!editingProvider} onOpenChange={(o) => { if (!o) { setEditingProvider(null); setEditProviderPreset("custom"); } else if (editingProvider) { setEditProviderPreset(detectProviderPreset(editingProvider.api_base)); } }}>
+      <Dialog open={!!editingProvider} onOpenChange={(o) => { if (!o) { setEditingProvider(null); setEditProviderPreset("custom"); setEditBedrockRegion("us-east-1"); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Provider</DialogTitle></DialogHeader>
           <form onSubmit={handleEdit} className="space-y-4">
@@ -173,8 +244,26 @@ export function ProvidersTab({
               </Select>
             </div>
             <div className="space-y-2"><Label>Name</Label><Input name="name" required defaultValue={editingProvider?.name} /></div>
-            <div className="space-y-2"><Label>API Base URL</Label><Input name="api_base" required defaultValue={editingProvider?.api_base} placeholder={PROVIDER_PRESETS[editProviderPreset]?.apiBase || "https://..."} /></div>
-            <div className="space-y-2"><Label>API Key</Label><Input name="api_key" type="password" placeholder="Leave blank to keep current key" /></div>
+            {editProviderPreset === "bedrock" ? (
+              <>
+                <div className="space-y-2">
+                  <Label>AWS Region</Label>
+                  <Select value={editBedrockRegion} onValueChange={setEditBedrockRegion}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {BEDROCK_REGIONS.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2"><Label>Access Key ID</Label><Input name="access_key_id" type="password" placeholder="Leave blank to keep current" /></div>
+                <div className="space-y-2"><Label>Secret Access Key</Label><Input name="secret_access_key" type="password" placeholder="Leave blank to keep current" /></div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2"><Label>API Base URL</Label><Input name="api_base" required defaultValue={editingProvider?.api_base} placeholder={PROVIDER_PRESETS[editProviderPreset]?.apiBase || "https://..."} /></div>
+                <div className="space-y-2"><Label>API Key</Label><Input name="api_key" type="password" placeholder="Leave blank to keep current key" /></div>
+              </>
+            )}
             <Button type="submit" className="w-full" disabled={editing}>{editing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editing ? "Saving..." : "Update"}</Button>
           </form>
         </DialogContent>

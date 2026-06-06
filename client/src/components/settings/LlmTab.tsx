@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import type { AppDispatch, RootState } from "@/store";
 import { fetchRepositories } from "@/store/repositoriesSlice";
@@ -12,7 +12,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import type { Provider } from "./types";
-import { PROVIDER_PRESETS, detectProviderPreset } from "./types";
 
 export function LlmTab({ providers, loading }: { providers: Provider[]; loading?: boolean }) {
   const dispatch = useDispatch<AppDispatch>();
@@ -22,15 +21,28 @@ export function LlmTab({ providers, loading }: { providers: Provider[]; loading?
   const [testResult, setTestResult] = useState<Record<string, string>>({});
   const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({});
   const [savingLlm, setSavingLlm] = useState<Record<string, boolean>>({});
+  const [fetchingModels, setFetchingModels] = useState<Record<string, boolean>>({});
 
-  const handleFetchModels = async (providerId: string) => {
+  const handleFetchModels = useCallback(async (providerId: string) => {
+    if (!providerId || fetchedModels[providerId] || fetchingModels[providerId]) return;
+    setFetchingModels((prev) => ({ ...prev, [providerId]: true }));
     try {
       const data = await api.get<{ models: string[] }>(`/api/providers/${providerId}/models`);
       setFetchedModels((prev) => ({ ...prev, [providerId]: data.models }));
     } catch (err) {
       toast({ title: "Failed to fetch models", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setFetchingModels((prev) => ({ ...prev, [providerId]: false }));
     }
-  };
+  }, [fetchedModels, fetchingModels, toast]);
+
+  useEffect(() => {
+    for (const p of providers) {
+      if (p.id && !fetchedModels[p.id]) {
+        handleFetchModels(p.id);
+      }
+    }
+  }, [providers, handleFetchModels, fetchedModels]);
 
   const handleTestLlm = async (repoId: string, providerId: string, model: string) => {
     setTestingRepo(repoId);
@@ -58,10 +70,8 @@ export function LlmTab({ providers, loading }: { providers: Provider[]; loading?
       {repos.map((repo) => {
         const providerId = String(repo.llm_provider_id || "");
         const provider = providers.find((p) => p.id === providerId);
-        const preset = provider ? detectProviderPreset(provider.api_base) : "custom";
-        const presetModels = PROVIDER_PRESETS[preset]?.models || [];
         const apiModels = fetchedModels[providerId] || [];
-        const modelList = apiModels.length > 0 ? apiModels : presetModels;
+        const isFetching = fetchingModels[providerId];
 
         const saveLlm = (patch: Record<string, unknown>) => {
           setSavingLlm((prev) => ({ ...prev, [String(repo.id)]: true }));
@@ -104,12 +114,12 @@ export function LlmTab({ providers, loading }: { providers: Provider[]; loading?
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Model</Label>
-                    {providerId && <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => handleFetchModels(providerId)}>Fetch models</Button>}
+                    {providerId && !apiModels.length && isFetching && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
                   </div>
-                  {modelList.length > 0 ? (
-                    <Select defaultValue={String(repo.llm_model || modelList[0])} onValueChange={(v) => saveLlm({ llm_model: v })} disabled={savingLlm[String(repo.id)]}>
+                  {apiModels.length > 0 ? (
+                    <Select defaultValue={String(repo.llm_model || apiModels[0])} onValueChange={(v) => saveLlm({ llm_model: v })} disabled={savingLlm[String(repo.id)]}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{modelList.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                      <SelectContent>{apiModels.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
                     </Select>
                   ) : (
                     <Input defaultValue={String(repo.llm_model || "gpt-4")} onBlur={(e) => saveLlm({ llm_model: e.target.value })} disabled={savingLlm[String(repo.id)]} />
