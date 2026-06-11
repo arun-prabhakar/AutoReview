@@ -5,7 +5,7 @@ import type { LlmSettings, SmtpSettings } from "../types";
 export const fetchSettings = createAsyncThunk("settings/fetch", async () => {
   const [llm, smtp] = await Promise.all([
     api.get<LlmSettings[]>("/api/settings/llm"),
-    api.get<SmtpSettings[]>("/api/settings/smtp"),
+    api.get<SmtpSettings>("/api/settings/smtp"),
   ]);
   return { llm, smtp };
 });
@@ -14,7 +14,7 @@ const settingsSlice = createSlice({
   name: "settings",
   initialState: {
     credentials: [] as Record<string, unknown>[],
-    smtp: [] as SmtpSettings[],
+    smtp: null as SmtpSettings | null,
     llmConfig: [] as LlmSettings[],
     loading: false,
     error: null as string | null,

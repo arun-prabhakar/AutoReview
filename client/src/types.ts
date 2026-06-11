@@ -62,11 +62,6 @@ export interface Repository {
   llm_model: string;
   llm_max_tokens: number;
   llm_temperature: number;
-  smtp_host: string | null;
-  smtp_port: number | null;
-  smtp_user: string | null;
-  smtp_password_encrypted: string | null;
-  smtp_from_address: string | null;
   multi_pass_review: number;
 }
 
@@ -110,7 +105,6 @@ export interface LlmSettings {
 
 export interface SmtpSettings {
   id: string;
-  name: string;
   smtp_host: string | null;
   smtp_port: number | null;
   smtp_user: string | null;
