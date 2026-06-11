@@ -15,19 +15,19 @@ settingsRouter.get("/llm", async (_req, res) => {
 });
 
 settingsRouter.get("/smtp", async (_req, res) => {
-  const repos = await all(
-    "SELECT id, name, smtp_host, smtp_port, smtp_user, smtp_from_address FROM repositories"
-  );
-  res.json(repos);
+  const row = await get("SELECT id, smtp_host, smtp_port, smtp_user, smtp_from_address FROM smtp_settings WHERE id = 'global'");
+  res.json(row || { id: "global", smtp_host: null, smtp_port: null, smtp_user: null, smtp_from_address: null });
 });
 
-settingsRouter.put("/smtp/:repo_id", async (req, res) => {
+settingsRouter.put("/smtp", async (req, res) => {
   const { smtp_host, smtp_port, smtp_user, smtp_password, smtp_from_address } = req.body;
   try {
     const encryptedPassword = smtp_password ? encrypt(smtp_password) : null;
     await run(
-      `UPDATE repositories SET smtp_host = $1, smtp_port = $2, smtp_user = $3, smtp_password_encrypted = $4, smtp_from_address = $5, updated_at = NOW() WHERE id = $6`,
-      [smtp_host, smtp_port, smtp_user, encryptedPassword, smtp_from_address, req.params.repo_id]
+      `INSERT INTO smtp_settings (id, smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address, created_at, updated_at)
+       VALUES ('global', $1, $2, $3, $4, $5, NOW(), NOW())
+       ON CONFLICT (id) DO UPDATE SET smtp_host = $1, smtp_port = $2, smtp_user = $3, smtp_password_encrypted = $4, smtp_from_address = $5, updated_at = NOW()`,
+      [smtp_host, smtp_port, smtp_user, encryptedPassword, smtp_from_address]
     );
     res.json({ updated: true });
   } catch (error) {

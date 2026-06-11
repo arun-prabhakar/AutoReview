@@ -115,20 +115,22 @@ export async function sendReviewEmail(
   diff?: string,
   metadata?: ReviewMetadata
 ): Promise<void> {
-  const repo = await get<{
-    smtp_host: string; smtp_port: number; smtp_user: string;
-    smtp_password_encrypted: string; smtp_from_address: string;
-    notification_recipients: string | null;
-  }>(
-    "SELECT smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address, notification_recipients FROM repositories WHERE id = $1",
-    [repoId]
-  );
+  const [smtpConfig, repo] = await Promise.all([
+    get<{
+      smtp_host: string; smtp_port: number; smtp_user: string;
+      smtp_password_encrypted: string; smtp_from_address: string;
+    }>("SELECT smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address FROM smtp_settings WHERE id = 'global'"),
+    get<{ notification_recipients: string | null }>(
+      "SELECT notification_recipients FROM repositories WHERE id = $1",
+      [repoId]
+    ),
+  ]);
 
-  if (!repo || !repo.smtp_host) throw new Error("SMTP not configured for this repository");
+  if (!smtpConfig || !smtpConfig.smtp_host) throw new Error("SMTP not configured");
 
-  const smtpPassword = repo.smtp_password_encrypted ? decrypt(repo.smtp_password_encrypted) : "";
+  const smtpPassword = smtpConfig.smtp_password_encrypted ? decrypt(smtpConfig.smtp_password_encrypted) : "";
 
-  const transporter = getSmtpTransporter(repo.smtp_host, repo.smtp_port, repo.smtp_user, smtpPassword);
+  const transporter = getSmtpTransporter(smtpConfig.smtp_host, smtpConfig.smtp_port, smtpConfig.smtp_user, smtpPassword);
 
   const mustCount = findings.filter((f) => f.risk_level === "must_fix").length;
   const statusTag = mustCount > 0 ? `⚠ ${mustCount} Must Fix` : findings.length > 0 ? `${findings.length} Findings` : "Clean";
@@ -144,8 +146,8 @@ export async function sendReviewEmail(
   const body = generateEmailDraft(repoName, findings, aiOverview, changedFiles, diff, metadata);
 
   await transporter.sendMail({
-    from: repo.smtp_from_address,
-    to: repo.notification_recipients || "",
+    from: smtpConfig.smtp_from_address,
+    to: repo?.notification_recipients || "",
     subject,
     text: body,
   });
