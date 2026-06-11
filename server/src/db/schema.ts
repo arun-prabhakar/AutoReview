@@ -91,11 +91,6 @@ async function createTables(pool: Pool): Promise<void> {
       llm_model TEXT DEFAULT 'gpt-4',
       llm_max_tokens INTEGER DEFAULT 4096,
       llm_temperature DOUBLE PRECISION DEFAULT 0.2,
-      smtp_host TEXT,
-      smtp_port INTEGER,
-      smtp_user TEXT,
-      smtp_password_encrypted TEXT,
-      smtp_from_address TEXT,
       multi_pass_review BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -162,6 +157,19 @@ async function createTables(pool: Pool): Promise<void> {
       content TEXT NOT NULL,
       strictness TEXT NOT NULL DEFAULT 'all',
       is_default BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS smtp_settings (
+      id TEXT PRIMARY KEY,
+      smtp_host TEXT,
+      smtp_port INTEGER,
+      smtp_user TEXT,
+      smtp_password_encrypted TEXT,
+      smtp_from_address TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -318,6 +326,19 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
     sql: [
       `ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS provider_type TEXT NOT NULL DEFAULT 'openai_compatible'`,
       `ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS aws_region TEXT`,
+    ],
+  },
+  {
+    id: "011",
+    description: "Move SMTP settings from repositories to global smtp_settings table",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS smtp_settings (id TEXT PRIMARY KEY, smtp_host TEXT, smtp_port INTEGER, smtp_user TEXT, smtp_password_encrypted TEXT, smtp_from_address TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+      `INSERT INTO smtp_settings (id, smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address) SELECT 'global', smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address FROM repositories WHERE smtp_host IS NOT NULL LIMIT 1 ON CONFLICT (id) DO NOTHING`,
+      `ALTER TABLE repositories DROP COLUMN IF EXISTS smtp_host`,
+      `ALTER TABLE repositories DROP COLUMN IF EXISTS smtp_port`,
+      `ALTER TABLE repositories DROP COLUMN IF EXISTS smtp_user`,
+      `ALTER TABLE repositories DROP COLUMN IF EXISTS smtp_password_encrypted`,
+      `ALTER TABLE repositories DROP COLUMN IF EXISTS smtp_from_address`,
     ],
   },
 ];
