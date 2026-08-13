@@ -341,6 +341,39 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `ALTER TABLE repositories DROP COLUMN IF EXISTS smtp_from_address`,
     ],
   },
+  {
+    id: "012",
+    description: "Backfill repository configuration columns",
+    sql: [
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS auto_review_enabled BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS poll_interval_minutes INTEGER NOT NULL DEFAULT 5`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS trigger_on_commit BOOLEAN NOT NULL DEFAULT true`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS trigger_on_pr_update BOOLEAN NOT NULL DEFAULT true`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS generate_email BOOLEAN NOT NULL DEFAULT true`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS post_to_bitbucket BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS excluded_paths TEXT`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS notification_recipients TEXT`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS include_commit_author BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS llm_provider TEXT DEFAULT 'openai'`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS llm_provider_id TEXT`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS llm_model TEXT DEFAULT 'gpt-4'`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS llm_max_tokens INTEGER DEFAULT 4096`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS llm_temperature DOUBLE PRECISION DEFAULT 0.2`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS multi_pass_review BOOLEAN NOT NULL DEFAULT false`,
+    ],
+  },
+  {
+    id: "013",
+    description: "Backfill finding disposition columns",
+    sql: [
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS disposition TEXT NOT NULL DEFAULT 'open'`,
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS disposition_reason TEXT`,
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS disposition_by TEXT`,
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS disposition_at TIMESTAMPTZ`,
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS suppressed BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS suppressed_by_rule_id TEXT`,
+    ],
+  },
 ];
 
 function buildTimestampMigrations(): string[] {
