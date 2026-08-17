@@ -5,7 +5,7 @@ export function setOnUnauthorized(callback: () => void): void {
 }
 
 const TIMEOUT_MS = 30_000;
-const REVIEW_TIMEOUT_MS = 180_000;
+const REVIEW_TIMEOUT_MS = 840_000;
 
 type ApiRequestOptions = {
   timeoutMs?: number;
