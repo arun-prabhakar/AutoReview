@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, GitCommit, GitPullRequest, RefreshCw, Loader2 } from "lucide-react";
+import { AlertTriangle, GitCommit, GitPullRequest, RefreshCw, Loader2, XCircle } from "lucide-react";
 import type { Repository } from "@/types";
 
 type ReviewResult = {
@@ -31,6 +31,17 @@ type OpenPr = {
   destinationBranch: string;
   author: string;
   updatedOn: string;
+};
+
+type ReviewPreflight = {
+  model: string;
+  changedFiles: number;
+  estimatedInputTokens: number;
+  estimatedMaxOutputTokens: number;
+  estimatedMaxCost: number;
+  truncated: boolean;
+  incremental: boolean;
+  passes: number;
 };
 
 export default function ManualReview() {
@@ -52,6 +63,11 @@ export default function ManualReview() {
   const [loadingPrs, setLoadingPrs] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [streamStatus, setStreamStatus] = useState("");
+  const [preflight, setPreflight] = useState<ReviewPreflight | null>(null);
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [preflighting, setPreflighting] = useState(false);
+  const [pendingForce, setPendingForce] = useState(false);
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -100,9 +116,10 @@ export default function ManualReview() {
     try {
       let data: ReviewResult;
       const handleStreamEvent = (event: string, payload: Record<string, unknown>) => {
-        if (event === "started" || event === "heartbeat") {
+        if (event === "started" || event === "heartbeat" || event === "progress") {
           setStreamStatus(String(payload.message || "Review is running..."));
         }
+        if (event === "progress" && payload.reviewId) setActiveReviewId(String(payload.reviewId));
       };
       if (mode === "commit") {
         data = await api.postStream<ReviewResult>("/api/reviews/manual/stream", {
@@ -134,12 +151,41 @@ export default function ManualReview() {
     } finally {
       setSubmitting(false);
       setStreamStatus("");
+      setActiveReviewId(null);
+    }
+  };
+
+  const cancelActiveReview = async () => {
+    if (!activeReviewId) return;
+    try {
+      await api.post(`/api/reviews/${activeReviewId}/cancel`, {});
+      setStreamStatus("Cancellation requested; waiting for the current stage to stop...");
+    } catch (err) {
+      toast({ title: "Cancellation failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    }
+  };
+
+  const prepareReview = async (force: boolean) => {
+    setPreflighting(true);
+    try {
+      const data = await api.post<ReviewPreflight>("/api/reviews/preflight", {
+        repository_id: repoId,
+        mode: mode === "commit" ? "manual" : "pr",
+        target: mode === "commit" ? commitHash : prId,
+      });
+      setPreflight(data);
+      setPendingForce(force);
+      setPreflightOpen(true);
+    } catch (err) {
+      toast({ title: "Preflight failed", description: err instanceof Error ? err.message : "Could not inspect the diff", variant: "destructive" });
+    } finally {
+      setPreflighting(false);
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    submitReview(false);
+    prepareReview(false);
   };
 
   const handleViewExisting = () => {
@@ -149,10 +195,10 @@ export default function ManualReview() {
 
   const handleReviewAgain = () => {
     setConfirmOpen(false);
-    submitReview(true);
+    prepareReview(true);
   };
 
-  const isSubmitDisabled = submitting || !repoId || (mode === "commit" ? !commitHash : !prId);
+  const isSubmitDisabled = submitting || preflighting || !repoId || (mode === "commit" ? !commitHash : !prId);
 
   const conflictLabel = mode === "commit"
     ? commitHash.substring(0, 12)
@@ -277,9 +323,10 @@ export default function ManualReview() {
                 disabled={isSubmitDisabled}
                 className={cn("w-full h-11 rounded-lg font-bold")}
               >
-                {submitting ? <><Loader2 className="h-4 w-4 animate-spin mr-2 inline" />Reviewing with AI... ({elapsed}s)</> : mode === "pr" ? "Review Pull Request" : "Start Review"}
+                {submitting ? <><Loader2 className="h-4 w-4 animate-spin mr-2 inline" />Reviewing with AI... ({elapsed}s)</> : preflighting ? <><Loader2 className="h-4 w-4 animate-spin mr-2 inline" />Estimating review...</> : mode === "pr" ? "Review Pull Request" : "Start Review"}
               </Button>
               {submitting && streamStatus && <p className="text-center text-xs text-muted-foreground">{streamStatus}</p>}
+              {submitting && activeReviewId && <Button type="button" variant="outline" className="w-full" onClick={cancelActiveReview}><XCircle className="mr-2 h-4 w-4" />Cancel Review</Button>}
             </form>
           </CardContent>
         </Card>
@@ -351,6 +398,28 @@ export default function ManualReview() {
             <Button onClick={handleReviewAgain} disabled={submitting}>
               {submitting ? `Reviewing... (${elapsed}s)` : "Review Again"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={preflightOpen} onOpenChange={setPreflightOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Review Preflight</DialogTitle>
+            <DialogDescription>Confirm the expected review size and maximum estimated cost.</DialogDescription>
+          </DialogHeader>
+          {preflight && (
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-md bg-secondary p-3"><p className="text-xs text-muted-foreground">Changed files</p><p className="font-semibold">{preflight.changedFiles}</p></div>
+              <div className="rounded-md bg-secondary p-3"><p className="text-xs text-muted-foreground">Review passes</p><p className="font-semibold">{preflight.passes}</p></div>
+              <div className="rounded-md bg-secondary p-3"><p className="text-xs text-muted-foreground">Estimated input</p><p className="font-semibold">{preflight.estimatedInputTokens.toLocaleString()} tokens</p></div>
+              <div className="rounded-md bg-secondary p-3"><p className="text-xs text-muted-foreground">Maximum output</p><p className="font-semibold">{preflight.estimatedMaxOutputTokens.toLocaleString()} tokens</p></div>
+              <div className="col-span-2 rounded-md border border-border p-3"><p className="text-xs text-muted-foreground">Model and estimated maximum cost</p><p className="font-semibold break-all">{preflight.model} · ${preflight.estimatedMaxCost.toFixed(4)}</p>{preflight.incremental && <p className="mt-1 text-xs text-success">Incremental review from the previous PR head</p>}{preflight.truncated && <p className="mt-1 text-xs text-warning">Diff exceeds the review size limit and will be truncated</p>}</div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreflightOpen(false)}>Cancel</Button>
+            <Button onClick={() => { setPreflightOpen(false); submitReview(pendingForce); }}>Start Review</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

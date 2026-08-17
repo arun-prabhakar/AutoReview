@@ -131,7 +131,7 @@ export default function Dashboard() {
     if (review.status === "pending") {
       return <span title="In progress"><div className="h-4 w-4 rounded-full border-2 border-muted-foreground/30 border-t-foreground animate-spin" /></span>;
     }
-    if (review.status === "failed") {
+    if (review.status === "failed" || review.status === "cancelled") {
       const label = review.failure_category && FAILURE_LABELS[review.failure_category] ? FAILURE_LABELS[review.failure_category] : "Failed";
       return <span title={label}><XCircle className="h-4 w-4 text-muted-foreground" /></span>;
     }
@@ -385,7 +385,7 @@ export default function Dashboard() {
                         review.status === "completed" && (review.must_fix_count ?? 0) > 0 && "border-l-2 border-l-destructive",
                         review.status === "completed" && (review.must_fix_count ?? 0) === 0 && (review.should_fix_count ?? 0) > 0 && "border-l-2 border-l-warning",
                         review.status === "completed" && (review.must_fix_count ?? 0) === 0 && (review.should_fix_count ?? 0) === 0 && "border-l-2 border-l-success",
-                        review.status === "failed" && "border-l-2 border-l-destructive",
+                        (review.status === "failed" || review.status === "cancelled") && "border-l-2 border-l-destructive",
                         review.status === "pending" && "border-l-2 border-l-warning"
                       )}
                       role="button"

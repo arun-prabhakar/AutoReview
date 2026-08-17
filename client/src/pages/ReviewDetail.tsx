@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { FAILURE_LABELS } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import { FindingCard } from "@/components/review/FindingCard";
-import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2 } from "lucide-react";
+import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ReviewDetail() {
@@ -30,6 +30,7 @@ export default function ReviewDetail() {
   const [emailVisible, setEmailVisible] = useState(false);
   const [rereviewing, setRereviewing] = useState(false);
   const [rereviewOpen, setRereviewOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const [chain, setChain] = useState<ReviewChainItem[]>([]);
   const [chainVisible, setChainVisible] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -68,6 +69,20 @@ export default function ReviewDetail() {
     } finally {
       setRereviewing(false);
       setRereviewOpen(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!id) return;
+    setCancelling(true);
+    try {
+      await api.post(`/api/reviews/${id}/cancel`, {});
+      toast({ title: "Cancellation requested", description: "The review will stop at the next pipeline checkpoint." });
+      dispatch(fetchReviewDetail(id));
+    } catch (err) {
+      toast({ title: "Cancellation failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -283,13 +298,19 @@ AutoReview`;
           </nav>
         </div>
         <div className="flex items-center gap-2">
+          {review?.status === "pending" && (
+            <Button variant="outline" size="sm" onClick={handleCancel} disabled={cancelling}>
+              {cancelling ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5 mr-1.5" />}
+              Cancel
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={shareData ? undefined : () => setShareOpen(true)} disabled={shareLoading}>
             <Share2 className="h-3.5 w-3.5 mr-1.5" />
             {shareLoading ? "Sharing..." : "Share"}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setRereviewOpen(true)} disabled={rereviewing}>
+          <Button variant="outline" size="sm" onClick={() => setRereviewOpen(true)} disabled={rereviewing || review?.status === "pending"}>
             <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-            {rereviewing ? "Re-reviewing..." : "Re-review"}
+            {rereviewing ? "Reviewing..." : review?.status === "failed" || review?.status === "cancelled" ? "Retry" : "Re-review"}
           </Button>
 
           {user?.role === "admin" && (
@@ -451,7 +472,11 @@ AutoReview`;
                     </p>
                   </div>
                 </div>
-                <Badge variant={review.status === "completed" ? "default" : "destructive"} className="capitalize">{String(review.status)}</Badge>
+                <div className="flex items-center gap-2">
+                  {review.incremental && <Badge variant="outline">Incremental</Badge>}
+                  {review.policy_status && <Badge variant={review.policy_status === "passed" ? "default" : "destructive"}>Policy {review.policy_status}</Badge>}
+                  <Badge variant={review.status === "completed" ? "default" : "destructive"} className="capitalize">{String(review.status)}</Badge>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

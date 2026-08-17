@@ -10,4 +10,5 @@ export const FAILURE_LABELS: Record<string, string> = {
   no_provider: "No LLM Provider Configured",
   no_credential: "No Credential Configured",
   internal_error: "Internal Error",
+  cancelled: "Cancelled",
 };

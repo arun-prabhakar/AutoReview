@@ -374,6 +374,19 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `ALTER TABLE findings ADD COLUMN IF NOT EXISTS suppressed_by_rule_id TEXT`,
     ],
   },
+  {
+    id: "014",
+    description: "Add review lifecycle and policy fields",
+    sql: [
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS cancel_requested BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS policy_status TEXT`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS incremental BOOLEAN NOT NULL DEFAULT false`,
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS base_commit TEXT`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS policy_fail_on_must_fix BOOLEAN NOT NULL DEFAULT true`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS policy_max_should_fix INTEGER`,
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS policy_post_build_status BOOLEAN NOT NULL DEFAULT false`,
+    ],
+  },
 ];
 
 function buildTimestampMigrations(): string[] {

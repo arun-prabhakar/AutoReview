@@ -1,5 +1,5 @@
 import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, findPreviousPrReview, type RawFindingInput } from "./storage-service.js";
-import { fetchCommitDiff, fetchPrDiff, fetchPrInfo, findPullRequestForCommit, postPrComment, postInlinePrComment, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
+import { fetchCommitDiff, fetchPrDiff, fetchPrDiffSince, fetchPrInfo, findPullRequestForCommit, postPrComment, postInlinePrComment, postBuildStatus, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
@@ -25,6 +25,22 @@ interface ReviewContext {
   prHeadCommit?: string;
   prBranch?: string;
   llmModel?: string;
+  incremental?: boolean;
+  baseCommit?: string;
+}
+
+class ReviewCancelledError extends Error {
+  constructor() {
+    super("Review cancelled by user");
+  }
+}
+
+async function ensureNotCancelled(reviewId: string): Promise<void> {
+  const review = await get<{ cancel_requested: boolean }>(
+    "SELECT cancel_requested FROM reviews WHERE id = $1",
+    [reviewId],
+  );
+  if (review?.cancel_requested) throw new ReviewCancelledError();
 }
 
 function classifyError(error: unknown): string {
@@ -124,7 +140,7 @@ async function performDedup(repositoryId: string, dedupKey: string, force: boole
   return { action: "proceed" as const };
 }
 
-async function executeReview(ctx: ReviewContext, createdBy?: string, parentReviewId?: string) {
+async function executeReview(ctx: ReviewContext, createdBy?: string, parentReviewId?: string, onCreated?: (reviewId: string) => void) {
   const reviewId = uuid();
 
   let projectContext: string | undefined;
@@ -159,7 +175,10 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     failure_category: null,
     pr_head_commit: ctx.prHeadCommit ?? null,
     llm_model: ctx.llmModel ?? null,
+    incremental: ctx.incremental ?? false,
+    base_commit: ctx.baseCommit ?? null,
   });
+  onCreated?.(reviewId);
 
   if (!created) {
     const existing = await findExistingReview(ctx.repo.id, ctx.dedupKey);
@@ -170,6 +189,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
   }
 
   try {
+    await ensureNotCancelled(reviewId);
     const template = await getPromptTemplate(ctx.repo.strictness);
     const provider = await resolveProvider(ctx.repo);
 
@@ -192,6 +212,8 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       aiResponse = singleResult.aiResponse;
     }
 
+    await ensureNotCancelled(reviewId);
+
     const findings = rawFindings.map((f) => ({
       file_path: f.file_path,
       line_number: f.line_number,
@@ -210,6 +232,8 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       aiOverview = fallbackOverview(ctx.commit, ctx.diff);
     }
 
+    await ensureNotCancelled(reviewId);
+
     await insertFindings(reviewId, findings);
 
     const newFindingIds = await linkDuplicateFindings(ctx.repo.id, findings);
@@ -218,6 +242,13 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     }
 
     const modelCostPerToken = estimateCost(ctx.repo.llm_model, tokenUsage);
+    const mustFixCount = findings.filter((finding) => finding.risk_level === "must_fix").length;
+    const shouldFixCount = findings.filter((finding) => finding.risk_level === "should_fix_soon").length;
+    const policyFailed =
+      (ctx.repo.policy_fail_on_must_fix && mustFixCount > 0) ||
+      (ctx.repo.policy_max_should_fix != null && shouldFixCount > ctx.repo.policy_max_should_fix);
+    const policyStatus = policyFailed ? "failed" : "passed";
+
     await updateReviewStatus(
       reviewId,
       "completed",
@@ -230,15 +261,33 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
         estimated_cost: modelCostPerToken,
       },
       undefined,
-      aiResponse
+      aiResponse,
+      policyStatus,
     );
 
-    return { reviewId, findings, cached: false, incomplete, aiOverview, tokenUsage };
+    if (ctx.repo.policy_post_build_status) {
+      const policyCredentials = await resolveCredentials(ctx.repo);
+      await postBuildStatus(
+        ctx.repo.workspace,
+        ctx.repo.slug,
+        ctx.commit.hash,
+        policyFailed ? "FAILED" : "SUCCESSFUL",
+        "AutoReview policy",
+        policyFailed
+          ? `Policy failed: ${mustFixCount} must-fix, ${shouldFixCount} should-fix finding(s)`
+          : "AutoReview policy passed",
+        policyCredentials.password,
+        policyCredentials.username,
+      );
+    }
+
+    return { reviewId, findings, cached: false, incomplete, aiOverview, tokenUsage, policyStatus, incremental: ctx.incremental ?? false };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    const category = classifyError(error);
+    const cancelled = error instanceof ReviewCancelledError;
+    const category = cancelled ? "cancelled" : classifyError(error);
     const aiResponse = error instanceof LlmResponseError ? error.aiResponse : undefined;
-    await updateReviewStatus(reviewId, "failed", message, undefined, undefined, category, aiResponse);
+    await updateReviewStatus(reviewId, cancelled ? "cancelled" : "failed", message, undefined, undefined, category, aiResponse);
     if (category === "vcs_auth_failed" || message.includes("CREDENTIAL_EXPIRED")) {
       logger.error(`ALERT: Credential expired for repo ${ctx.repo.name}`, { repoId: ctx.repo.id });
     }
@@ -375,7 +424,7 @@ async function linkDuplicateFindings(repositoryId: string, findings: RawFindingI
   return linked;
 }
 
-export async function runManualReview(repositoryId: string, commitHash: string, force = false, createdBy?: string) {
+export async function runManualReview(repositoryId: string, commitHash: string, force = false, createdBy?: string, onCreated?: (reviewId: string) => void) {
   const repo = await getRepoById(repositoryId);
   if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
 
@@ -391,7 +440,7 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
   if (dedupResult.action === "in_progress") return { review: dedupResult.review, findings: [], cached: false, message: "Review already in progress" };
 
   const ctx: ReviewContext = { repo, diff, commit, truncated, dedupKey, reviewMode: "manual", llmModel: repo.llm_model };
-  const result = await executeReview(ctx, createdBy, dedupResult.parentReviewId);
+  const result = await executeReview(ctx, createdBy, dedupResult.parentReviewId, onCreated);
 
   await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);
   await notifyReviewComplete(repo.id, result.reviewId, repo.name, result.findings, createdBy);
@@ -399,7 +448,7 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
   return result;
 }
 
-export async function runPrReview(repositoryId: string, prId: string, force = false, createdBy?: string) {
+export async function runPrReview(repositoryId: string, prId: string, force = false, createdBy?: string, onCreated?: (reviewId: string) => void) {
   const repo = await getRepoById(repositoryId);
   if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
 
@@ -414,12 +463,17 @@ export async function runPrReview(repositoryId: string, prId: string, force = fa
   if (dedupResult.action === "in_progress") return { review: dedupResult.review, findings: [], cached: false, message: "Review already in progress" };
 
   let parentReviewId = dedupResult.parentReviewId;
+  const previousReview = await findPreviousPrReview(repositoryId, prId);
   if (!parentReviewId) {
-    const previousReview = await findPreviousPrReview(repositoryId, prId);
     if (previousReview) parentReviewId = previousReview.id;
   }
 
-  const { diff, pr, truncated } = await fetchPrDiff(repo.workspace, repo.slug, prId, password, username);
+  const canReviewIncrementally = Boolean(
+    previousReview?.pr_head_commit && previousReview.pr_head_commit !== prInfo.commitHash,
+  );
+  const { diff, pr, truncated } = canReviewIncrementally
+    ? await fetchPrDiffSince(repo.workspace, repo.slug, prId, previousReview!.pr_head_commit!, password, username)
+    : await fetchPrDiff(repo.workspace, repo.slug, prId, password, username);
 
   const syntheticCommit: CommitInfo = {
     hash: pr.commitHash,
@@ -428,8 +482,8 @@ export async function runPrReview(repositoryId: string, prId: string, force = fa
     author: { raw: pr.author },
   };
 
-  const ctx: ReviewContext = { repo, diff, commit: syntheticCommit, truncated, dedupKey, reviewMode: "pr", prId, prHeadCommit: pr.commitHash, prBranch: pr.sourceBranch, llmModel: repo.llm_model };
-  const result = await executeReview(ctx, createdBy, parentReviewId);
+  const ctx: ReviewContext = { repo, diff, commit: syntheticCommit, truncated, dedupKey, reviewMode: "pr", prId, prHeadCommit: pr.commitHash, prBranch: pr.sourceBranch, llmModel: repo.llm_model, incremental: canReviewIncrementally, baseCommit: canReviewIncrementally ? previousReview?.pr_head_commit ?? undefined : undefined };
+  const result = await executeReview(ctx, createdBy, parentReviewId, onCreated);
 
   await sendNotifications(ctx, result.reviewId, result.findings, result.aiOverview, password, username, result.tokenUsage);
   await notifyReviewComplete(repo.id, result.reviewId, repo.name, result.findings, createdBy);
@@ -461,7 +515,7 @@ async function notifyReviewComplete(
   }
 }
 
-export async function rerunReview(reviewId: string, createdBy?: string) {
+export async function rerunReview(reviewId: string, createdBy?: string, onCreated?: (reviewId: string) => void) {
   const review = await get<{ id: string; repository_id: string; commit_hash: string; review_mode: string }>(
     "SELECT id, repository_id, commit_hash, review_mode FROM reviews WHERE id = $1", [reviewId]
   );
@@ -470,7 +524,56 @@ export async function rerunReview(reviewId: string, createdBy?: string) {
   if (review.review_mode === "pr") {
     const parts = review.commit_hash.split(":");
     const prId = parts[1];
-    return runPrReview(review.repository_id, prId, true, createdBy);
+    return runPrReview(review.repository_id, prId, true, createdBy, onCreated);
   }
-  return runManualReview(review.repository_id, review.commit_hash, true, createdBy);
+  return runManualReview(review.repository_id, review.commit_hash, true, createdBy, onCreated);
+}
+
+export async function preflightReview(
+  repositoryId: string,
+  mode: "manual" | "pr",
+  target: string,
+) {
+  const repo = await getRepoById(repositoryId);
+  if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
+  const { password, username } = await resolveCredentials(repo);
+
+  let diff: string;
+  let truncated: boolean;
+  let incremental = false;
+  if (mode === "pr") {
+    const pr = await fetchPrInfo(repo.workspace, repo.slug, target, password, username);
+    const previous = await findPreviousPrReview(repositoryId, target);
+    incremental = Boolean(previous?.pr_head_commit && previous.pr_head_commit !== pr.commitHash);
+    const result = incremental
+      ? await fetchPrDiffSince(repo.workspace, repo.slug, target, previous!.pr_head_commit!, password, username)
+      : await fetchPrDiff(repo.workspace, repo.slug, target, password, username);
+    diff = result.diff;
+    truncated = result.truncated;
+  } else {
+    const result = await fetchCommitDiff(repo.workspace, repo.slug, target, password, username);
+    diff = result.diff;
+    truncated = result.truncated;
+  }
+
+  const estimatedInputTokens = Math.ceil(diff.length / 4);
+  const passCount = repo.multi_pass_review ? 3 : 1;
+  const estimatedMaxOutputTokens = repo.llm_max_tokens * passCount;
+  const estimatedMaxCost = estimateCost(repo.llm_model, {
+    prompt_tokens: estimatedInputTokens * passCount,
+    completion_tokens: estimatedMaxOutputTokens,
+  });
+  const changedFiles = extractFilePaths(diff).split("\n").filter(Boolean).length;
+
+  return {
+    model: repo.llm_model,
+    diffCharacters: diff.length,
+    changedFiles,
+    estimatedInputTokens: estimatedInputTokens * passCount,
+    estimatedMaxOutputTokens,
+    estimatedMaxCost,
+    truncated,
+    incremental,
+    passes: passCount,
+  };
 }

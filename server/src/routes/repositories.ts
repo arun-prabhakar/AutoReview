@@ -62,6 +62,7 @@ const ALLOWED_UPDATE_FIELDS: readonly string[] = [
   "generate_email", "post_to_bitbucket", "excluded_paths", "notification_recipients",
   "include_commit_author", "llm_provider", "llm_provider_id", "llm_model", "llm_max_tokens",
   "llm_temperature", "multi_pass_review",
+  "policy_fail_on_must_fix", "policy_max_should_fix", "policy_post_build_status",
 ] as const;
 
 repositoriesRouter.put("/:id", requireRole("admin"), async (req, res) => {

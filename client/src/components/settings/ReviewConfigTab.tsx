@@ -53,6 +53,27 @@ export function ReviewConfigTab() {
               <Input defaultValue={String(repo.excluded_paths || "")} placeholder="node_modules/, *.min.js" onBlur={(e) => updateRepo(String(repo.id), { excluded_paths: e.target.value })} disabled={updating[String(repo.id)]} />
             </div>
             <Separator />
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label>Fail on must-fix</Label>
+                <Select defaultValue={repo.policy_fail_on_must_fix === false || repo.policy_fail_on_must_fix === 0 ? "off" : "on"} onValueChange={(v) => updateRepo(String(repo.id), { policy_fail_on_must_fix: v === "on" })} disabled={updating[String(repo.id)]}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="on">On</SelectItem><SelectItem value="off">Off</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Max should-fix</Label>
+                <Input type="number" min="0" defaultValue={repo.policy_max_should_fix ?? ""} placeholder="No limit" onBlur={(e) => updateRepo(String(repo.id), { policy_max_should_fix: e.target.value === "" ? null : Number(e.target.value) })} disabled={updating[String(repo.id)]} />
+              </div>
+              <div className="space-y-2">
+                <Label>Publish build status</Label>
+                <Select defaultValue={repo.policy_post_build_status ? "on" : "off"} onValueChange={(v) => updateRepo(String(repo.id), { policy_post_build_status: v === "on" })} disabled={updating[String(repo.id)]}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="on">On</SelectItem><SelectItem value="off">Off</SelectItem></SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Separator />
             <div className="flex items-center gap-4">
               <Label className="text-sm">Auto Review</Label>
               <Select defaultValue={Number(repo.auto_review_enabled) ? "on" : "off"} onValueChange={(v) => updateRepo(String(repo.id), { auto_review_enabled: v === "on" ? 1 : 0 })} disabled={updating[String(repo.id)]}>

@@ -3,7 +3,7 @@ export interface Review {
   repository_id: string;
   commit_hash: string;
   branch: string | null;
-  status: 'pending' | 'completed' | 'failed';
+  status: 'pending' | 'completed' | 'failed' | 'cancelled';
   strictness: string;
   review_mode: string;
   error_message: string | null;
@@ -25,6 +25,10 @@ export interface Review {
   diff_text?: string | null;
   must_fix_count?: number;
   should_fix_count?: number;
+  cancel_requested?: boolean;
+  policy_status?: 'passed' | 'failed' | null;
+  incremental?: boolean;
+  base_commit?: string | null;
 }
 
 export interface Finding {
@@ -63,6 +67,9 @@ export interface Repository {
   llm_max_tokens: number;
   llm_temperature: number;
   multi_pass_review: number;
+  policy_fail_on_must_fix?: boolean | number;
+  policy_max_should_fix?: number | null;
+  policy_post_build_status?: boolean | number;
 }
 
 export interface Credential {

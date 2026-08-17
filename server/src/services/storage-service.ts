@@ -26,6 +26,10 @@ export type ReviewRow = {
   diff_text: string | null;
   pr_head_commit: string | null;
   llm_model: string | null;
+  cancel_requested?: boolean;
+  policy_status?: string | null;
+  incremental?: boolean;
+  base_commit?: string | null;
 };
 
 export type FindingRow = {
@@ -56,11 +60,11 @@ export async function findFindingsByReviewId(reviewId: string): Promise<FindingR
 
 export async function createReview(review: Omit<ReviewRow, "created_at" | "ai_overview" | "ai_response">): Promise<{ id: string; created: boolean }> {
   const result = await getPool().query(
-    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author, diff_text, pr_head_commit, llm_model)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+    `INSERT INTO reviews (id, repository_id, commit_hash, branch, status, strictness, review_mode, error_message, completed_at, created_by, parent_review_id, tokens_prompt, tokens_completion, tokens_total, estimated_cost, project_context, commit_author, diff_text, pr_head_commit, llm_model, incremental, base_commit)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
      ON CONFLICT DO NOTHING
      RETURNING id`,
-    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null, review.diff_text ?? null, review.pr_head_commit ?? null, review.llm_model ?? null]
+    [review.id, review.repository_id, review.commit_hash, review.branch, review.status, review.strictness, review.review_mode, review.error_message, review.completed_at, review.created_by, review.parent_review_id ?? null, review.tokens_prompt ?? null, review.tokens_completion ?? null, review.tokens_total ?? null, review.estimated_cost ?? null, review.project_context ?? null, review.commit_author ?? null, review.diff_text ?? null, review.pr_head_commit ?? null, review.llm_model ?? null, review.incremental ?? false, review.base_commit ?? null]
   );
   const created = result.rows.length > 0;
   if (!created) {
@@ -76,12 +80,13 @@ export async function updateReviewStatus(
   aiOverview?: string,
   tokenData?: { tokens_prompt: number; tokens_completion: number; tokens_total: number; estimated_cost: number },
   failureCategory?: string,
-  aiResponse?: string
+  aiResponse?: string,
+  policyStatus?: string,
 ): Promise<void> {
-  const completedAt = status === "completed" || status === "failed" ? new Date().toISOString() : null;
+  const completedAt = status === "completed" || status === "failed" || status === "cancelled" ? new Date().toISOString() : null;
   await run(
-    "UPDATE reviews SET status = $1, error_message = $2, completed_at = COALESCE($3, completed_at), ai_overview = COALESCE($4, ai_overview), ai_response = COALESCE($5, ai_response), tokens_prompt = COALESCE($6, tokens_prompt), tokens_completion = COALESCE($7, tokens_completion), tokens_total = COALESCE($8, tokens_total), estimated_cost = COALESCE($9, estimated_cost), failure_category = COALESCE($10, failure_category) WHERE id = $11",
-    [status, errorMessage || null, completedAt, aiOverview || null, aiResponse || null, tokenData?.tokens_prompt ?? null, tokenData?.tokens_completion ?? null, tokenData?.tokens_total ?? null, tokenData?.estimated_cost ?? null, failureCategory || null, id]
+    "UPDATE reviews SET status = $1, error_message = $2, completed_at = COALESCE($3, completed_at), ai_overview = COALESCE($4, ai_overview), ai_response = COALESCE($5, ai_response), tokens_prompt = COALESCE($6, tokens_prompt), tokens_completion = COALESCE($7, tokens_completion), tokens_total = COALESCE($8, tokens_total), estimated_cost = COALESCE($9, estimated_cost), failure_category = COALESCE($10, failure_category), policy_status = COALESCE($11, policy_status) WHERE id = $12",
+    [status, errorMessage || null, completedAt, aiOverview || null, aiResponse || null, tokenData?.tokens_prompt ?? null, tokenData?.tokens_completion ?? null, tokenData?.tokens_total ?? null, tokenData?.estimated_cost ?? null, failureCategory || null, policyStatus || null, id]
   );
 }
 

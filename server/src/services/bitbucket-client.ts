@@ -242,6 +242,32 @@ export async function fetchPrDiff(
   return { diff, pr, truncated };
 }
 
+export async function fetchPrDiffSince(
+  workspace: string,
+  repoSlug: string,
+  prId: string,
+  baseCommit: string,
+  appPassword: string,
+  username: string,
+): Promise<{ diff: string; pr: PullRequestInfo; truncated: boolean }> {
+  const headers = makeAuthHeader(appPassword, username);
+  const pr = await fetchPrInfo(workspace, repoSlug, prId, appPassword, username);
+  const spec = encodeURIComponent(`${baseCommit}..${pr.commitHash}`);
+  const diffRes = await retryFetch(
+    `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/diff/${spec}`,
+    { headers },
+  );
+  if (!diffRes.ok) throw new Error(`Bitbucket incremental diff API error: ${diffRes.status}`);
+
+  let diff = await diffRes.text();
+  let truncated = false;
+  if (diff.length > MAX_DIFF_SIZE) {
+    diff = diff.substring(0, MAX_DIFF_SIZE);
+    truncated = true;
+  }
+  return { diff, pr, truncated };
+}
+
 export type CommitInfo = {
   hash: string;
   message: string;

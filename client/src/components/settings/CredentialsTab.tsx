@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, KeyRound, Loader2, Pencil } from "lucide-react";
+import { Plus, Trash2, KeyRound, Loader2, Pencil, ShieldCheck } from "lucide-react";
 import type { Credential } from "./types";
 
 export function CredentialsTab({
@@ -26,6 +26,7 @@ export function CredentialsTab({
   const [editUsername, setEditUsername] = useState("");
   const [editWorkspace, setEditWorkspace] = useState("");
   const [editToken, setEditToken] = useState("");
+  const [testing, setTesting] = useState<string | null>(null);
 
   const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -91,6 +92,18 @@ export function CredentialsTab({
     }
   };
 
+  const handleTest = async (credential: Credential) => {
+    setTesting(credential.id);
+    try {
+      const result = await api.post<{ repository: string; openPullRequests: number }>(`/api/credentials/${credential.id}/test`, {});
+      toast({ title: "Credential verified", description: `${result.repository}: access confirmed (${result.openPullRequests} open PRs).`, variant: "success" });
+    } catch (err) {
+      toast({ title: "Credential test failed", description: err instanceof Error ? err.message : "Bitbucket access could not be verified", variant: "destructive" });
+    } finally {
+      setTesting(null);
+    }
+  };
+
   return (
     <>
       <div className="flex items-center justify-between">
@@ -117,6 +130,7 @@ export function CredentialsTab({
               <p className="text-sm text-muted-foreground">{cred.workspace || "No workspace"}</p>
             </div>
             <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" aria-label="Test credential" disabled={testing === cred.id} onClick={() => handleTest(cred)}>{testing === cred.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}</Button>
               <Button variant="ghost" size="icon" aria-label="Edit credential" onClick={() => openEdit(cred)}><Pencil className="h-4 w-4" /></Button>
               <Button variant="ghost" size="icon" aria-label="Delete credential" disabled={deleting === cred.id} onClick={() => handleDelete(cred.id)}>{deleting === cred.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}</Button>
             </div>

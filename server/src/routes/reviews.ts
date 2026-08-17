@@ -1,6 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import { all, get } from "../db/queries.js";
-import { runManualReview, runPrReview, rerunReview } from "../services/manual-review-service.js";
+import { all, get, run } from "../db/queries.js";
+import { runManualReview, runPrReview, rerunReview, preflightReview } from "../services/manual-review-service.js";
 import { getRepoById } from "../services/repository-service.js";
 import { getDecryptedPassword } from "../services/credential-service.js";
 import { fetchOpenPullRequests } from "../services/bitbucket-client.js";
@@ -11,7 +11,8 @@ import { NotFoundError, ValidationError } from "../errors.js";
 
 export const reviewsRouter = Router();
 
-type ReviewTask = () => Promise<unknown>;
+type StreamEmitter = (event: string, data: unknown) => void;
+type ReviewTask = (emit: StreamEmitter) => Promise<unknown>;
 
 async function streamReview(res: Response, task: ReviewTask): Promise<void> {
   res.status(200);
@@ -42,7 +43,7 @@ async function streamReview(res: Response, task: ReviewTask): Promise<void> {
   }, 15_000);
 
   try {
-    const result = await task();
+    const result = await task(send);
     send("completed", result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Review failed";
@@ -249,13 +250,15 @@ reviewsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction
       status: string; strictness: string; review_mode: string; error_message: string | null;
       failure_category: string | null; created_at: string; completed_at: string | null;
       repository_name: string; ai_overview: string | null;
+      cancel_requested: boolean; policy_status: string | null; incremental: boolean; base_commit: string | null;
     }>(
       `SELECT
          r.id, r.repository_id, r.commit_hash, r.branch, r.status, r.strictness, r.review_mode,
          r.error_message, r.failure_category, r.created_at, r.completed_at, r.created_by,
          r.ai_overview, r.parent_review_id, r.tokens_prompt, r.tokens_completion, r.tokens_total,
          r.estimated_cost, r.project_context, r.commit_author, r.diff_text, r.pr_head_commit,
-         r.llm_model, repo.name as repository_name
+         r.llm_model, r.cancel_requested, r.policy_status, r.incremental, r.base_commit,
+         repo.name as repository_name
        FROM reviews r JOIN repositories repo ON r.repository_id = repo.id
        WHERE r.id = $1`,
       [req.params.id]
@@ -302,6 +305,19 @@ reviewsRouter.post("/manual", async (req: Request, res: Response, next: NextFunc
   }
 });
 
+reviewsRouter.post("/preflight", async (req: Request, res: Response, next: NextFunction) => {
+  const { repository_id, mode, target } = req.body;
+  if (!repository_id || !target || !["manual", "pr"].includes(mode)) {
+    res.status(400).json({ error: "repository_id, mode, and target are required" });
+    return;
+  }
+  try {
+    res.json(await preflightReview(repository_id, mode, String(target)));
+  } catch (error) {
+    next(error);
+  }
+});
+
 reviewsRouter.post("/manual/stream", async (req: Request, res: Response) => {
   const { repository_id, commit_hash, force = false } = req.body;
 
@@ -310,7 +326,7 @@ reviewsRouter.post("/manual/stream", async (req: Request, res: Response) => {
     return;
   }
 
-  await streamReview(res, () => runManualReview(repository_id, commit_hash, Boolean(force), req.user?.username));
+  await streamReview(res, (emit) => runManualReview(repository_id, commit_hash, Boolean(force), req.user?.username, (reviewId) => emit("progress", { reviewId, message: "Review record created; AI analysis is running" })));
 });
 
 reviewsRouter.post("/pr", async (req: Request, res: Response, next: NextFunction) => {
@@ -337,7 +353,7 @@ reviewsRouter.post("/pr/stream", async (req: Request, res: Response) => {
     return;
   }
 
-  await streamReview(res, () => runPrReview(repository_id, String(pr_id), Boolean(force), req.user?.username));
+  await streamReview(res, (emit) => runPrReview(repository_id, String(pr_id), Boolean(force), req.user?.username, (reviewId) => emit("progress", { reviewId, message: "Review record created; AI analysis is running" })));
 });
 
 reviewsRouter.post("/:id/rereview", async (req: Request, res: Response, next: NextFunction) => {
@@ -349,8 +365,27 @@ reviewsRouter.post("/:id/rereview", async (req: Request, res: Response, next: Ne
   }
 });
 
+reviewsRouter.post("/:id/cancel", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const review = await get<{ status: string; created_by: string | null }>("SELECT status, created_by FROM reviews WHERE id = $1", [req.params.id]);
+    if (!review) throw new NotFoundError("Review not found");
+    if (req.user?.role !== "admin" && review.created_by !== req.user?.username) {
+      res.status(403).json({ error: "Only the review creator or an administrator can cancel this review" });
+      return;
+    }
+    if (review.status !== "pending") {
+      res.status(409).json({ error: `Only pending reviews can be cancelled; review is ${review.status}` });
+      return;
+    }
+    await run("UPDATE reviews SET cancel_requested = true WHERE id = $1", [req.params.id]);
+    res.json({ cancelRequested: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 reviewsRouter.post("/:id/rereview/stream", async (req: Request, res: Response) => {
-  await streamReview(res, () => rerunReview(String(req.params.id), req.user?.username));
+  await streamReview(res, (emit) => rerunReview(String(req.params.id), req.user?.username, (reviewId) => emit("progress", { reviewId, message: "Review record created; AI analysis is running" })));
 });
 
 reviewsRouter.get("/:id/chain", async (req: Request, res: Response, next: NextFunction) => {
