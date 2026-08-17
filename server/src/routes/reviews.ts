@@ -11,6 +11,49 @@ import { NotFoundError, ValidationError } from "../errors.js";
 
 export const reviewsRouter = Router();
 
+type ReviewTask = () => Promise<unknown>;
+
+async function streamReview(res: Response, task: ReviewTask): Promise<void> {
+  res.status(200);
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+
+  let closed = false;
+  res.on("close", () => { closed = true; });
+
+  const send = (event: string, data: unknown) => {
+    if (closed || res.writableEnded) return;
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    (res as Response & { flush?: () => void }).flush?.();
+  };
+
+  const startedAt = Date.now();
+  send("started", { message: "Review started" });
+  const heartbeat = setInterval(() => {
+    send("heartbeat", {
+      message: "Review is still running",
+      elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
+    });
+  }, 15_000);
+
+  try {
+    const result = await task();
+    send("completed", result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Review failed";
+    logger.error("Streamed review failed", { error: message });
+    send("failed", { error: message });
+  } finally {
+    clearInterval(heartbeat);
+    if (!closed && !res.writableEnded) res.end();
+  }
+}
+
 function collectQueryValues(value: unknown): string[] {
   if (!value) return [];
   const values = Array.isArray(value) ? value : [value];
@@ -259,6 +302,17 @@ reviewsRouter.post("/manual", async (req: Request, res: Response, next: NextFunc
   }
 });
 
+reviewsRouter.post("/manual/stream", async (req: Request, res: Response) => {
+  const { repository_id, commit_hash, force = false } = req.body;
+
+  if (!repository_id || !commit_hash) {
+    res.status(400).json({ error: "repository_id and commit_hash are required" });
+    return;
+  }
+
+  await streamReview(res, () => runManualReview(repository_id, commit_hash, Boolean(force), req.user?.username));
+});
+
 reviewsRouter.post("/pr", async (req: Request, res: Response, next: NextFunction) => {
   const { repository_id, pr_id, force = false } = req.body;
 
@@ -275,6 +329,17 @@ reviewsRouter.post("/pr", async (req: Request, res: Response, next: NextFunction
   }
 });
 
+reviewsRouter.post("/pr/stream", async (req: Request, res: Response) => {
+  const { repository_id, pr_id, force = false } = req.body;
+
+  if (!repository_id || !pr_id) {
+    res.status(400).json({ error: "repository_id and pr_id are required" });
+    return;
+  }
+
+  await streamReview(res, () => runPrReview(repository_id, String(pr_id), Boolean(force), req.user?.username));
+});
+
 reviewsRouter.post("/:id/rereview", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await rerunReview(String(req.params.id), req.user?.username);
@@ -282,6 +347,10 @@ reviewsRouter.post("/:id/rereview", async (req: Request, res: Response, next: Ne
   } catch (err) {
     next(err);
   }
+});
+
+reviewsRouter.post("/:id/rereview/stream", async (req: Request, res: Response) => {
+  await streamReview(res, () => rerunReview(String(req.params.id), req.user?.username));
 });
 
 reviewsRouter.get("/:id/chain", async (req: Request, res: Response, next: NextFunction) => {

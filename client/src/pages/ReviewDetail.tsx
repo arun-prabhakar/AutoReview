@@ -60,7 +60,7 @@ export default function ReviewDetail() {
     if (!id) return;
     setRereviewing(true);
     try {
-      const result = await api.post<{ reviewId: string }>(`/api/reviews/${id}/rereview`, {}, { timeoutMs: api.reviewTimeoutMs });
+      const result = await api.postStream<{ reviewId: string }>(`/api/reviews/${id}/rereview/stream`, {});
       toast({ title: "Re-review completed", description: "The new review is ready.", variant: "success" });
       navigate(`/reviews/${result.reviewId}`);
     } catch (err) {

@@ -5,11 +5,12 @@ export function setOnUnauthorized(callback: () => void): void {
 }
 
 const TIMEOUT_MS = 30_000;
-const REVIEW_TIMEOUT_MS = 840_000;
 
 type ApiRequestOptions = {
   timeoutMs?: number;
 };
+
+type StreamEventHandler = (event: string, data: Record<string, unknown>) => void;
 
 function fetchWithTimeout(path: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
@@ -76,6 +77,51 @@ async function handleResponse<T>(response: Response, init?: RequestInit): Promis
   return response.json();
 }
 
+async function postStream<T>(path: string, body: unknown, onEvent?: StreamEventHandler): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    credentials: "include",
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) return handleResponse<T>(response);
+  if (!response.body) throw new Error("Review stream is unavailable");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      boundary = buffer.indexOf("\n\n");
+
+      let event = "message";
+      const dataLines: string[] = [];
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
+      }
+      if (dataLines.length === 0) continue;
+
+      const data = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+      onEvent?.(event, data);
+      if (event === "completed") return data as T;
+      if (event === "failed") throw new Error(String(data.error || "Review failed"));
+    }
+
+    if (done) break;
+  }
+
+  throw new Error("Review stream disconnected before completion");
+}
+
 export const api = {
   async get<T = unknown>(path: string, options?: ApiRequestOptions): Promise<T> {
     const init: RequestInit = { credentials: "include" };
@@ -125,5 +171,5 @@ export const api = {
     return handleResponse<T>(response, init);
   },
 
-  reviewTimeoutMs: REVIEW_TIMEOUT_MS,
+  postStream,
 };

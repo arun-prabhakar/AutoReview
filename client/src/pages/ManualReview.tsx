@@ -51,6 +51,7 @@ export default function ManualReview() {
   const [openPrs, setOpenPrs] = useState<OpenPr[]>([]);
   const [loadingPrs, setLoadingPrs] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [streamStatus, setStreamStatus] = useState("");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -95,20 +96,26 @@ export default function ManualReview() {
 
   const submitReview = async (force: boolean) => {
     setSubmitting(true);
+    setStreamStatus("Connecting to review stream...");
     try {
       let data: ReviewResult;
+      const handleStreamEvent = (event: string, payload: Record<string, unknown>) => {
+        if (event === "started" || event === "heartbeat") {
+          setStreamStatus(String(payload.message || "Review is running..."));
+        }
+      };
       if (mode === "commit") {
-        data = await api.post<ReviewResult>("/api/reviews/manual", {
+        data = await api.postStream<ReviewResult>("/api/reviews/manual/stream", {
           repository_id: repoId,
           commit_hash: commitHash,
           force,
-        }, { timeoutMs: api.reviewTimeoutMs });
+        }, handleStreamEvent);
       } else {
-        data = await api.post<ReviewResult>("/api/reviews/pr", {
+        data = await api.postStream<ReviewResult>("/api/reviews/pr/stream", {
           repository_id: repoId,
           pr_id: prId,
           force,
-        }, { timeoutMs: api.reviewTimeoutMs });
+        }, handleStreamEvent);
       }
 
       if (data.cached && !force) {
@@ -126,6 +133,7 @@ export default function ManualReview() {
       toast({ title: "Review Failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     } finally {
       setSubmitting(false);
+      setStreamStatus("");
     }
   };
 
@@ -271,6 +279,7 @@ export default function ManualReview() {
               >
                 {submitting ? <><Loader2 className="h-4 w-4 animate-spin mr-2 inline" />Reviewing with AI... ({elapsed}s)</> : mode === "pr" ? "Review Pull Request" : "Start Review"}
               </Button>
+              {submitting && streamStatus && <p className="text-center text-xs text-muted-foreground">{streamStatus}</p>}
             </form>
           </CardContent>
         </Card>
