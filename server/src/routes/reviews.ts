@@ -174,6 +174,13 @@ reviewsRouter.get("/open-prs/:repositoryId", async (req: Request, res: Response,
     const prs = await fetchOpenPullRequests(repo.workspace, repo.slug, password, credential.username);
     res.json(prs);
   } catch (err) {
+    if (err instanceof Error && err.message.startsWith("CREDENTIAL_EXPIRED")) {
+      res.status(502).json({
+        error: "Bitbucket authentication failed. Replace the repository credential with an Atlassian email and API token.",
+        code: "BITBUCKET_AUTH_FAILED",
+      });
+      return;
+    }
     next(err);
   }
 });

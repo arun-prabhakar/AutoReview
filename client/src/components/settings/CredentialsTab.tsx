@@ -57,8 +57,8 @@ export function CredentialsTab({
           <DialogContent>
             <DialogHeader><DialogTitle>Add Credential</DialogTitle></DialogHeader>
             <form onSubmit={handleAdd} className="space-y-4">
-              <div className="space-y-2"><Label>Username</Label><Input name="username" required /></div>
-              <div className="space-y-2"><Label>App Password</Label><Input name="app_password" type="password" required /></div>
+              <div className="space-y-2"><Label>Atlassian email</Label><Input name="username" type="email" autoComplete="email" required /></div>
+              <div className="space-y-2"><Label>API token</Label><Input name="app_password" type="password" autoComplete="new-password" required /></div>
               <div className="space-y-2"><Label>Workspace (optional)</Label><Input name="workspace" /></div>
               <Button type="submit" className="w-full" disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{saving ? "Saving..." : "Save"}</Button>
             </form>
