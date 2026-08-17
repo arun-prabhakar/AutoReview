@@ -25,13 +25,44 @@ export async function createCredential(username: string, appPassword: string, wo
   return { id, username, workspace };
 }
 
+export async function updateCredential(
+  id: string,
+  username: string,
+  workspace?: string,
+  appPassword?: string,
+) {
+  const existing = await getCredentialById(id);
+  if (!existing) throw new NotFoundError("Credential not found");
+
+  if (appPassword) {
+    await run(
+      `UPDATE credentials
+       SET username = $1, workspace = $2, app_password_encrypted = $3, updated_at = NOW()
+       WHERE id = $4`,
+      [username, workspace || null, encrypt(appPassword), id],
+    );
+  } else {
+    await run(
+      `UPDATE credentials SET username = $1, workspace = $2, updated_at = NOW() WHERE id = $3`,
+      [username, workspace || null, id],
+    );
+  }
+
+  logger.audit("credential_updated", { id, username, workspace, tokenUpdated: Boolean(appPassword) });
+  return getCredentialById(id);
+}
+
 export async function deleteCredential(id: string) {
+  const existing = await getCredentialById(id);
+  if (!existing) throw new NotFoundError("Credential not found");
+
   const deps = await all<{ id: string; name: string }>(
     "SELECT id, name FROM repositories WHERE credential_id = $1", [id]
   );
   if (deps.length > 0) {
+    const repositoryNames = deps.map((repo) => repo.name).join(", ");
     throw new ConflictError(
-      `Cannot delete credential: still referenced by ${deps.length} repository(ies). Update repositories first.`
+      `Cannot delete credential because it is used by: ${repositoryNames}. Assign those repositories another credential first.`
     );
   }
   await run("DELETE FROM credentials WHERE id = $1", [id]);

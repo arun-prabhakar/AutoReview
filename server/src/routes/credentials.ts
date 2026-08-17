@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getAllCredentials, createCredential, deleteCredential } from "../services/credential-service.js";
+import { getAllCredentials, createCredential, updateCredential, deleteCredential } from "../services/credential-service.js";
 
 export const credentialsRouter = Router();
 
@@ -30,11 +30,27 @@ credentialsRouter.post("/", async (req, res) => {
   }
 });
 
-credentialsRouter.delete("/:id", async (req, res) => {
+credentialsRouter.put("/:id", async (req, res, next) => {
+  const { username, app_password, workspace } = req.body;
+
+  if (!username) {
+    res.status(400).json({ error: "username is required" });
+    return;
+  }
+
+  try {
+    const result = await updateCredential(req.params.id, username, workspace, app_password || undefined);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+credentialsRouter.delete("/:id", async (req, res, next) => {
   try {
     await deleteCredential(req.params.id);
     res.status(204).send();
-  } catch {
-    res.status(404).json({ error: "Credential not found" });
+  } catch (error) {
+    next(error);
   }
 });

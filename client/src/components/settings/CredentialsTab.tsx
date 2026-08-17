@@ -5,8 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, KeyRound, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Plus, Trash2, KeyRound, Loader2, Pencil } from "lucide-react";
 import type { Credential } from "./types";
 
 export function CredentialsTab({
@@ -22,6 +22,10 @@ export function CredentialsTab({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<Credential | null>(null);
+  const [editUsername, setEditUsername] = useState("");
+  const [editWorkspace, setEditWorkspace] = useState("");
+  const [editToken, setEditToken] = useState("");
 
   const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -43,9 +47,48 @@ export function CredentialsTab({
     }
   };
 
+  const openEdit = (credential: Credential) => {
+    setEditTarget(credential);
+    setEditUsername(credential.username);
+    setEditWorkspace(credential.workspace || "");
+    setEditToken("");
+  };
+
+  const handleEdit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editTarget) return;
+    setSaving(true);
+    try {
+      await api.put(`/api/credentials/${editTarget.id}`, {
+        username: editUsername,
+        workspace: editWorkspace,
+        app_password: editToken || undefined,
+      });
+      toast({ title: "Credential updated", variant: "success" });
+      setEditTarget(null);
+      onRefresh();
+    } catch (err) {
+      toast({ title: "Update failed", description: err instanceof Error ? err.message : "Failed to update credential", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     setDeleting(id);
-    try { await api.del(`/api/credentials/${id}`); toast({ title: "Credential deleted", variant: "success" }); onRefresh(); } catch { toast({ title: "Failed to delete credential", variant: "destructive" }); } finally { setDeleting(null); }
+    try {
+      await api.del(`/api/credentials/${id}`);
+      toast({ title: "Credential deleted", variant: "success" });
+      onRefresh();
+    } catch (err) {
+      toast({
+        title: "Cannot delete credential",
+        description: err instanceof Error ? err.message : "The credential may be in use by a repository.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(null);
+    }
   };
 
   return (
@@ -73,7 +116,10 @@ export function CredentialsTab({
               <p className="font-medium">{cred.username}</p>
               <p className="text-sm text-muted-foreground">{cred.workspace || "No workspace"}</p>
             </div>
-            <Button variant="ghost" size="icon" aria-label="Delete credential" disabled={deleting === cred.id} onClick={() => handleDelete(cred.id)}>{deleting === cred.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}</Button>
+            <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" aria-label="Edit credential" onClick={() => openEdit(cred)}><Pencil className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" aria-label="Delete credential" disabled={deleting === cred.id} onClick={() => handleDelete(cred.id)}>{deleting === cred.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}</Button>
+            </div>
           </CardContent>
         </Card>
       ))}
@@ -85,6 +131,21 @@ export function CredentialsTab({
           <Button size="sm" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Add your first credential</Button>
         </div>
       )}
+
+      <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Credential</DialogTitle></DialogHeader>
+          <form onSubmit={handleEdit} className="space-y-4">
+            <div className="space-y-2"><Label>Atlassian email</Label><Input type="email" autoComplete="email" value={editUsername} onChange={(e) => setEditUsername(e.target.value)} required /></div>
+            <div className="space-y-2"><Label>New API token (optional)</Label><Input type="password" autoComplete="new-password" value={editToken} onChange={(e) => setEditToken(e.target.value)} placeholder="Leave blank to keep current token" /></div>
+            <div className="space-y-2"><Label>Workspace (optional)</Label><Input value={editWorkspace} onChange={(e) => setEditWorkspace(e.target.value)} /></div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditTarget(null)} disabled={saving}>Cancel</Button>
+              <Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{saving ? "Saving..." : "Save Changes"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
