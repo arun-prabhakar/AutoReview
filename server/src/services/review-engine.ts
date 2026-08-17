@@ -3,6 +3,7 @@ import type { RepositoryConfig } from "./repository-service.js";
 import { createAdapter, type ProviderConfig } from "./llm/index.js";
 import type { LlmAdapter } from "./llm/types.js";
 import { logger } from "../middleware/index.js";
+import { buildRetryPrompt, buildSpecializedTemplate, FIXED_OUTPUT_FORMAT as CENTRAL_FIXED_OUTPUT_FORMAT, SPECIALIZED_PROMPTS } from "../prompts/index.js";
 
 export const FIXED_OUTPUT_FORMAT = `
 ---
@@ -45,7 +46,9 @@ export type TokenUsage = {
   total_tokens: number;
 };
 
-const MAX_ANALYSIS_TOKENS = 32768;
+export const INITIAL_ANALYSIS_TOKENS = 6144;
+export const MAX_ANALYSIS_TOKENS = 8192;
+export const MAX_REVIEW_DIFF_CHARS = 60000;
 const MIN_RETRY_TOKENS = 8192;
 
 type AnalysisCompletion = {
@@ -73,9 +76,19 @@ export async function analyzeDiff(
   truncated = false,
   projectContext?: string
 ): Promise<{ findings: RawFinding[]; incomplete: boolean; tokenUsage: TokenUsage; aiResponse: string }> {
-  const changedFiles = extractFilePathList(diff);
+  const reviewDiff = prepareDiffForAnalysis(diff, repo.excluded_paths);
+  const effectiveIncomplete = truncated || reviewDiff.length === MAX_REVIEW_DIFF_CHARS;
+  const changedFiles = extractFilePathList(reviewDiff);
+  if (!reviewDiff.trim()) {
+    return {
+      findings: [],
+      incomplete: effectiveIncomplete,
+      tokenUsage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+      aiResponse: "[]",
+    };
+  }
   let prompt = promptTemplate
-    .replace("{{diff}}", diff)
+    .replace("{{diff}}", reviewDiff)
     .replace("{{file_paths}}", formatChangedFilesForPrompt(changedFiles))
     .replace("{{strictness_level}}", repo.strictness)
     .replace("{{excluded_paths}}", repo.excluded_paths || "none")
@@ -85,32 +98,33 @@ export async function analyzeDiff(
     .replace("{{repository}}", repo.name);
 
   if (projectContext) {
-    prompt += `\n\n## Project-Specific Context\n\nThe team has provided the following context about their codebase and coding standards. Use this to tailor your review:\n\n${projectContext}`;
+    prompt += `\n\n## Project-Specific Context\nUse these repository rules when they apply:\n${projectContext.slice(0, 6000)}`;
   }
 
-  prompt += FIXED_OUTPUT_FORMAT;
+  prompt += CENTRAL_FIXED_OUTPUT_FORMAT;
 
-  if (truncated) {
+  if (effectiveIncomplete) {
     prompt += "\n\nNOTE: The diff was truncated due to size. Your review may be incomplete. Focus on the available changes.";
   }
 
   const adapter = createAdapter(provider);
 
-  const initialResponse = await requestAnalysisCompletion(adapter, repo, prompt, repo.llm_max_tokens);
+  const initialTokens = Math.min(repo.llm_max_tokens, INITIAL_ANALYSIS_TOKENS);
+  const initialResponse = await requestAnalysisCompletion(adapter, repo, prompt, initialTokens);
   let response = initialResponse;
   let totalUsage = initialResponse.tokenUsage;
 
   try {
     const findings = parseAnalysisFindings(response, changedFiles, repo.excluded_paths);
-    return buildAnalysisResult(findings, truncated, totalUsage, response.content, repo.excluded_paths);
+    return buildAnalysisResult(findings, effectiveIncomplete, totalUsage, response.content, repo.excluded_paths);
   } catch (error) {
     if (!(error instanceof LlmResponseError)) throw error;
 
-    const retryTokens = retryTokenBudget(repo.llm_max_tokens);
+    const retryTokens = retryTokenBudget(initialTokens);
     logger.warn("LLM response invalid; retrying AI review once", {
       model: repo.llm_model,
       error: error.message,
-      originalMaxTokens: repo.llm_max_tokens,
+      originalMaxTokens: initialTokens,
       retryMaxTokens: retryTokens,
       contentLength: response.content.length,
       tokens: response.tokenUsage.total_tokens,
@@ -119,7 +133,7 @@ export async function analyzeDiff(
     response = await requestAnalysisCompletion(
       adapter,
       repo,
-      retryPrompt(prompt),
+      buildRetryPrompt(prompt),
       retryTokens
     );
     totalUsage = addTokenUsage(totalUsage, response.tokenUsage);
@@ -127,7 +141,7 @@ export async function analyzeDiff(
 
   try {
     const findings = parseAnalysisFindings(response, changedFiles, repo.excluded_paths);
-    return buildAnalysisResult(findings, truncated, totalUsage, response.content, repo.excluded_paths);
+    return buildAnalysisResult(findings, effectiveIncomplete, totalUsage, response.content, repo.excluded_paths);
   } catch (error) {
     if (error instanceof LlmResponseError) {
       throw new LlmResponseError(
@@ -188,10 +202,6 @@ function retryTokenBudget(currentMaxTokens: number): number {
   );
 }
 
-function retryPrompt(prompt: string): string {
-  return `${prompt}\n\nIMPORTANT RETRY: The previous AI review response could not be parsed. Return one complete valid JSON array only. No markdown outside JSON. Keep explanation and suggested_fix concise. Use file_index values from Changed Files; do not repeat file paths.`;
-}
-
 function addTokenUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
   return {
     prompt_tokens: a.prompt_tokens + b.prompt_tokens,
@@ -210,7 +220,7 @@ async function requestAnalysisCompletion(
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
     maxTokens,
-    temperature: repo.llm_temperature,
+    temperature: Math.min(repo.llm_temperature, 0.2),
   });
 
   const content = result.content;
@@ -267,6 +277,21 @@ function buildExclusionPatterns(excludedPaths: string | null): RegExp[] {
 
 function matchesAnyPattern(filePath: string, patterns: RegExp[]): boolean {
   return patterns.some((p) => p.test(filePath));
+}
+
+export function prepareDiffForAnalysis(diff: string, excludedPaths: string | null): string {
+  const chunks = diff.split(/(?=^diff --git )/m).filter(Boolean);
+  if (chunks.length === 0) return diff.slice(0, MAX_REVIEW_DIFF_CHARS);
+
+  const patterns = buildExclusionPatterns(excludedPaths);
+  return chunks
+    .filter((chunk) => {
+      const match = chunk.match(/^diff --git a\/(.+?) b\/(.+?)$/m);
+      const filePath = match?.[2] || match?.[1];
+      return !filePath || !matchesAnyPattern(filePath, patterns);
+    })
+    .join("")
+    .slice(0, MAX_REVIEW_DIFF_CHARS);
 }
 
 export async function generateDiffOverview(
@@ -571,12 +596,6 @@ function extractJsonArray(content: string): string | null {
   return content.substring(start);
 }
 
-const SPECIALIZED_PROMPTS: Record<string, string> = {
-  security: `You are a senior security engineer performing a focused security audit. Identify ONLY security vulnerabilities: injection attacks, authentication issues, authorization bypasses, data exposure, insecure cryptography, SSRF, XSS, CSRF, path traversal, deserialization flaws, and similar. Do NOT flag style or maintainability issues.`,
-  performance: `You are a performance engineering specialist. Identify ONLY performance problems: N+1 queries, memory leaks, unnecessary allocations, missing indexes, inefficient algorithms, unbounded growth, blocking operations in async code, and similar. Do NOT flag style or security issues.`,
-  maintainability: `You are a code quality specialist focused on long-term maintainability. Identify issues like: dead code, overly complex functions, duplicated logic, poor naming, missing error handling, hardcoded values, tight coupling, and similar. Do NOT flag security or performance unless severe.`,
-};
-
 export type MultiPassResult = {
   findings: RawFinding[];
   tokenUsage: TokenUsage;
@@ -602,8 +621,7 @@ export async function multiPassReview(
 
   const results = await Promise.allSettled(
     focuses.map(async (focus) => {
-      const specializedSuffix = `\n\n## Specialized Focus\n\n${SPECIALIZED_PROMPTS[focus]}\n\nOnly report findings relevant to this focus area. If no ${focus}-related issues exist, return an empty array [].`;
-      const template = baseTemplate + specializedSuffix;
+      const template = buildSpecializedTemplate(baseTemplate, focus);
 
       const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext);
       return { focus, findings, tokenUsage, aiResponse };

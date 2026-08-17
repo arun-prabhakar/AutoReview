@@ -4,6 +4,7 @@ import { encrypt } from "../services/encryption-service.js";
 import { getDecryptedApiKey, getProviderById } from "../services/provider-service.js";
 import { createAdapter } from "../services/llm/index.js";
 import { logger } from "../middleware/index.js";
+import { CONNECTION_TEST_PROMPT } from "../prompts/index.js";
 
 export const settingsRouter = Router();
 
@@ -76,7 +77,7 @@ settingsRouter.post("/llm/test", async (req, res) => {
     const start = Date.now();
     const result = await adapter.complete({
       model: modelName,
-      messages: [{ role: "user", content: "Reply with exactly: OK" }],
+      messages: [{ role: "user", content: CONNECTION_TEST_PROMPT }],
       maxTokens: 10,
       temperature: 0,
     });

@@ -3,7 +3,7 @@ import { fetchCommitDiff, fetchPrDiff, fetchPrDiffSince, fetchPrInfo, findPullRe
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
-import { analyzeDiff, extractFilePaths, fallbackOverview, generateDiffOverview, LlmResponseError, multiPassReview, type RawFinding } from "./review-engine.js";
+import { analyzeDiff, extractFilePaths, fallbackOverview, INITIAL_ANALYSIS_TOKENS, LlmResponseError, multiPassReview, prepareDiffForAnalysis, type RawFinding } from "./review-engine.js";
 import { type ProviderConfig } from "./llm/index.js";
 import { sendReviewEmail, type ReviewMetadata } from "./email-draft-service.js";
 import { all, get } from "../db/queries.js";
@@ -224,13 +224,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       category: f.category,
     }));
 
-    let aiOverview = "";
-    try {
-      aiOverview = await generateDiffOverview(ctx.diff, ctx.commit, ctx.repo, provider);
-    } catch (err) {
-      logger.warn(`Failed to generate AI overview for ${ctx.dedupKey}`, { error: String(err) });
-      aiOverview = fallbackOverview(ctx.commit, ctx.diff);
-    }
+    const aiOverview = fallbackOverview(ctx.commit, ctx.diff);
 
     await ensureNotCancelled(reviewId);
 
@@ -556,9 +550,10 @@ export async function preflightReview(
     truncated = result.truncated;
   }
 
-  const estimatedInputTokens = Math.ceil(diff.length / 4);
+  const reviewDiff = prepareDiffForAnalysis(diff, repo.excluded_paths);
+  const estimatedInputTokens = Math.ceil(reviewDiff.length / 4);
   const passCount = repo.multi_pass_review ? 3 : 1;
-  const estimatedMaxOutputTokens = repo.llm_max_tokens * passCount;
+  const estimatedMaxOutputTokens = Math.min(repo.llm_max_tokens, INITIAL_ANALYSIS_TOKENS) * passCount;
   const estimatedMaxCost = estimateCost(repo.llm_model, {
     prompt_tokens: estimatedInputTokens * passCount,
     completion_tokens: estimatedMaxOutputTokens,
@@ -568,6 +563,7 @@ export async function preflightReview(
   return {
     model: repo.llm_model,
     diffCharacters: diff.length,
+    analyzedDiffCharacters: reviewDiff.length,
     changedFiles,
     estimatedInputTokens: estimatedInputTokens * passCount,
     estimatedMaxOutputTokens,

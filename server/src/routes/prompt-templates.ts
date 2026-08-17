@@ -3,7 +3,7 @@ import { v4 as uuid } from "uuid";
 import OpenAI from "openai";
 import { all, get, run } from "../db/queries.js";
 import { getDecryptedApiKey } from "../services/provider-service.js";
-import { FIXED_OUTPUT_FORMAT } from "../services/review-engine.js";
+import { buildPromptEnhancementMessages, FIXED_OUTPUT_FORMAT } from "../prompts/index.js";
 import { logger } from "../middleware/index.js";
 
 export const promptTemplateRouter = Router();
@@ -153,13 +153,7 @@ promptTemplateRouter.post("/enhance", async (req, res) => {
 
     const modelName = req.body.model || "gemini-flash-latest";
 
-    const systemMsg = custom_prompt
-      ? `You are an expert code review prompt engineer. Enhance the following prompt template while preserving its intent. Return only the enhanced template.`
-      : `You are an expert code review prompt engineer. Enhance the following code review prompt template to be more thorough and specific. Return only the enhanced template.`;
-
-    const userMsg = custom_prompt
-      ? `Enhance this prompt template:\n\n${content}\n\nAdditional instructions: ${custom_prompt}`
-      : `Enhance this prompt template:\n\n${content}`;
+    const { system: systemMsg, user: userMsg } = buildPromptEnhancementMessages(content, custom_prompt);
 
     const response = await client.chat.completions.create({
       model: modelName,

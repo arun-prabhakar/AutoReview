@@ -1,8 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseFindings, filterExcludedPaths, extractFilePaths, cleanOverviewText, fallbackOverview, isUsableOverview } from "../services/review-engine.js";
+import { parseFindings, filterExcludedPaths, extractFilePaths, cleanOverviewText, fallbackOverview, isUsableOverview, MAX_REVIEW_DIFF_CHARS, prepareDiffForAnalysis } from "../services/review-engine.js";
 import type { RawFinding } from "../services/review-engine.js";
 import type { CommitInfo } from "../services/bitbucket-client.js";
 import type { RepositoryConfig } from "../services/repository-service.js";
+
+describe("prepareDiffForAnalysis", () => {
+  it("removes excluded file chunks before sending a diff to the LLM", () => {
+    const diff = [
+      "diff --git a/src/app.ts b/src/app.ts\n+const active = true;\n",
+      "diff --git a/package-lock.json b/package-lock.json\n+generated content\n",
+      "diff --git a/docs/api.md b/docs/api.md\n+documentation\n",
+    ].join("");
+
+    const result = prepareDiffForAnalysis(diff, "docs/*");
+
+    expect(result).toContain("src/app.ts");
+    expect(result).not.toContain("package-lock.json");
+    expect(result).not.toContain("docs/api.md");
+  });
+
+  it("caps the review diff payload", () => {
+    const diff = `diff --git a/src/app.ts b/src/app.ts\n${"+x\n".repeat(30000)}`;
+    expect(prepareDiffForAnalysis(diff, null)).toHaveLength(MAX_REVIEW_DIFF_CHARS);
+  });
+});
 
 describe("parseFindings", () => {
   it("should parse new-format findings with field mapping", () => {
