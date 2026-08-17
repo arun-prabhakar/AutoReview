@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Mail } from "lucide-react";
 
-export function NotificationsTab() {
+export function NotificationsTab({ repositoryId = "all" }: { repositoryId?: string }) {
   const dispatch = useDispatch<AppDispatch>();
   const { items: repos } = useSelector((state: RootState) => state.repositories);
   const { smtp } = useSelector((state: RootState) => state.settings);
@@ -26,6 +26,7 @@ export function NotificationsTab() {
     smtp_password: "",
     smtp_from_address: "",
   });
+  const visibleRepos = repositoryId === "all" ? repos : repos.filter((repo) => String(repo.id) === repositoryId);
 
   useEffect(() => {
     if (smtp) {
@@ -77,7 +78,7 @@ export function NotificationsTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">Global SMTP settings used by all repositories for sending review notifications.</p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>SMTP Host</Label>
               <Input
@@ -99,7 +100,7 @@ export function NotificationsTab() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>SMTP User</Label>
               <Input
@@ -138,10 +139,10 @@ export function NotificationsTab() {
       <Separator />
 
       <p className="text-sm text-muted-foreground">Per-repository notification settings</p>
-      {repos.map((repo) => (
+      {visibleRepos.map((repo) => (
         <Card key={String(repo.id)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">{String(repo.name)}</CardTitle>
+            <CardTitle className="text-base break-all">{String(repo.name)}</CardTitle>
             {savingRepo[String(repo.id)] && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </CardHeader>
           <CardContent className="space-y-4">

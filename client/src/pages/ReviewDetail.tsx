@@ -45,6 +45,7 @@ export default function ReviewDetail() {
   const [aiResponseLoading, setAiResponseLoading] = useState(false);
   const [findingSearch, setFindingSearch] = useState("");
   const [findingStatus, setFindingStatus] = useState("open");
+  const [findingLimit, setFindingLimit] = useState(10);
 
   useEffect(() => {
     if (id) dispatch(fetchReviewDetail(id));
@@ -59,6 +60,8 @@ export default function ReviewDetail() {
   useEffect(() => {
     if (id) dispatch(markReviewNotificationsRead(id));
   }, [id, dispatch]);
+
+  useEffect(() => { setFindingLimit(10); }, [findingSearch, findingStatus]);
 
   useEffect(() => {
     if (id) {
@@ -198,6 +201,7 @@ export default function ReviewDetail() {
       toast({ title: "Could not update finding", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     }
   };
+  const displayedFindingIds = new Set(visibleFindings.slice(0, findingLimit).map((finding) => finding.id));
   const worstRisk = grouped.must_fix.length > 0 ? "critical" : grouped.should_fix_soon.length > 0 ? "warning" : "clean";
 
   const formatFinding = (f: Finding, index: number) => {
@@ -462,10 +466,12 @@ AutoReview`;
 
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
+              <label htmlFor="finding-search" className="sr-only">Search findings or files</label>
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input value={findingSearch} onChange={(e) => setFindingSearch(e.target.value)} placeholder="Search findings or files" className="pl-9" />
+              <Input id="finding-search" value={findingSearch} onChange={(e) => setFindingSearch(e.target.value)} placeholder="Search findings or files" className="pl-9" />
             </div>
-            <select value={findingStatus} onChange={(e) => setFindingStatus(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+            <label htmlFor="finding-status" className="sr-only">Finding status</label>
+            <select id="finding-status" value={findingStatus} onChange={(e) => setFindingStatus(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
               <option value="open">Open findings</option>
               <option value="resolved">Resolved</option>
               <option value="false_positive">False positives</option>
@@ -476,7 +482,8 @@ AutoReview`;
 
           {(["must_fix", "should_fix_soon", "ignore"] as const).map((level) => {
             const items = grouped[level];
-            if (items.length === 0) return null;
+            const displayedItems = items.filter((finding) => displayedFindingIds.has(finding.id));
+            if (displayedItems.length === 0) return null;
             return (
               <div key={level} className="space-y-3">
                 <div className="flex items-center gap-3 pt-2">
@@ -487,12 +494,13 @@ AutoReview`;
                   <h3 className="text-lg font-bold tracking-tight capitalize text-foreground">{level.replace(/_/g, " ")}</h3>
                   <span className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "finding" : "findings"}</span>
                 </div>
-                {items.map((finding) => (
+                {displayedItems.map((finding) => (
                   <FindingCard key={finding.id} {...finding} sourceUrl={review.repository_workspace && review.repository_slug ? `https://bitbucket.org/${review.repository_workspace}/${review.repository_slug}/src/${reviewedCommit}/${finding.file_path}${finding.line_number ? `#lines-${finding.line_number}` : ""}` : undefined} onDisposition={(disposition) => updateDisposition(finding.id, disposition)} />
                 ))}
               </div>
             );
           })}
+          {visibleFindings.length > findingLimit && <Button variant="outline" className="w-full" onClick={() => setFindingLimit((limit) => limit + 10)}>Show 10 more findings</Button>}
           {visibleFindings.length === 0 && <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No findings match the current filters.</div>}
         </div>
 
@@ -511,7 +519,7 @@ AutoReview`;
                     )} />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground">{repoName}</h3>
+                    <h3 className="font-semibold text-foreground break-words">{repoName}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {isPrReview ? `Pull Request #${prId}` : "Commit Review"}
                       {review.commit_author && ` · by ${review.commit_author}`}
@@ -531,7 +539,7 @@ AutoReview`;
                   <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Branch</p>
-                    <p className="text-sm font-medium text-foreground">{branch}</p>
+                    <p className="text-sm font-medium text-foreground break-all">{branch}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">

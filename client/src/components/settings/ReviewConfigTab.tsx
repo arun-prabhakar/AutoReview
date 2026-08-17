@@ -11,11 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Loader2 } from "lucide-react";
 
-export function ReviewConfigTab() {
+export function ReviewConfigTab({ repositoryId = "all" }: { repositoryId?: string }) {
   const dispatch = useDispatch<AppDispatch>();
   const { items: repos } = useSelector((state: RootState) => state.repositories);
   const { toast } = useToast();
   const [updating, setUpdating] = useState<Record<string, boolean>>({});
+  const visibleRepos = repositoryId === "all" ? repos : repos.filter((repo) => String(repo.id) === repositoryId);
 
   const updateRepo = async (id: string, body: Record<string, unknown>) => {
     setUpdating((prev) => ({ ...prev, [id]: true }));
@@ -25,14 +26,14 @@ export function ReviewConfigTab() {
   return (
     <>
       <p className="text-sm text-muted-foreground">Configure review settings per repository</p>
-      {repos.map((repo) => (
+      {visibleRepos.map((repo) => (
         <Card key={String(repo.id)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">{String(repo.name)}</CardTitle>
+            <CardTitle className="text-base break-all">{String(repo.name)}</CardTitle>
             {updating[String(repo.id)] && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Review Mode</Label>
                 <Select defaultValue={String(repo.review_mode)} onValueChange={(v) => updateRepo(String(repo.id), { review_mode: v })} disabled={updating[String(repo.id)]}>

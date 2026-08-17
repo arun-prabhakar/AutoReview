@@ -93,7 +93,13 @@ async function postStream<T>(path: string, body: unknown, onEvent?: StreamEventH
   let buffer = "";
 
   while (true) {
-    const { done, value } = await reader.read();
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch (error) {
+      throw new Error(`Review stream disconnected: ${error instanceof Error ? error.message : "network connection lost"}`);
+    }
+    const { done, value } = chunk;
     buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
 
     let boundary = buffer.indexOf("\n\n");

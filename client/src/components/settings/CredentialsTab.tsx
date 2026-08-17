@@ -126,10 +126,10 @@ export function CredentialsTab({
       {loading && Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-20 rounded-lg bg-secondary animate-pulse" />)}
       {!loading && credentials.map((cred) => (
         <Card key={cred.id}>
-          <CardContent className="flex items-center justify-between pt-6">
-            <div>
-              <p className="font-medium">{cred.username}</p>
-              <p className="text-sm text-muted-foreground">{cred.workspace || "No workspace"}</p>
+          <CardContent className="flex items-center justify-between gap-3 pt-6">
+            <div className="min-w-0">
+              <p className="font-medium break-all">{cred.username}</p>
+              <p className="text-sm text-muted-foreground break-all">{cred.workspace || "No workspace"}</p>
             </div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" aria-label="Test credential" disabled={testing === cred.id} onClick={() => handleTest(cred)}>{testing === cred.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}</Button>

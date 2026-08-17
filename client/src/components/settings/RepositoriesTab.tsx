@@ -144,12 +144,12 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
       {loadingRepos && Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-20 rounded-lg bg-secondary animate-pulse" />)}
       {!loadingRepos && repos.map((repo) => (
         <Card key={String(repo.id)}>
-          <CardContent className="flex items-center justify-between pt-6">
-            <div>
-              <p className="font-medium">{String(repo.name)}</p>
-              <p className="text-sm text-muted-foreground font-mono">{String(repo.workspace)}/{String(repo.slug)}</p>
+          <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="font-medium break-words">{String(repo.name)}</p>
+              <p className="text-sm text-muted-foreground font-mono break-all">{String(repo.workspace)}/{String(repo.slug)}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">{String(repo.review_mode)}</Badge>
               {repo.multi_pass_review ? (
                 <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 flex items-center gap-1">

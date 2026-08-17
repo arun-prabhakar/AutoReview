@@ -72,8 +72,10 @@ export default function ManualReview() {
   const [preflighting, setPreflighting] = useState(false);
   const [pendingForce, setPendingForce] = useState(false);
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
+  const [cancelRequested, setCancelRequested] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeReviewRef = useRef<string | null>(null);
+  const cancellationRequestedRef = useRef(false);
 
   useEffect(() => {
     if (submitting) {
@@ -122,6 +124,8 @@ export default function ManualReview() {
 
   const submitReview = async (force: boolean) => {
     setSubmitting(true);
+    setCancelRequested(false);
+    cancellationRequestedRef.current = false;
     setStreamStatus("Connecting to review stream...");
     try {
       let data: ReviewResult;
@@ -162,7 +166,10 @@ export default function ManualReview() {
       toast({ title: "Review Completed", description: "Findings are ready." });
     } catch (err) {
       const recoveryId = activeReviewRef.current;
-      if (recoveryId && err instanceof Error && err.message.includes("disconnected")) {
+      if (cancellationRequestedRef.current) {
+        toast({ title: "Review cancelled", description: "Model generation was stopped.", variant: "default" });
+        if (recoveryId) navigate(`/reviews/${recoveryId}`);
+      } else if (recoveryId && err instanceof Error && /disconnect|network|fetch|connection|stream/i.test(err.message)) {
         toast({ title: "Connection interrupted", description: "The review is still running. Opening its status page.", variant: "default" });
         navigate(`/reviews/${recoveryId}`);
       } else {
@@ -178,10 +185,14 @@ export default function ManualReview() {
 
   const cancelActiveReview = async () => {
     if (!activeReviewId) return;
+    cancellationRequestedRef.current = true;
+    setCancelRequested(true);
     try {
       await api.post(`/api/reviews/${activeReviewId}/cancel`, {});
       setStreamStatus("Cancellation requested; waiting for the current stage to stop...");
     } catch (err) {
+      cancellationRequestedRef.current = false;
+      setCancelRequested(false);
       toast({ title: "Cancellation failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     }
   };
@@ -238,7 +249,10 @@ export default function ManualReview() {
                   type="button"
                   role="tab"
                   aria-selected={mode === "commit"}
+                  tabIndex={mode === "commit" ? 0 : -1}
                   onClick={() => handleModeChange("commit")}
+                  onKeyDown={(e) => { if (e.key === "ArrowRight") { e.preventDefault(); handleModeChange("pr"); document.getElementById("review-mode-pr")?.focus(); } }}
+                  id="review-mode-commit"
                   className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors rounded-md ${mode === "commit" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"}`}
                 >
                   <GitCommit className="h-3.5 w-3.5" />Commit
@@ -247,7 +261,10 @@ export default function ManualReview() {
                   type="button"
                   role="tab"
                   aria-selected={mode === "pr"}
+                  tabIndex={mode === "pr" ? 0 : -1}
                   onClick={() => handleModeChange("pr")}
+                  onKeyDown={(e) => { if (e.key === "ArrowLeft") { e.preventDefault(); handleModeChange("commit"); document.getElementById("review-mode-commit")?.focus(); } }}
+                  id="review-mode-pr"
                   className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors rounded-md ${mode === "pr" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground"}`}
                 >
                   <GitPullRequest className="h-3.5 w-3.5" />Pull Request
@@ -351,7 +368,7 @@ export default function ManualReview() {
                 {submitting ? <><Loader2 className="h-4 w-4 animate-spin mr-2 inline" />Reviewing with AI... ({elapsed}s)</> : preflighting ? <><Loader2 className="h-4 w-4 animate-spin mr-2 inline" />Estimating review...</> : mode === "pr" ? "Review Pull Request" : "Start Review"}
               </Button>
               {submitting && streamStatus && <p className="text-center text-xs text-muted-foreground">{streamStatus}</p>}
-              {submitting && activeReviewId && <Button type="button" variant="outline" className="w-full" onClick={cancelActiveReview}><XCircle className="mr-2 h-4 w-4" />Cancel Review</Button>}
+              {submitting && activeReviewId && <Button type="button" variant="outline" className="w-full" onClick={cancelActiveReview} disabled={cancelRequested}><XCircle className="mr-2 h-4 w-4" />{cancelRequested ? "Cancellation requested" : "Cancel Review"}</Button>}
             </form>
           </CardContent>
         </Card>

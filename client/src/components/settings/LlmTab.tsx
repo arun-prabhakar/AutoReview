@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import type { Provider } from "./types";
 
-export function LlmTab({ providers, loading }: { providers: Provider[]; loading?: boolean }) {
+export function LlmTab({ providers, loading, repositoryId = "all" }: { providers: Provider[]; loading?: boolean; repositoryId?: string }) {
   const dispatch = useDispatch<AppDispatch>();
   const { items: repos } = useSelector((state: RootState) => state.repositories);
   const { toast } = useToast();
@@ -22,6 +22,7 @@ export function LlmTab({ providers, loading }: { providers: Provider[]; loading?
   const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({});
   const [savingLlm, setSavingLlm] = useState<Record<string, boolean>>({});
   const [fetchingModels, setFetchingModels] = useState<Record<string, boolean>>({});
+  const visibleRepos = repositoryId === "all" ? repos : repos.filter((repo) => String(repo.id) === repositoryId);
 
   const handleFetchModels = useCallback(async (providerId: string) => {
     if (!providerId || fetchedModels[providerId] || fetchingModels[providerId]) return;
@@ -67,7 +68,7 @@ export function LlmTab({ providers, loading }: { providers: Provider[]; loading?
   return (
     <>
       <p className="text-sm text-muted-foreground">Assign LLM provider and model per repository</p>
-      {repos.map((repo) => {
+      {visibleRepos.map((repo) => {
         const providerId = String(repo.llm_provider_id || "");
         const provider = providers.find((p) => p.id === providerId);
         const apiModels = fetchedModels[providerId] || [];
@@ -88,11 +89,11 @@ export function LlmTab({ providers, loading }: { providers: Provider[]; loading?
         return (
           <Card key={String(repo.id)}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-base">{String(repo.name)}</CardTitle>
+              <CardTitle className="text-base break-all">{String(repo.name)}</CardTitle>
               {savingLlm[String(repo.id)] && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Provider</Label>
                   <Select
@@ -126,7 +127,7 @@ export function LlmTab({ providers, loading }: { providers: Provider[]; loading?
                   )}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2"><Label>Max Tokens</Label><Input type="number" min="256" max="8192" defaultValue={String(Math.min(Number(repo.llm_max_tokens || 4096), 8192))} onBlur={(e) => saveLlm({ llm_max_tokens: Math.max(256, Math.min(8192, Number(e.target.value) || 4096)) })} disabled={savingLlm[String(repo.id)]} /><p className="text-xs text-muted-foreground">Reviews use up to 6,144 tokens initially and 8,192 on retry.</p></div>
                 <div className="space-y-2"><Label>Temperature</Label><Input type="number" min="0" max="0.2" step="0.1" defaultValue={String(Math.min(Number(repo.llm_temperature || 0.2), 0.2))} onBlur={(e) => saveLlm({ llm_temperature: Math.max(0, Math.min(0.2, Number(e.target.value) || 0)) })} disabled={savingLlm[String(repo.id)]} /><p className="text-xs text-muted-foreground">Lower values produce more consistent structured reviews.</p></div>
               </div>

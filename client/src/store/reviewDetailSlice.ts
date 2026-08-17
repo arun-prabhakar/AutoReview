@@ -33,7 +33,7 @@ const reviewDetailSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchReviewDetail.pending, (state) => {
-        state.loading = true;
+        state.loading = state.review == null;
         state.error = null;
       })
       .addCase(fetchReviewDetail.fulfilled, (state, action) => {

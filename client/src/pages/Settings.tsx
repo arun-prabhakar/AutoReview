@@ -5,6 +5,7 @@ import type { AppDispatch, RootState } from "@/store";
 import { fetchRepositories } from "@/store/repositoriesSlice";
 import { api } from "@/services/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Cpu, KeyRound, FolderGit2, Settings2, Brain, FileText, Bell, CheckCircle2, Circle } from "lucide-react";
 import type { Credential, Provider } from "@/components/settings/types";
@@ -26,6 +27,8 @@ export default function Settings() {
   const { toast } = useToast();
   const repositories = useSelector((state: RootState) => state.repositories.items);
   const activeTab = searchParams.get("tab") || "providers";
+  const selectedRepository = searchParams.get("repo") || "all";
+  const setTab = (tab: string) => setSearchParams(selectedRepository === "all" ? { tab } : { tab, repo: selectedRepository }, { replace: true });
 
   useEffect(() => {
     dispatch(fetchRepositories());
@@ -57,13 +60,15 @@ export default function Settings() {
           { label: "Repository", ready: repositories.length > 0, tab: "repositories" },
           { label: "LLM assigned", ready: repositories.some((repo) => Boolean(repo.llm_provider_id && repo.llm_model)), tab: "llm" },
         ].map((item) => (
-          <button key={item.label} onClick={() => setSearchParams({ tab: item.tab }, { replace: true })} className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
+          <button key={item.label} onClick={() => setTab(item.tab)} className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             {item.ready ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}{item.label}
           </button>
         ))}
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
+      {repositories.length > 1 && <div className="flex items-center gap-3"><span className="text-sm font-medium">Repository scope</span><Select value={selectedRepository} onValueChange={(repo) => setSearchParams(repo === "all" ? { tab: activeTab } : { tab: activeTab, repo }, { replace: true })}><SelectTrigger className="w-full max-w-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All repositories</SelectItem>{repositories.map((repo) => <SelectItem key={String(repo.id)} value={String(repo.id)}>{String(repo.name)}</SelectItem>)}</SelectContent></Select></div>}
+
+      <Tabs value={activeTab} onValueChange={setTab}>
         <TabsList className="w-full flex-wrap h-auto gap-1">
           <TabsTrigger value="providers"><Cpu className="h-3.5 w-3.5 mr-1.5" />LLM Providers</TabsTrigger>
           <TabsTrigger value="credentials"><KeyRound className="h-3.5 w-3.5 mr-1.5" />Credentials</TabsTrigger>
@@ -87,11 +92,11 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="review" className="space-y-3 mt-2">
-          <ReviewConfigTab />
+          <ReviewConfigTab repositoryId={selectedRepository} />
         </TabsContent>
 
         <TabsContent value="llm" className="space-y-3 mt-2">
-          <LlmTab providers={providers} loading={loadingProviders} />
+          <LlmTab providers={providers} loading={loadingProviders} repositoryId={selectedRepository} />
         </TabsContent>
 
         <TabsContent value="prompt" className="space-y-3 mt-2">
@@ -99,7 +104,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-3 mt-2">
-          <NotificationsTab />
+          <NotificationsTab repositoryId={selectedRepository} />
         </TabsContent>
        </Tabs>
     </div>
