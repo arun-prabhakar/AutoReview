@@ -85,7 +85,7 @@ export async function updateReviewStatus(
 ): Promise<void> {
   const completedAt = status === "completed" || status === "failed" || status === "cancelled" ? new Date().toISOString() : null;
   await run(
-    "UPDATE reviews SET status = $1, error_message = $2, completed_at = COALESCE($3, completed_at), ai_overview = COALESCE($4, ai_overview), ai_response = COALESCE($5, ai_response), tokens_prompt = COALESCE($6, tokens_prompt), tokens_completion = COALESCE($7, tokens_completion), tokens_total = COALESCE($8, tokens_total), estimated_cost = COALESCE($9, estimated_cost), failure_category = COALESCE($10, failure_category), policy_status = COALESCE($11, policy_status) WHERE id = $12",
+    "UPDATE reviews SET status = $1, error_message = $2, completed_at = COALESCE($3, completed_at), ai_overview = COALESCE($4, ai_overview), ai_response = COALESCE($5, ai_response), tokens_prompt = COALESCE($6, tokens_prompt), tokens_completion = COALESCE($7, tokens_completion), tokens_total = COALESCE($8, tokens_total), estimated_cost = COALESCE($9, estimated_cost), failure_category = COALESCE($10, failure_category), policy_status = COALESCE($11, policy_status), progress_stage = NULL WHERE id = $12",
     [status, errorMessage || null, completedAt, aiOverview || null, aiResponse || null, tokenData?.tokens_prompt ?? null, tokenData?.tokens_completion ?? null, tokenData?.tokens_total ?? null, tokenData?.estimated_cost ?? null, failureCategory || null, policyStatus || null, id]
   );
 }

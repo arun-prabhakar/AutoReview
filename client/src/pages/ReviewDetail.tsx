@@ -9,13 +9,14 @@ import { api } from "@/services/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { FAILURE_LABELS } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import { FindingCard } from "@/components/review/FindingCard";
-import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2, XCircle } from "lucide-react";
+import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2, XCircle, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ReviewDetail() {
@@ -42,10 +43,18 @@ export default function ReviewDetail() {
   const [aiResponseOpen, setAiResponseOpen] = useState(false);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [aiResponseLoading, setAiResponseLoading] = useState(false);
+  const [findingSearch, setFindingSearch] = useState("");
+  const [findingStatus, setFindingStatus] = useState("open");
 
   useEffect(() => {
     if (id) dispatch(fetchReviewDetail(id));
   }, [id, dispatch]);
+
+  useEffect(() => {
+    if (!id || review?.status !== "pending") return;
+    const timer = window.setInterval(() => dispatch(fetchReviewDetail(id)), 3000);
+    return () => window.clearInterval(timer);
+  }, [id, review?.status, dispatch]);
 
   useEffect(() => {
     if (id) dispatch(markReviewNotificationsRead(id));
@@ -151,14 +160,20 @@ export default function ReviewDetail() {
     </div>
   );
 
+  const visibleFindings = findings.filter((finding) => {
+    const matchesStatus = findingStatus === "all" || (finding.disposition || "open") === findingStatus;
+    const query = findingSearch.trim().toLowerCase();
+    return matchesStatus && (!query || `${finding.summary} ${finding.file_path} ${finding.category || ""}`.toLowerCase().includes(query));
+  });
   const grouped = {
-    must_fix: findings.filter((f) => f.risk_level === "must_fix"),
-    should_fix_soon: findings.filter((f) => f.risk_level === "should_fix_soon"),
-    ignore: findings.filter((f) => f.risk_level === "ignore"),
+    must_fix: visibleFindings.filter((f) => f.risk_level === "must_fix"),
+    should_fix_soon: visibleFindings.filter((f) => f.risk_level === "should_fix_soon"),
+    ignore: visibleFindings.filter((f) => f.risk_level === "ignore"),
   };
 
   const isPrReview = String(review.commit_hash).startsWith("pr:");
-  const prId = isPrReview ? String(review.commit_hash).replace("pr:", "") : null;
+  const prId = isPrReview ? String(review.commit_hash).split(":")[1] : null;
+  const reviewedCommit = isPrReview ? String(review.commit_hash).split(":")[2] : String(review.commit_hash);
   const repoName = String(review.repository_name || review.repository_id);
   const branch = String(review.branch || "N/A");
   const aiOverview = String(review.ai_overview || "Review completed.");
@@ -172,6 +187,17 @@ export default function ReviewDetail() {
   })();
 
   const totalFindings = findings.length;
+  const durationSeconds = review.completed_at ? Math.max(0, Math.round((new Date(review.completed_at).getTime() - new Date(review.created_at).getTime()) / 1000)) : null;
+  const updateDisposition = async (findingId: string, disposition: "open" | "resolved" | "false_positive" | "accepted_risk") => {
+    if (!id) return;
+    try {
+      await api.patch(`/api/reviews/${id}/findings/${findingId}`, { disposition });
+      await dispatch(fetchReviewDetail(id));
+      toast({ title: disposition === "open" ? "Finding reopened" : "Finding updated", variant: "success" });
+    } catch (err) {
+      toast({ title: "Could not update finding", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    }
+  };
   const worstRisk = grouped.must_fix.length > 0 ? "critical" : grouped.should_fix_soon.length > 0 ? "warning" : "clean";
 
   const formatFinding = (f: Finding, index: number) => {
@@ -366,6 +392,12 @@ AutoReview`;
           </div>
         </div>
       )}
+      {review.status === "pending" && (
+        <div className="rounded-lg border border-warning/30 bg-warning/5 px-4 py-3 flex items-center gap-3">
+          <Loader2 className="h-4 w-4 animate-spin text-warning" />
+          <div><p className="text-sm font-semibold">{review.progress_stage || "AI review is running"}</p><p className="text-xs text-muted-foreground">This page updates automatically. You can leave and return without losing the review.</p></div>
+        </div>
+      )}
 
       {chain.length > 1 && (
         <Card className="border-border bg-card">
@@ -408,7 +440,7 @@ AutoReview`;
       )}
 
       <div className="flex flex-col lg:flex-row gap-6">
-        <div className="w-full lg:w-[30%] min-w-0 space-y-4">
+        <div className="w-full lg:w-[42%] min-w-0 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-xl border border-border bg-card text-center">
               <p className="text-xs font-bold uppercase tracking-wider text-destructive">Must Fix</p>
@@ -428,6 +460,20 @@ AutoReview`;
             </div>
           </div>
 
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input value={findingSearch} onChange={(e) => setFindingSearch(e.target.value)} placeholder="Search findings or files" className="pl-9" />
+            </div>
+            <select value={findingStatus} onChange={(e) => setFindingStatus(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="open">Open findings</option>
+              <option value="resolved">Resolved</option>
+              <option value="false_positive">False positives</option>
+              <option value="accepted_risk">Accepted risks</option>
+              <option value="all">All findings</option>
+            </select>
+          </div>
+
           {(["must_fix", "should_fix_soon", "ignore"] as const).map((level) => {
             const items = grouped[level];
             if (items.length === 0) return null;
@@ -442,11 +488,12 @@ AutoReview`;
                   <span className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "finding" : "findings"}</span>
                 </div>
                 {items.map((finding) => (
-                  <FindingCard key={finding.id} {...finding} />
+                  <FindingCard key={finding.id} {...finding} sourceUrl={review.repository_workspace && review.repository_slug ? `https://bitbucket.org/${review.repository_workspace}/${review.repository_slug}/src/${reviewedCommit}/${finding.file_path}${finding.line_number ? `#lines-${finding.line_number}` : ""}` : undefined} onDisposition={(disposition) => updateDisposition(finding.id, disposition)} />
                 ))}
               </div>
             );
           })}
+          {visibleFindings.length === 0 && <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No findings match the current filters.</div>}
         </div>
 
         <div className="flex-1 min-w-0 space-y-4">
@@ -519,6 +566,7 @@ AutoReview`;
 
               {(review.tokens_total != null || review.project_context) && (
                 <div className="mt-3 flex flex-wrap gap-2">
+                  {durationSeconds != null && <div className="flex items-center gap-1.5 rounded-md bg-secondary px-2.5 py-1 text-xs"><Clock className="h-3 w-3 text-muted-foreground" /><span className="text-muted-foreground">{durationSeconds < 60 ? `${durationSeconds}s` : `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`}</span></div>}
                   {review.tokens_total != null && (
                     <div className="flex items-center gap-1.5 rounded-md bg-secondary px-2.5 py-1 text-xs">
                       <Coins className="h-3 w-3 text-muted-foreground" />

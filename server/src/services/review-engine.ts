@@ -74,7 +74,8 @@ export async function analyzeDiff(
   promptTemplate: string,
   provider: ProviderConfig,
   truncated = false,
-  projectContext?: string
+  projectContext?: string,
+  signal?: AbortSignal,
 ): Promise<{ findings: RawFinding[]; incomplete: boolean; tokenUsage: TokenUsage; aiResponse: string }> {
   const reviewDiff = prepareDiffForAnalysis(diff, repo.excluded_paths);
   const effectiveIncomplete = truncated || reviewDiff.length === MAX_REVIEW_DIFF_CHARS;
@@ -110,7 +111,7 @@ export async function analyzeDiff(
   const adapter = createAdapter(provider);
 
   const initialTokens = Math.min(repo.llm_max_tokens, INITIAL_ANALYSIS_TOKENS);
-  const initialResponse = await requestAnalysisCompletion(adapter, repo, prompt, initialTokens);
+  const initialResponse = await requestAnalysisCompletion(adapter, repo, prompt, initialTokens, signal);
   let response = initialResponse;
   let totalUsage = initialResponse.tokenUsage;
 
@@ -134,7 +135,8 @@ export async function analyzeDiff(
       adapter,
       repo,
       buildRetryPrompt(prompt),
-      retryTokens
+      retryTokens,
+      signal,
     );
     totalUsage = addTokenUsage(totalUsage, response.tokenUsage);
   }
@@ -214,13 +216,15 @@ async function requestAnalysisCompletion(
   adapter: LlmAdapter,
   repo: RepositoryConfig,
   prompt: string,
-  maxTokens: number
+  maxTokens: number,
+  signal?: AbortSignal,
 ): Promise<AnalysisCompletion> {
   const result = await adapter.complete({
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
     maxTokens,
     temperature: Math.min(repo.llm_temperature, 0.2),
+    signal,
   });
 
   const content = result.content;
@@ -610,7 +614,8 @@ export async function multiPassReview(
   baseTemplate: string,
   provider: ProviderConfig,
   truncated: boolean,
-  projectContext?: string
+  projectContext?: string,
+  signal?: AbortSignal,
 ): Promise<MultiPassResult> {
   const passes: { focus: string; findings: number }[] = [];
   const allFindings: RawFinding[] = [];
@@ -623,7 +628,7 @@ export async function multiPassReview(
     focuses.map(async (focus) => {
       const template = buildSpecializedTemplate(baseTemplate, focus);
 
-      const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext);
+      const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext, signal);
       return { focus, findings, tokenUsage, aiResponse };
     })
   );

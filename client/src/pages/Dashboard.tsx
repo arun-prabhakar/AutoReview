@@ -412,7 +412,10 @@ export default function Dashboard() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="py-2 text-xs text-muted-foreground">{formatDateTime(review.created_at)}</TableCell>
+                      <TableCell className="py-2 text-xs text-muted-foreground">
+                        <div>{formatDateTime(review.created_at)}</div>
+                        {review.completed_at && <div>{Math.max(0, Math.round((new Date(review.completed_at).getTime() - new Date(review.created_at).getTime()) / 1000))}s</div>}
+                      </TableCell>
                       {isAdmin && (
                         <TableCell className="py-2 pr-3 text-right">
                           <button

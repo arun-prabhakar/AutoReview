@@ -6,7 +6,7 @@ import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
 import { analyzeDiff, extractFilePaths, fallbackOverview, INITIAL_ANALYSIS_TOKENS, LlmResponseError, multiPassReview, prepareDiffForAnalysis, type RawFinding } from "./review-engine.js";
 import { type ProviderConfig } from "./llm/index.js";
 import { sendReviewEmail, type ReviewMetadata } from "./email-draft-service.js";
-import { all, get } from "../db/queries.js";
+import { all, get, run } from "../db/queries.js";
 import { v4 as uuid } from "uuid";
 import { logger } from "../middleware/index.js";
 import { NotFoundError, ValidationError } from "../errors.js";
@@ -188,7 +188,16 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     }
   }
 
+  const abortController = new AbortController();
+  const cancelMonitor = setInterval(async () => {
+    try {
+      const row = await get<{ cancel_requested: boolean }>("SELECT cancel_requested FROM reviews WHERE id = $1", [reviewId]);
+      if (row?.cancel_requested) abortController.abort();
+    } catch { /* the normal review error path handles database failures */ }
+  }, 1000);
+
   try {
+    await run("UPDATE reviews SET progress_stage = 'Preparing review context' WHERE id = $1", [reviewId]);
     await ensureNotCancelled(reviewId);
     const template = await getPromptTemplate(ctx.repo.strictness);
     const provider = await resolveProvider(ctx.repo);
@@ -199,13 +208,15 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     let aiResponse: string;
 
     if (ctx.repo.multi_pass_review) {
-      const multiResult = await multiPassReview(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext);
+      await run("UPDATE reviews SET progress_stage = 'Running specialized AI passes' WHERE id = $1", [reviewId]);
+      const multiResult = await multiPassReview(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal);
       rawFindings = multiResult.findings;
       incomplete = ctx.truncated;
       tokenUsage = multiResult.tokenUsage;
       aiResponse = multiResult.aiResponse;
     } else {
-      const singleResult = await analyzeDiff(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext);
+      await run("UPDATE reviews SET progress_stage = 'Analyzing changes with AI' WHERE id = $1", [reviewId]);
+      const singleResult = await analyzeDiff(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal);
       rawFindings = singleResult.findings;
       incomplete = singleResult.incomplete;
       tokenUsage = singleResult.tokenUsage;
@@ -213,6 +224,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     }
 
     await ensureNotCancelled(reviewId);
+    await run("UPDATE reviews SET progress_stage = 'Saving and linking findings' WHERE id = $1", [reviewId]);
 
     const findings = rawFindings.map((f) => ({
       file_path: f.file_path,
@@ -275,10 +287,12 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       );
     }
 
+    clearInterval(cancelMonitor);
     return { reviewId, findings, cached: false, incomplete, aiOverview, tokenUsage, policyStatus, incremental: ctx.incremental ?? false };
   } catch (error) {
+    clearInterval(cancelMonitor);
     const message = error instanceof Error ? error.message : "Unknown error";
-    const cancelled = error instanceof ReviewCancelledError;
+    const cancelled = error instanceof ReviewCancelledError || abortController.signal.aborted;
     const category = cancelled ? "cancelled" : classifyError(error);
     const aiResponse = error instanceof LlmResponseError ? error.aiResponse : undefined;
     await updateReviewStatus(reviewId, cancelled ? "cancelled" : "failed", message, undefined, undefined, category, aiResponse);

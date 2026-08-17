@@ -124,6 +124,7 @@ async function createTables(pool: Pool): Promise<void> {
       diff_text TEXT,
       pr_head_commit TEXT,
       llm_model TEXT,
+      progress_stage TEXT,
       FOREIGN KEY(repository_id) REFERENCES repositories(id) ON DELETE CASCADE
     )
   `);
@@ -385,6 +386,13 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS policy_fail_on_must_fix BOOLEAN NOT NULL DEFAULT true`,
       `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS policy_max_should_fix INTEGER`,
       `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS policy_post_build_status BOOLEAN NOT NULL DEFAULT false`,
+    ],
+  },
+  {
+    id: "015",
+    description: "Add persisted review progress stage",
+    sql: [
+      `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS progress_stage TEXT`,
     ],
   },
 ];

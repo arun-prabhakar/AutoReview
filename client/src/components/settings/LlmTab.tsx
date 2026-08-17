@@ -127,8 +127,8 @@ export function LlmTab({ providers, loading }: { providers: Provider[]; loading?
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2"><Label>Max Tokens</Label><Input type="number" defaultValue={String(repo.llm_max_tokens || 4096)} onBlur={(e) => saveLlm({ llm_max_tokens: Number(e.target.value) })} disabled={savingLlm[String(repo.id)]} /></div>
-                <div className="space-y-2"><Label>Temperature</Label><Input type="number" step="0.1" defaultValue={String(repo.llm_temperature || 0.2)} onBlur={(e) => saveLlm({ llm_temperature: Number(e.target.value) })} disabled={savingLlm[String(repo.id)]} /></div>
+                <div className="space-y-2"><Label>Max Tokens</Label><Input type="number" min="256" max="8192" defaultValue={String(Math.min(Number(repo.llm_max_tokens || 4096), 8192))} onBlur={(e) => saveLlm({ llm_max_tokens: Math.max(256, Math.min(8192, Number(e.target.value) || 4096)) })} disabled={savingLlm[String(repo.id)]} /><p className="text-xs text-muted-foreground">Reviews use up to 6,144 tokens initially and 8,192 on retry.</p></div>
+                <div className="space-y-2"><Label>Temperature</Label><Input type="number" min="0" max="0.2" step="0.1" defaultValue={String(Math.min(Number(repo.llm_temperature || 0.2), 0.2))} onBlur={(e) => saveLlm({ llm_temperature: Math.max(0, Math.min(0.2, Number(e.target.value) || 0)) })} disabled={savingLlm[String(repo.id)]} /><p className="text-xs text-muted-foreground">Lower values produce more consistent structured reviews.</p></div>
               </div>
               {providerId && (
                 <div className="flex items-center gap-3">

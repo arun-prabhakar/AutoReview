@@ -22,6 +22,7 @@ export function CredentialsTab({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Credential | null>(null);
   const [editTarget, setEditTarget] = useState<Credential | null>(null);
   const [editUsername, setEditUsername] = useState("");
   const [editWorkspace, setEditWorkspace] = useState("");
@@ -80,6 +81,7 @@ export function CredentialsTab({
     try {
       await api.del(`/api/credentials/${id}`);
       toast({ title: "Credential deleted", variant: "success" });
+      setDeleteTarget(null);
       onRefresh();
     } catch (err) {
       toast({
@@ -132,7 +134,7 @@ export function CredentialsTab({
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" aria-label="Test credential" disabled={testing === cred.id} onClick={() => handleTest(cred)}>{testing === cred.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}</Button>
               <Button variant="ghost" size="icon" aria-label="Edit credential" onClick={() => openEdit(cred)}><Pencil className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="icon" aria-label="Delete credential" disabled={deleting === cred.id} onClick={() => handleDelete(cred.id)}>{deleting === cred.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}</Button>
+              <Button variant="ghost" size="icon" aria-label="Delete credential" disabled={deleting === cred.id} onClick={() => setDeleteTarget(cred)}>{deleting === cred.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 text-destructive" />}</Button>
             </div>
           </CardContent>
         </Card>
@@ -158,6 +160,16 @@ export function CredentialsTab({
               <Button type="submit" disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{saving ? "Saving..." : "Save Changes"}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open && !deleting) setDeleteTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle className="text-destructive">Delete Credential</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Delete the credential for <span className="font-medium text-foreground">{deleteTarget?.username}</span>? Credentials assigned to repositories cannot be deleted.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={!!deleting}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteTarget && handleDelete(deleteTarget.id)} disabled={!!deleting}>{deleting ? "Deleting..." : "Delete Credential"}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

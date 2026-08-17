@@ -1,6 +1,9 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Check, Copy, ExternalLink, RotateCcw, XCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface FindingCardProps {
   id: string;
@@ -12,6 +15,9 @@ interface FindingCardProps {
   suggested_fix: string | null;
   category: string | null;
   className?: string;
+  disposition?: "open" | "resolved" | "false_positive" | "accepted_risk";
+  onDisposition?: (disposition: "open" | "resolved" | "false_positive" | "accepted_risk") => void;
+  sourceUrl?: string;
 }
 
 const severityConfig = {
@@ -41,8 +47,12 @@ export function FindingCard({
   suggested_fix,
   category,
   className,
+  disposition = "open",
+  onDisposition,
+  sourceUrl,
 }: FindingCardProps) {
   const config = severityConfig[risk_level];
+  const { toast } = useToast();
 
   return (
     <Card
@@ -92,6 +102,21 @@ export function FindingCard({
             </code>
           </div>
         )}
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(`${summary}\n${file_path}${line_number ? `:${line_number}` : ""}\n${explanation}${suggested_fix ? `\nFix: ${suggested_fix}` : ""}`); toast({ title: "Finding copied", variant: "success" }); }}>
+            <Copy className="h-3.5 w-3.5" />Copy
+          </Button>
+          {sourceUrl && <Button asChild variant="ghost" size="sm"><a href={sourceUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" />Open source</a></Button>}
+          {onDisposition && disposition === "open" && <>
+            <Button variant="outline" size="sm" onClick={() => onDisposition("resolved")}><Check className="h-3.5 w-3.5" />Resolve</Button>
+            <Button variant="outline" size="sm" onClick={() => onDisposition("false_positive")}><XCircle className="h-3.5 w-3.5" />False positive</Button>
+            <Button variant="outline" size="sm" onClick={() => onDisposition("accepted_risk")}>Accept risk</Button>
+          </>}
+          {onDisposition && disposition !== "open" && <>
+            <Badge variant="outline" className="capitalize">{disposition.replace(/_/g, " ")}</Badge>
+            <Button variant="ghost" size="sm" onClick={() => onDisposition("open")}><RotateCcw className="h-3.5 w-3.5" />Reopen</Button>
+          </>}
+        </div>
       </CardContent>
     </Card>
   );

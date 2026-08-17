@@ -257,8 +257,8 @@ reviewsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction
          r.error_message, r.failure_category, r.created_at, r.completed_at, r.created_by,
          r.ai_overview, r.parent_review_id, r.tokens_prompt, r.tokens_completion, r.tokens_total,
          r.estimated_cost, r.project_context, r.commit_author, r.diff_text, r.pr_head_commit,
-         r.llm_model, r.cancel_requested, r.policy_status, r.incremental, r.base_commit,
-         repo.name as repository_name
+         r.llm_model, r.cancel_requested, r.policy_status, r.incremental, r.base_commit, r.progress_stage,
+         repo.name as repository_name, repo.workspace as repository_workspace, repo.slug as repository_slug
        FROM reviews r JOIN repositories repo ON r.repository_id = repo.id
        WHERE r.id = $1`,
       [req.params.id]
@@ -286,6 +286,29 @@ reviewsRouter.delete("/:id", requireRole("admin"), async (req: Request, res: Res
     res.status(204).send();
   } catch (err) {
     next(err);
+  }
+});
+
+reviewsRouter.patch("/:reviewId/findings/:findingId", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const disposition = String(req.body.disposition || "");
+    if (!["open", "resolved", "false_positive", "accepted_risk"].includes(disposition)) {
+      res.status(400).json({ error: "Invalid finding disposition" });
+      return;
+    }
+    const finding = await get<{ id: string }>("SELECT id FROM findings WHERE id = $1 AND review_id = $2", [req.params.findingId, req.params.reviewId]);
+    if (!finding) {
+      res.status(404).json({ error: "Finding not found" });
+      return;
+    }
+    await run(
+      `UPDATE findings SET disposition = $1, disposition_reason = $2, disposition_by = $3,
+       disposition_at = CASE WHEN $1 = 'open' THEN NULL ELSE NOW() END WHERE id = $4`,
+      [disposition, req.body.reason || null, req.user?.username || null, req.params.findingId],
+    );
+    res.json(await get("SELECT * FROM findings WHERE id = $1", [req.params.findingId]));
+  } catch (error) {
+    next(error);
   }
 });
 

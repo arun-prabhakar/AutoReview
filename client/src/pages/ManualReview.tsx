@@ -42,6 +42,8 @@ type ReviewPreflight = {
   truncated: boolean;
   incremental: boolean;
   passes: number;
+  diffCharacters: number;
+  analyzedDiffCharacters: number;
 };
 
 export default function ManualReview() {
@@ -61,6 +63,8 @@ export default function ManualReview() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [openPrs, setOpenPrs] = useState<OpenPr[]>([]);
   const [loadingPrs, setLoadingPrs] = useState(false);
+  const [prLoadError, setPrLoadError] = useState("");
+  const [prsLoaded, setPrsLoaded] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [streamStatus, setStreamStatus] = useState("");
   const [preflight, setPreflight] = useState<ReviewPreflight | null>(null);
@@ -69,6 +73,7 @@ export default function ManualReview() {
   const [pendingForce, setPendingForce] = useState(false);
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeReviewRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (submitting) {
@@ -86,12 +91,17 @@ export default function ManualReview() {
   const loadOpenPrs = async (selectedRepoId: string) => {
     if (!selectedRepoId) return;
     setLoadingPrs(true);
+    setPrLoadError("");
+    setPrsLoaded(false);
     setOpenPrs([]);
     try {
       const data = await api.get<OpenPr[]>(`/api/reviews/open-prs/${selectedRepoId}`);
       setOpenPrs(data);
-    } catch {
-      toast({ title: "Could not load open PRs", description: "Check repository credentials.", variant: "destructive" });
+      setPrsLoaded(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not load open pull requests";
+      setPrLoadError(message);
+      toast({ title: "Could not load open PRs", description: message, variant: "destructive" });
     } finally {
       setLoadingPrs(false);
     }
@@ -119,7 +129,11 @@ export default function ManualReview() {
         if (event === "started" || event === "heartbeat" || event === "progress") {
           setStreamStatus(String(payload.message || "Review is running..."));
         }
-        if (event === "progress" && payload.reviewId) setActiveReviewId(String(payload.reviewId));
+        if (event === "progress" && payload.reviewId) {
+          const reviewId = String(payload.reviewId);
+          activeReviewRef.current = reviewId;
+          setActiveReviewId(reviewId);
+        }
       };
       if (mode === "commit") {
         data = await api.postStream<ReviewResult>("/api/reviews/manual/stream", {
@@ -147,11 +161,18 @@ export default function ManualReview() {
       setResult(data);
       toast({ title: "Review Completed", description: "Findings are ready." });
     } catch (err) {
-      toast({ title: "Review Failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+      const recoveryId = activeReviewRef.current;
+      if (recoveryId && err instanceof Error && err.message.includes("disconnected")) {
+        toast({ title: "Connection interrupted", description: "The review is still running. Opening its status page.", variant: "default" });
+        navigate(`/reviews/${recoveryId}`);
+      } else {
+        toast({ title: "Review Failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+      }
     } finally {
       setSubmitting(false);
       setStreamStatus("");
       setActiveReviewId(null);
+      activeReviewRef.current = null;
     }
   };
 
@@ -306,6 +327,10 @@ export default function ManualReview() {
                     />
                   )}
 
+                  {loadingPrs && <p className="text-xs text-muted-foreground">Loading open pull requests...</p>}
+                  {!loadingPrs && prsLoaded && openPrs.length === 0 && <p className="text-xs text-muted-foreground">No open pull requests found. You can still enter a PR number.</p>}
+                  {!loadingPrs && prLoadError && <p className="text-xs text-destructive">{prLoadError}</p>}
+
                   {prId && openPrs.length > 0 && (() => {
                     const selected = openPrs.find((p) => p.id === prId);
                     return selected ? (
@@ -414,6 +439,11 @@ export default function ManualReview() {
               <div className="rounded-md bg-secondary p-3"><p className="text-xs text-muted-foreground">Review passes</p><p className="font-semibold">{preflight.passes}</p></div>
               <div className="rounded-md bg-secondary p-3"><p className="text-xs text-muted-foreground">Estimated input</p><p className="font-semibold">{preflight.estimatedInputTokens.toLocaleString()} tokens</p></div>
               <div className="rounded-md bg-secondary p-3"><p className="text-xs text-muted-foreground">Maximum output</p><p className="font-semibold">{preflight.estimatedMaxOutputTokens.toLocaleString()} tokens</p></div>
+              <div className="col-span-2 rounded-md bg-secondary p-3">
+                <p className="text-xs text-muted-foreground">Review coverage</p>
+                <p className="font-semibold">{preflight.analyzedDiffCharacters.toLocaleString()} of {preflight.diffCharacters.toLocaleString()} characters</p>
+                {preflight.analyzedDiffCharacters < preflight.diffCharacters && <p className="mt-1 text-xs text-warning">Large or excluded content will not be sent to the model.</p>}
+              </div>
               <div className="col-span-2 rounded-md border border-border p-3"><p className="text-xs text-muted-foreground">Model and estimated maximum cost</p><p className="font-semibold break-all">{preflight.model} · ${preflight.estimatedMaxCost.toFixed(4)}</p>{preflight.incremental && <p className="mt-1 text-xs text-success">Incremental review from the previous PR head</p>}{preflight.truncated && <p className="mt-1 text-xs text-warning">Diff exceeds the review size limit and will be truncated</p>}</div>
             </div>
           )}

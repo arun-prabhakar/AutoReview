@@ -12,6 +12,8 @@ export interface Review {
   completed_at: string | null;
   created_by: string | null;
   repository_name?: string;
+  repository_workspace?: string;
+  repository_slug?: string;
   ai_overview?: string | null;
   ai_response?: string | null;
   findings?: Finding[];
@@ -29,6 +31,7 @@ export interface Review {
   policy_status?: 'passed' | 'failed' | null;
   incremental?: boolean;
   base_commit?: string | null;
+  progress_stage?: string | null;
 }
 
 export interface Finding {
@@ -41,6 +44,9 @@ export interface Finding {
   risk_level: 'must_fix' | 'should_fix_soon' | 'ignore';
   suggested_fix: string | null;
   category: string | null;
+  disposition?: 'open' | 'resolved' | 'false_positive' | 'accepted_risk';
+  disposition_reason?: string | null;
+  disposition_by?: string | null;
 }
 
 export interface Repository {

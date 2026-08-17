@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
-import type { AppDispatch } from "@/store";
+import type { AppDispatch, RootState } from "@/store";
 import { fetchRepositories } from "@/store/repositoriesSlice";
 import { api } from "@/services/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Cpu, KeyRound, FolderGit2, Settings2, Brain, FileText, Bell } from "lucide-react";
+import { Cpu, KeyRound, FolderGit2, Settings2, Brain, FileText, Bell, CheckCircle2, Circle } from "lucide-react";
 import type { Credential, Provider } from "@/components/settings/types";
 import { ProvidersTab } from "@/components/settings/ProvidersTab";
 import { CredentialsTab } from "@/components/settings/CredentialsTab";
@@ -24,6 +24,7 @@ export default function Settings() {
   const [loadingCredentials, setLoadingCredentials] = useState(true);
   const [loadingProviders, setLoadingProviders] = useState(true);
   const { toast } = useToast();
+  const repositories = useSelector((state: RootState) => state.repositories.items);
   const activeTab = searchParams.get("tab") || "providers";
 
   useEffect(() => {
@@ -47,6 +48,20 @@ export default function Settings() {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-bold tracking-tight">Settings</h2>
+
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-4 text-sm">
+        <span className="font-medium mr-1">Setup readiness</span>
+        {[
+          { label: "Provider", ready: providers.length > 0, tab: "providers" },
+          { label: "Credential", ready: credentials.length > 0, tab: "credentials" },
+          { label: "Repository", ready: repositories.length > 0, tab: "repositories" },
+          { label: "LLM assigned", ready: repositories.some((repo) => Boolean(repo.llm_provider_id && repo.llm_model)), tab: "llm" },
+        ].map((item) => (
+          <button key={item.label} onClick={() => setSearchParams({ tab: item.tab }, { replace: true })} className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 hover:bg-accent">
+            {item.ready ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}{item.label}
+          </button>
+        ))}
+      </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setSearchParams({ tab: v }, { replace: true })}>
         <TabsList className="w-full flex-wrap h-auto gap-1">

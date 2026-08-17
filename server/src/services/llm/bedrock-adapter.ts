@@ -87,7 +87,7 @@ export class BedrockAdapter implements LlmAdapter {
       },
     });
 
-    const response = await this.runtimeClient.send(command);
+    const response = await this.runtimeClient.send(command, { abortSignal: request.signal });
 
     const content = response.output?.message?.content?.[0]?.text ?? "[]";
     const tokenUsage = {

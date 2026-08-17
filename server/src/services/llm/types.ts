@@ -18,6 +18,7 @@ export type LlmCompletionRequest = {
   messages: LlmMessage[];
   maxTokens: number;
   temperature: number;
+  signal?: AbortSignal;
 };
 
 /** Adapter interface abstracting over LLM backends (OpenAI-compatible, AWS Bedrock, etc.) */

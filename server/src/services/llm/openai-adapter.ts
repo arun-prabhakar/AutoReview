@@ -34,7 +34,7 @@ export class OpenAIAdapter implements LlmAdapter {
       messages: request.messages.map((m) => ({ role: m.role, content: m.content })),
       max_tokens: request.maxTokens,
       temperature: request.temperature,
-    });
+    }, { signal: request.signal });
 
     const content = response.choices?.[0]?.message?.content || "[]";
     const tokenUsage = {
