@@ -4,26 +4,26 @@
 
 @layer base {
   :root {
-    /* AutoReview — Monochromatic Light Theme (DESIGN.MD) */
-    --background: 0 0% 100%;           /* Canvas White #ffffff */
+    /* AutoReview — Monochromatic Light Theme (DESIGN.MD), refined */
+    --background: 0 0% 98%;            /* Canvas #fafafa — tinted so white cards layer above it */
     --foreground: 0 0% 4%;             /* Rich Black #0a0a0a */
 
-    --card: 0 0% 100%;                 /* Canvas White #ffffff */
+    --card: 0 0% 100%;                 /* Card White #ffffff */
     --card-foreground: 0 0% 4%;
 
-    --popover: 0 0% 100%;              /* Canvas White #ffffff */
+    --popover: 0 0% 100%;              /* Card White #ffffff */
     --popover-foreground: 0 0% 4%;
 
-    --primary: 0 0% 0%;                /* Deep Black #000000 — CTA */
+    --primary: 0 0% 7%;                /* Near-black CTA #121212 */
     --primary-foreground: 0 0% 100%;   /* White on CTA */
 
-    --secondary: 0 0% 95%;             /* Ghost Gray #f2f2f2 */
+    --secondary: 0 0% 96%;             /* Ghost Gray #f5f5f5 */
     --secondary-foreground: 0 0% 4%;
 
-    --muted: 0 0% 95%;                 /* Ghost Gray #f2f2f2 */
+    --muted: 0 0% 96%;                 /* Ghost Gray #f5f5f5 */
     --muted-foreground: 0 0% 40%;      /* #666666 — 5.7:1 contrast for readability */
 
-    --accent: 0 0% 95%;                /* Ghost Gray #f2f2f2 */
+    --accent: 0 0% 96%;                /* Ghost Gray #f5f5f5 */
     --accent-foreground: 0 0% 4%;
 
     /* Interactive accent — the single signal color (links, focus, active states) */
@@ -35,8 +35,8 @@
     --success: 130 85% 41%;            /* Success Green #10c22b */
     --warning: 26 90% 37%;             /* Warning Amber #b45309 */
 
-    --border: 0 0% 90%;                /* Subtle Ash #e5e5e5 */
-    --input: 0 0% 90%;
+    --border: 0 0% 0% / 0.08;          /* adaptive black-alpha hairline */
+    --input: 0 0% 0% / 0.10;
     --ring: 221 83% 53%;               /* focus ring: accent blue */
 
     /* Radius scale — 10px base (buttons/inputs), 14px cards, 26px badges */
@@ -58,31 +58,31 @@
     --font-geist: 'Geist Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-    /* Elevation — 1px hairline shadow, no heavy multi-directional shadows */
-    --shadow-card: oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px;
+    /* Elevation — border for hairline, soft layered shadow for depth */
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px -2px rgb(0 0 0 / 0.06);
     --focus-ring: 0 0 0 2px hsl(var(--interactive));
   }
 
   .dark {
-    --background: 0 0% 4%;             /* Deep Canvas #0a0a0a */
+    --background: 240 6% 4%;           /* Deep Canvas #09090b */
     --foreground: 0 0% 98%;            /* Primary Text #fafafa */
 
-    --card: 0 0% 8%;                   /* Elevated Card #141414 */
+    --card: 240 5% 9%;                 /* Elevated Card #161618 */
     --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 15%;               /* Overlay Surface #262626 */
+    --popover: 240 5% 13%;             /* Overlay Surface #202023 */
     --popover-foreground: 0 0% 98%;
 
     --primary: 0 0% 98%;               /* CTA #fafafa (inverted) */
     --primary-foreground: 0 0% 4%;
 
-    --secondary: 0 0% 11%;             /* Input Surface #1c1c1c */
+    --secondary: 240 4% 12%;           /* Input Surface #1d1d20 */
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 0 0% 11%;                 /* Input Surface #1c1c1c */
-    --muted-foreground: 0 0% 64%;      /* Muted Text #a3a3a3 */
+    --muted: 240 4% 12%;               /* Input Surface #1d1d20 */
+    --muted-foreground: 240 4% 65%;    /* Muted Text #a5a5ad */
 
-    --accent: 0 0% 11%;                /* Input Surface #1c1c1c */
+    --accent: 240 4% 12%;              /* Input Surface #1d1d20 */
     --accent-foreground: 0 0% 98%;
 
     /* Interactive accent — brighter for dark backgrounds */
@@ -94,12 +94,12 @@
     --success: 142 71% 45%;            /* Success Green #22c55e */
     --warning: 38 92% 50%;             /* Warning Amber #f59e0b */
 
-    --border: 0 0% 15%;                /* Subtle Border #262626 */
-    --input: 0 0% 15%;
+    --border: 0 0% 100% / 0.07;        /* adaptive white-alpha hairline */
+    --input: 0 0% 100% / 0.08;
     --ring: 217 91% 60% / 0.5;         /* focus ring: accent blue, softened */
 
-    /* Dark elevation comes from borders — shadows are invisible on dark */
-    --shadow-card: 0 0 #0000;
+    /* Elevation — white-alpha border for definition, soft shadow + top-edge light for depth */
+    --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.03), 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 16px -6px rgb(0 0 0 / 0.4);
     --focus-ring: 0 0 0 2px hsl(var(--interactive) / 0.5);
   }
 

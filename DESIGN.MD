@@ -1,49 +1,71 @@
-# Ui — Style Reference
-> Monochromatic architectural blueprint – precise, functional forms on a stark, bright canvas.
+> Monochrome Utility, Human Touch. A system that prioritizes clarity and function with a stark black-and-white palette, but softens it with friendly typography and rounded forms.
 
 **Theme:** light
 
-This design system feels like a finely tuned machine, presenting a clean and precise interface with a stark black-and-white aesthetic. The visual mood is serious and functional, achieved through a dominant achromatic palette and very subtle elevation. Geometric balance is created by mixing hard 10-14px radii for cards and inputs with highly rounded (near-pill) buttons and badges, suggesting both structure and approachability. The use of a custom sans-serif font across all elements with meticulous letter-spacing creates a unified, crisp typographic voice.
+The design feels like a pragmatic, high-precision instrument. It's built on a strict and disciplined monochrome palette of black, white, and echelon grays, where color is intentionally excluded from the core UI to emphasize function. The custom font, 'Cal Sans', defines the visual identity with its geometric yet open letterforms, giving headlines a technical but approachable character. Nearly all interactive elements are either solid black or pill-shaped outlines, creating a binary system of action. Cards are the fundamental building block, using soft 8-12px radii and extremely subtle shadows to create a quiet, layered topology on a light gray background.
 
 ## Tokens — Colors
 
 | Name | Value | Token | Role |
 |------|-------|-------|------|
-| Canvas White | `#ffffff` | `--color-canvas-white` | Page background, primary card surfaces, popovers. The foundational bright base. |
-| Ghost Gray | `#f2f2f2` | `--color-ghost-gray` | Secondary background for segmented sections or subtle card differentiation. Lighter than default background. |
-| Subtle Ash | `#e5e5e5` | `--color-subtle-ash` | Border colors for inputs, cards, and dividers. Provides definition without harshness. |
-| Midtone Gray | `#737373` | `--color-midtone-gray` | Muted text, placeholder text in inputs, secondary icons. Recedes into the background. |
-| Rich Black | `#0a0a0a` | `--color-rich-black` | Primary text color for body copy, standard icons, badges with white text. High contrast for readability. |
-| Deep Black | `#000000` | `--color-deep-black` | Headings, active state button backgrounds, highlighted text. The darkest tone for strong emphasis. |
-| Callout Red | `#c22b10` | `--color-callout-red` | Destructive actions, error states. A muted, serious red. |
-| Success Green | `#10c22b` | `--color-success-green` | Success states, positive confirmations. A muted, serious green. |
+| Ink | `#101010` | `--color-ink` | Primary CTAs, primary text, active states. Used as the strongest dark tone, providing maximum contrast and visual weight for key actions. |
+| Action Blue | `#0099ff` | `--color-action-blue` | Tertiary links, informational banner text. A rare, functional splash of color reserved for secondary calls to action and informational highlights. |
+| White | `#ffffff` | `--color-white` | Card backgrounds, text on dark buttons. |
+| Paper | `#f4f4f4` | `--color-paper` | Main page background. |
+| Graphite | `#242424` | `--color-graphite` | Headlines, primary body text. |
+| Slate | `#6b7280` | `--color-slate` | Secondary text, descriptive copy, disabled states. |
+| Stone | `#898989` | `--color-stone` | Placeholder text, decorative UI elements. |
+| Silver | `#e5e7eb` | `--color-silver` | Borders, dividers, subtle backgrounds. |
+| Info Banner BG | `#eff6fe` | `--color-info-banner-bg` | Background for the top-of-page informational banner. |
+| Google Blue | `#4285f4` | `--color-google-blue` | Integration logos only. |
+| Google Yellow | `#fbbc04` | `--color-google-yellow` | Integration logos only. |
+| Google Green | `#34a853` | `--color-google-green` | Integration logos only. |
+| Google Red | `#ea4335` | `--color-google-red` | Integration logos only. |
 
 ## Tokens — Typography
 
-### Geist — Primary brand font for all UI text, headings, and body. Its varied weights and precise tracking create a modern, technical feel. · `--font-geist`
-- **Substitute:** Inter
-- **Weights:** 400, 500, 600
-- **Sizes:** 12px, 13px, 14px, 16px, 18px, 48px
-- **Line height:** 1.00, 1.10, 1.20, 1.33, 1.38, 1.43, 1.50, 1.56, 1.63, 2.00
-- **Letter spacing:** -0.0500em at 48px, -0.0250em at 18px
-- **Role:** Primary brand font for all UI text, headings, and body. Its varied weights and precise tracking create a modern, technical feel.
+### Cal Sans — Primary headline font. Its geometric forms and slightly wide stance give the brand a unique, technical-yet-friendly voice. Used exclusively for headings to establish hierarchy. · `--font-cal-sans`
+- **Substitute:** Poppins, Gilroy
+- **Weights:** 600
+- **Sizes:** 20px, 24px, 48px, 64px
+- **Line height:** 1.10 - 1.30
+- **Letter spacing:** +0.01em tracking adds airiness at display sizes.
+- **Role:** Primary headline font. Its geometric forms and slightly wide stance give the brand a unique, technical-yet-friendly voice. Used exclusively for headings to establish hierarchy.
 
-### Geist Mono — Used for code snippets or specific input fields requiring monospaced characters. Reinforces a technical aesthetic. · `--font-geist-mono`
-- **Substitute:** IBM Plex Mono
+### Cal Sans UI Variable Light — Primary body and UI text font. The light weight and tight negative tracking create a clean, modern text block that is readable without being loud. · `--font-cal-sans-ui-variable-light`
+- **Substitute:** Inter Light
+- **Weights:** 300
+- **Sizes:** 14px, 16px, 18px
+- **Line height:** 1.40 - 1.50
+- **Letter spacing:** Tight negative tracking from -0.19px to -0.24px for a compact feel.
+- **Role:** Primary body and UI text font. The light weight and tight negative tracking create a clean, modern text block that is readable without being loud.
+
+### Inter — Secondary UI and body font. Used for smaller text, labels, and inside complex components like the calendar widget where utmost clarity is required. · `--font-inter`
+- **Substitute:** system-ui, -apple-system, sans-serif
+- **Weights:** 400, 500, 600
+- **Sizes:** 10px, 12px, 14px, 16px
+- **Line height:** 1.14 - 1.43
+- **Role:** Secondary UI and body font. Used for smaller text, labels, and inside complex components like the calendar widget where utmost clarity is required.
+
+### Matter — Tertiary UI text for captions and metadata where a highly legible, neutral choice is needed. · `--font-matter`
+- **Substitute:** Inter
 - **Weights:** 400
-- **Sizes:** 14px
-- **Line height:** 1.43
-- **Letter spacing:** normal
-- **Role:** Used for code snippets or specific input fields requiring monospaced characters. Reinforces a technical aesthetic.
+- **Sizes:** 10px, 12px, 14px
+- **Line height:** 1.14 - 1.50
+- **Role:** Tertiary UI text for captions and metadata where a highly legible, neutral choice is needed.
 
 ### Type Scale
 
 | Role | Size | Line Height | Letter Spacing | Token |
 |------|------|-------------|----------------|-------|
-| caption | 12px | 1.5 | — | `--text-caption` |
-| body | 14px | 1.43 | — | `--text-body` |
-| heading | 18px | 1.33 | -0.45px | `--text-heading` |
-| display | 48px | 1 | -2.4px | `--text-display` |
+| caption | 12px | 1.4 | -0.24px | `--text-caption` |
+| body-sm | 14px | 1.5 | -0.2px | `--text-body-sm` |
+| body | 16px | 1.5 | -0.19px | `--text-body` |
+| subheading | 18px | 1.4 | -0.2px | `--text-subheading` |
+| heading-sm | 20px | 1.3 | 0.2px | `--text-heading-sm` |
+| heading | 24px | 1.3 | 0.24px | `--text-heading` |
+| heading-lg | 48px | 1.1 | 0.48px | `--text-heading-lg` |
+| display | 64px | 1.1 | 0.64px | `--text-display` |
 
 ## Tokens — Spacing & Shapes
 
@@ -62,227 +84,125 @@ This design system feels like a finely tuned machine, presenting a clean and pre
 | 16 | 16px | `--spacing-16` |
 | 20 | 20px | `--spacing-20` |
 | 24 | 24px | `--spacing-24` |
+| 28 | 28px | `--spacing-28` |
 | 32 | 32px | `--spacing-32` |
 | 40 | 40px | `--spacing-40` |
+| 48 | 48px | `--spacing-48` |
 | 80 | 80px | `--spacing-80` |
-| 83 | 83px | `--spacing-83` |
 
 ### Border Radius
 
 | Element | Value |
 |---------|-------|
-| pill | 9999px |
-| badge | 26px |
-| cards | 14px |
-| input | 10px |
-| buttons | 10px |
-| default | 10px |
+| tags | 9999px |
+| cards | 12px |
+| inputs | 8px |
+| buttons | 9999px (pills), 8px (rectangular) |
 
 ### Shadows
 
 | Name | Value | Token |
 |------|-------|-------|
-| subtle | `lab(100 0 0) 0px 0px 0px 2px` | `--shadow-subtle` |
-| subtle-2 | `oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0...` | `--shadow-subtle-2` |
+| sm | `rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, ...` | `--shadow-sm` |
+| subtle | `rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset` | `--shadow-subtle` |
+| sm-2 | `rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, ...` | `--shadow-sm-2` |
+| sm-3 | `rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, ...` | `--shadow-sm-3` |
+| sm-4 | `rgba(34, 42, 53, 0.05) 0px 4px 8px 0px` | `--shadow-sm-4` |
+| subtle-2 | `rgb(255, 255, 255) 0px 2px 0px 0px inset` | `--shadow-subtle-2` |
+| subtle-3 | `rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.06) 0...` | `--shadow-subtle-3` |
 
 ### Layout
 
-- **Section gap:** 83px
-- **Card padding:** 16px
-- **Element gap:** 8px
+- **Page max-width:** 1200px
+- **Section gap:** 96px
+- **Card padding:** 24px
 
 ## Components
 
-### Primary Action Button
-**Role:** Call to action.
+### Primary CTA Button
+**Role:** The main call-to-action on the page.
 
-Solid Deep Black (#000000) background with Canvas White (#ffffff) text. Features a 10px border-radius, 8px vertical padding, and 48px horizontal padding, making it a prominent rectangular element.
+A pill-shaped button. Background: Ink (#101010). Text: White (#ffffff). Font: Cal Sans UI at 14-16px. Radius: 9999px. Padding: ~12px 24px.
 
-### Ghost Button
-**Role:** Secondary or tertiary actions, often within groups.
+### Secondary Ghost Button
+**Role:** A secondary call-to-action, often next to the primary.
 
-Transparent background with Rich Black (#0a0a0a) text. Uses a 9999px border-radius for a pill shape, with no explicit padding defined by variants, implying content-based sizing.
+A pill-shaped outline button. Background: transparent or Paper (#f4f4f4). Text: Graphite (#242424). Border: 1px solid Silver (#e5e7eb). Radius: 9999px. Padding: ~12px 24px.
 
-### Split Button Left
-**Role:** Left segment of a grouped button control.
+### Header CTA Button
+**Role:** The main call-to-action in the sticky header.
 
-Canvas White (#ffffff) background with Deep Black (#000000) text. Features a 10px border-radius on the left, 0px on the right, and 10px horizontal padding. Borders in Subtle Ash (#e5e5e5).
+A rectangular button. Background: Ink (#101010). Text: White (#ffffff). Font: Cal Sans UI at 14px. Radius: 8px. Padding: ~8px 16px.
 
-### Split Button Right
-**Role:** Right segment of a grouped button control.
+### Tag Button
+**Role:** Small, non-critical buttons for categorizing or filtering content.
 
-Canvas White (#ffffff) background with Deep Black (#000000) text. Features a 10px border-radius on the right, 0px on the left. Borders in Subtle Ash (#e5e5e5).
+A small pill button. Background: Paper (#f4f4f4) or Silver (#e5e7eb). Text: Graphite (#242424). Radius: 9999px. Padding: ~4px 12px.
 
-### Elevated Card
-**Role:** Containers for distinct content blocks, forms, or data.
+### Scheduling Widget Card
+**Role:** The hero component showcasing the product's core functionality.
 
-Canvas White (#ffffff) background with a 14px border-radius. Features a subtle shadow: oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px, providing minimal elevation. Inner content padding is 16px.
+Background: White (#ffffff). Padding: 16px. Radius: 12px. Shadow: `rgba(36, 36, 36, 0.05) 0px 4px 8px 0px`. Contains an interactive calendar UI.
 
-### Plain Input Field
-**Role:** Standard text input.
+### Navigation Link
+**Role:** Links in the main site header.
 
-Transparent background with Rich Black (#0a0a0a) text. Defined by a 1px Subtle Ash (#e5e5e5) border and a 10px border-radius. Inner padding is 4px vertical, 10px horizontal.
-
-### Segmented Input Left
-**Role:** Left segment of a grouped input control.
-
-Transparent background with Rich Black (#0a0a0a) text. Features a 10px border-radius on the left and 0px on the right. Defined by a 1px Subtle Ash (#e5e5e5) border. Inner padding is 4px vertical, 10px horizontal.
-
-### Inverse Tag Badge
-**Role:** Highlighting status or category, with high contrast.
-
-Deep Black (#171717) background with Canvas White (#ffffff) text. Features a 26px border-radius, creating a pill shape. Padding is 2px vertical, 8px horizontal.
-
-### Neutral Tag Badge
-**Role:** Subtle categorization or status.
-
-Ghost Gray (#f2f2f2) background with Rich Black (#0a0a0a) text. Features a 26px border-radius, creating a pill shape. Padding is 2px vertical, 8px horizontal.
-
-### Outline Tag Badge
-**Role:** Very subtle categorization or option.
-
-Transparent background with Rich Black (#0a0a0a) text. Features a 26px border-radius and a Light Ash (#a1a1a1) border. Padding is 2px vertical, 8px horizontal.
+Text-only link. Color: Graphite (#242424). Font: Cal Sans UI at 14-16px. No underline.
 
 ## Do's and Don'ts
 
 ### Do
-- Use Deep Black (#000000) for primary headings and active states to command attention.
-- Apply Subtle Ash (#e5e5e5) for all primary borders and dividers to maintain a subtle visual separation.
-- Ensure input fields and cards consistently use a 10px or 14px border-radius, respectively, for geometric stability.
-- Employ Geist font universally, leveraging its 400, 500, and 600 weights to establish clear hierarchy without introducing new typefaces.
-- Maintain a default element gap of 8px, but use 16px for card inner padding to create adequate breathing room for content.
-- Utilize 9999px or 26px border-radius for all interactive buttons and badges to create a soft, approachable pill shape.
+- Use 'Cal Sans' weight 600 exclusively for headings (size 20px and above).
+- Employ a strict monochrome palette (Ink, Graphite, Slate, Paper, White) for 99% of the UI.
+- Use pill-shaped buttons (9999px radius) for all primary and secondary page CTAs.
+- Apply a 12px border radius to all content cards and large containers.
+- Use subtle, diffuse shadows (`rgba(36, 36, 36, 0.05) 0px 4px 8px 0px`) for elevation.
+- Set body copy in 'Cal Sans UI Variable Light' with tight negative letter-spacing.
+- Reserve the single 'Action Blue' (#0099ff) for secondary links or informational highlights.
 
 ### Don't
-- Avoid using highly saturated colors; stick to the achromatic scale and the two semantic reds and greens.
-- Do not introduce additional font families; the current choices are sufficient for all typographic needs.
-- Refrain from using strong, multi-directional shadows; rely on minimal 1px shadows or simple borders for elevation.
-- Do not deviate from the established border-radius values; the mix of sharp 0px (in split elements), 10px, 14px, and 9999px is intentional.
-- Don't add excessive padding or margin; the design favors a compact density with specific, calculated spacing.
-- Avoid decorative gradients; the brand's aesthetic is built on flat colors and subtle depth.
-
-## Surfaces
-
-### Light
-
-| Level | Name | Value | Purpose |
-|-------|------|-------|---------|
-| 0 | Canvas White | `#ffffff` | Primary page background and base surface for most content. |
-| 1 | Elevated Card | `#ffffff` | Content cards and distinct sections that require a subtle lift, defined by borders or minimal shadow. |
-| 2 | Search/Input Field | `#ffffff` | Interactive elements like search bars and inputs, often bordered. |
-| 3 | Popovers/Overlays | `#ffffff` | Transient UI elements that appear above other content. |
-| 4 | Ghost Gray Background | `#f2f2f2` | Used as a background color for secondary buttons or badges, indicating a slightly lower hierarchy. |
-
-### Dark (Inverted Monochromatic)
-
-| Level | Name | Value | Purpose |
-|-------|------|-------|---------|
-| 0 | Deep Canvas | `#0a0a0a` | Page background. Pure near-black with no color tint. |
-| 1 | Elevated Card | `#141414` | Cards and sections. Slightly lifted from canvas. |
-| 2 | Input Surface | `#1c1c1c` | Interactive elements — inputs, search bars. |
-| 3 | Overlay Surface | `#262626` | Popovers, dropdowns, transient elements. |
-| 4 | Subtle Fill | `#1c1c1c` | Secondary buttons, badges, muted backgrounds. |
-
-### Dark Theme Colors
-
-| Name | Value | Token | Role |
-|------|-------|-------|------|
-| Deep Canvas | `#0a0a0a` | `--color-deep-canvas` | Page background. |
-| Elevated Card | `#141414` | `--color-elevated-card` | Card surfaces. |
-| Input Surface | `#1c1c1c` | `--color-input-surface` | Input backgrounds. |
-| Subtle Border | `#262626` | `--color-subtle-border` | Borders and dividers. |
-| Muted Text | `#a3a3a3` | `--color-muted-text-dark` | Secondary text, placeholders. |
-| Primary Text | `#fafafa` | `--color-primary-text-dark` | Body text, headings. |
-| CTA Background | `#fafafa` | `--color-cta-dark` | Primary button background (inverted). |
-| CTA Text | `#0a0a0a` | `--color-cta-text-dark` | Text on primary buttons (inverted). |
-| Callout Red | `#ef4444` | `--color-callout-red-dark` | Destructive actions (brighter for dark bg). |
-| Success Green | `#22c55e` | `--color-success-green-dark` | Success states (brighter for dark bg). |
-
-### Dark Theme — CSS Custom Properties
-
-```css
-.dark {
-  --background: 0 0% 4%;             /* Deep Canvas #0a0a0a */
-  --foreground: 0 0% 98%;            /* Primary Text #fafafa */
-
-  --card: 0 0% 8%;                   /* Elevated Card #141414 */
-  --card-foreground: 0 0% 98%;
-
-  --popover: 0 0% 15%;               /* Overlay Surface #262626 */
-  --popover-foreground: 0 0% 98%;
-
-  --primary: 0 0% 98%;               /* CTA #fafafa (inverted) */
-  --primary-foreground: 0 0% 4%;     /* CTA text #0a0a0a (inverted) */
-
-  --secondary: 0 0% 11%;             /* Input Surface #1c1c1c */
-  --secondary-foreground: 0 0% 98%;
-
-  --muted: 0 0% 11%;                 /* Input Surface #1c1c1c */
-  --muted-foreground: 0 0% 64%;      /* Muted Text #a3a3a3 */
-
-  --accent: 0 0% 11%;
-  --accent-foreground: 0 0% 98%;
-
-  --destructive: 0 84% 60%;          /* Callout Red #ef4444 */
-  --destructive-foreground: 0 0% 98%;
-
-  --success: 142 71% 45%;            /* Success Green #22c55e */
-
-  --border: 0 0% 15%;                /* Subtle Border #262626 */
-  --input: 0 0% 15%;
-  --ring: 0 0% 98%;
-}
-```
-
-### Dark Theme Rules
-
-- **Invert the hierarchy**: light fills become dark surfaces, dark text becomes light text.
-- **CTA buttons invert**: white background with black text (instead of black bg with white text).
-- **Borders brighten**: from `#e5e5e5` (light) to `#262626` (dark) — still subtle against their respective canvases.
-- **Semantic colors brighten slightly**: red and green increase lightness to maintain visibility on dark backgrounds.
-- **No colored accents**: the same achromatic discipline applies — no purple, blue, or lavender in dark mode.
-- **Shadows become borders**: `box-shadow` is less visible on dark backgrounds; prefer `border: 1px solid` for card elevation.
+- Do not introduce any new colors to the core UI; confine color to logos and the single blue accent.
+- Do not use sharp corners on buttons or cards.
+- Do not use font weights heavier than 600.
+- Do not use traditional outlined buttons; use either solid 'Ink' or 'ghost' pill buttons.
+- Do not use gradients on any buttons or card backgrounds.
+- Do not use borders on cards; use shadows for separation.
+- Do not set body text in 'Cal Sans'; it is for headlines only.
 
 ## Elevation
 
-### Light
-- **Elevated Card:** `oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px`
-- **Focus Ring:** `lab(100 0 0) 0px 0px 0px 2px`
-
-### Dark
-- **Elevated Card:** `border: 1px solid #262626` (shadows are invisible on dark backgrounds)
-- **Focus Ring:** `0px 0px 0px 2px rgba(255, 255, 255, 0.1)`
+- **Feature Card, Scheduling Widget:** `rgba(36, 36, 36, 0.05) 0px 4px 8px 0px`
+- **Hover/Focus Card:** `rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, 0.05) 0px 4px 8px 0px`
 
 ## Imagery
 
-The visual language is purely utilitarian and functional. No photography or complex illustrations are present. Icons are monochromatic, typically black stroke or fill on white backgrounds, aligning with the stark aesthetic. Product components are presented directly, with an emphasis on UI elements rather than lifestyle or marketing visuals. Imagery's role is explanatory (via icons) or for showcasing UI components, maintaining a text-dominant layout. There are no decorative visuals.
+The visual language is entirely product-centric and informational. Imagery consists solely of clean, isolated product UI screenshots and the logos of integration partners. There is no lifestyle photography, illustration, or abstract graphics. This choice reinforces the brand's focus on its functional capabilities, letting the product itself be the hero. All visual elements are presented within contained cards, never full-bleed, maintaining the page's orderly, grid-based structure.
 
 ## Layout
 
-The page maintains a centered, contained layout with a maximum visible width, creating a focused content area. The hero section features a prominent, centered headline and subtext over the Canvas White background, followed by centrally aligned CTA buttons. Sections below are arranged in a multi-column grid, showcasing various UI components (forms, cards, controls). The rhythm is consistent vertical spacing, creating an organized, information-dense display. Navigation is a sticky top-bar with compact links and utility actions.
+The site uses a centered layout within a max-width of 1200px, creating generous breathing room on either side. Sections are clearly demarcated by 96px of vertical space, establishing a calm, deliberate rhythm. The hero combines a large headline stack with a prominent product UI visual. Content below follows a predictable pattern of centered headlines followed by 3-column feature card grids or alternating text-and-visual blocks. This simple, highly structured approach emphasizes clarity and ease of navigation.
 
 ## Agent Prompt Guide
 
 ### Quick Color Reference
-- **Text Primary:** #0a0a0a
-- **Text Muted:** #737373
-- **Background:** #ffffff
-- **CTA Background:** #000000
-- **Border:** #e5e5e5
-- **Accent (Semantic Red):** #c22b10
+- **Page Background:** `#f4f4f4` (Paper)
+- **Card Background:** `#ffffff` (White)
+- **Headline Text:** `#242424` (Graphite)
+- **Body Text:** `#242424` (Graphite)
+- **Primary CTA:** `#101010` (Ink) background, `#ffffff` (White) text
+- **Borders/Dividers:** `#e5e7eb` (Silver)
 
 ### Example Component Prompts
-1. **Create a Hero Section:** Canvas White (#ffffff) background. Headline 'The Foundation for your Design System' in Geist weight 600, 48px, line-height 1.0, letter-spacing -2.4px, color Deep Black (#000000). Subtext 'A set of beautifully designed components that you can customize...' in Geist weight 400, 18px, line-height 1.33, letter-spacing -0.45px, color Rich Black (#0a0a0a). Below this, a Primary Action Button labeled 'New Project' and a Ghost Button labeled 'View Components'. Section gap 83px.
-2. **Generate an Elevated Card:** Canvas White (#ffffff) background, 14px border-radius, with shadow 'oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px'. Inside, use 16px internal padding. Title 'Payment Method' in Geist weight 500, 16px, Rich Black (#0a0a0a). Body text 'All transactions are secure...' in Geist weight 400, 14px, Midtone Gray (#737373). Include a Plain Input Field with label 'Name on Card'.
-3. **Design a Form Input Group:** Two segmented input fields. The first is a Segmented Input Left for 'Card Number', with placeholder '1234 5678 9012 3456'. The second is a Plain Input Field for 'CVV', placeholder '123'. Both bordered with Subtle Ash (#e5e5e5).
-4. **Create a Navigation Bar:** Canvas White (#ffffff) background. Left aligned: 'Docs', 'Components', 'Blocks', 'Charts', 'Directory', 'Create' as text links in Geist weight 400, 14px, Rich Black (#0a0a0a). Right aligned: a Plain Input Field 'Search documentation...' and a Primary Action Button labeled '+ New'. Elements within the nav should have 8px element gap between them.
+1.  **Hero Section:** "Create a hero section with a `#f4f4f4` background. On the left, add a headline 'The better way to schedule' using 'Cal Sans' at 64px, weight 600, color `#242424`, and line-height 1.1. Below it, add body text using 'Cal Sans UI' at 18px, color `#6b7280'. On the right, place a large card with a white background, 12px radius, and a subtle shadow `rgba(36, 36, 36, 0.05) 0px 4px 8px 0px` to represent a scheduling widget."
+2.  **Primary CTA Button:** "Create a button with the text 'Get started'. Make it pill-shaped with a `9999px` radius. Use a `#101010` background color and `#ffffff` text color. The font should be 'Cal Sans UI' at 16px. Use padding of 12px top/bottom and 24px left/right."
+3.  **Feature Card:** "Create a feature card with a `#ffffff` background, `24px` padding, a `12px` border radius, and a `rgba(36, 36, 36, 0.05) 0px 4px 8px 0px` box shadow. Inside, add a small numbered tag, a heading 'Connect your calendar' in 'Cal Sans' at 20px, and body text 'We'll handle all the cross-referencing' in 'Cal Sans UI' at 16px."
 
 ## Similar Brands
 
-- **Vercel** — Dominant use of a stark black-and-white achromatic palette, clean typography, and focus on developer tools and component showcasing.
-- **Linear** — Systematic grid-based UI, minimal use of color, and high-fidelity, component-driven interaction patterns.
-- **Figma** — Functional, dark-mode leaning interfaces with strong typography and precise spacing, emphasizing tool-like utility.
-- **Revolut (early UI)** — Modern, crisp UI with strong geometric shapes, restrained use of color for status, and emphasis on clear data presentation.
+- **Calendly** — Direct competitor with a similar clean, utility-focused scheduling UI, but uses more color.
+- **Linear** — Shares the disciplined monochrome palette, precision typography, and subtle shadows.
+- **Vercel** — Similar use of a geometric sans-serif for headlines (Geist) against a stark black-and-white UI.
+- **Pitch** — Employs a custom slab-serif for identity and relies on a clean, card-based layout with a primarily B&W palette.
 
 ## Quick Start
 
@@ -291,32 +211,54 @@ The page maintains a centered, contained layout with a maximum visible width, cr
 ```css
 :root {
   /* Colors */
-  --color-canvas-white: #ffffff;
-  --color-ghost-gray: #f2f2f2;
-  --color-subtle-ash: #e5e5e5;
-  --color-midtone-gray: #737373;
-  --color-rich-black: #0a0a0a;
-  --color-deep-black: #000000;
-  --color-callout-red: #c22b10;
-  --color-success-green: #10c22b;
+  --color-ink: #101010;
+  --color-action-blue: #0099ff;
+  --color-white: #ffffff;
+  --color-paper: #f4f4f4;
+  --color-graphite: #242424;
+  --color-slate: #6b7280;
+  --color-stone: #898989;
+  --color-silver: #e5e7eb;
+  --color-info-banner-bg: #eff6fe;
+  --color-google-blue: #4285f4;
+  --color-google-yellow: #fbbc04;
+  --color-google-green: #34a853;
+  --color-google-red: #ea4335;
 
   /* Typography — Font Families */
-  --font-geist: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-cal-sans: 'Cal Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-cal-sans-ui-variable-light: 'Cal Sans UI Variable Light', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-matter: 'Matter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   /* Typography — Scale */
   --text-caption: 12px;
-  --leading-caption: 1.5;
-  --text-body: 14px;
-  --leading-body: 1.43;
-  --text-heading: 18px;
-  --leading-heading: 1.33;
-  --tracking-heading: -0.45px;
-  --text-display: 48px;
-  --leading-display: 1;
-  --tracking-display: -2.4px;
+  --leading-caption: 1.4;
+  --tracking-caption: -0.24px;
+  --text-body-sm: 14px;
+  --leading-body-sm: 1.5;
+  --tracking-body-sm: -0.2px;
+  --text-body: 16px;
+  --leading-body: 1.5;
+  --tracking-body: -0.19px;
+  --text-subheading: 18px;
+  --leading-subheading: 1.4;
+  --tracking-subheading: -0.2px;
+  --text-heading-sm: 20px;
+  --leading-heading-sm: 1.3;
+  --tracking-heading-sm: 0.2px;
+  --text-heading: 24px;
+  --leading-heading: 1.3;
+  --tracking-heading: 0.24px;
+  --text-heading-lg: 48px;
+  --leading-heading-lg: 1.1;
+  --tracking-heading-lg: 0.48px;
+  --text-display: 64px;
+  --leading-display: 1.1;
+  --tracking-display: 0.64px;
 
   /* Typography — Weights */
+  --font-weight-light: 300;
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
@@ -331,44 +273,42 @@ The page maintains a centered, contained layout with a maximum visible width, cr
   --spacing-16: 16px;
   --spacing-20: 20px;
   --spacing-24: 24px;
+  --spacing-28: 28px;
   --spacing-32: 32px;
   --spacing-40: 40px;
+  --spacing-48: 48px;
   --spacing-80: 80px;
-  --spacing-83: 83px;
 
   /* Layout */
-  --section-gap: 83px;
-  --card-padding: 16px;
-  --element-gap: 8px;
+  --page-max-width: 1200px;
+  --section-gap: 96px;
+  --card-padding: 24px;
 
   /* Border Radius */
   --radius-md: 4px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-3xl: 26px;
-  --radius-full: 9996px;
-  --radius-full-2: 9999px;
-  --radius-full-3: 159981px;
-  --radius-full-4: 159984px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 29px;
+  --radius-full: 100px;
+  --radius-full-2: 120px;
+  --radius-full-3: 1000px;
+  --radius-full-4: 9999px;
 
   /* Named Radii */
-  --radius-pill: 9999px;
-  --radius-badge: 26px;
-  --radius-cards: 14px;
-  --radius-input: 10px;
-  --radius-buttons: 10px;
-  --radius-default: 10px;
+  --radius-tags: 9999px;
+  --radius-cards: 12px;
+  --radius-inputs: 8px;
+  --radius-buttons: 9999px (pills), 8px (rectangular);
 
   /* Shadows */
-  --shadow-subtle: lab(100 0 0) 0px 0px 0px 2px;
-  --shadow-subtle-2: oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px;
-
-  /* Surfaces */
-  --surface-canvas-white: #ffffff;
-  --surface-elevated-card: #ffffff;
-  --surface-searchinput-field: #ffffff;
-  --surface-popoversoverlays: #ffffff;
-  --surface-ghost-gray-background: #f2f2f2;
+  --shadow-sm: rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, 0.05) 0px 4px 8px 0px;
+  --shadow-subtle: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset;
+  --shadow-sm-2: rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.1) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-sm-3: rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.08) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-sm-4: rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-subtle-2: rgb(255, 255, 255) 0px 2px 0px 0px inset;
+  --shadow-subtle-3: rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.06) 0px 0px 2px 0px;
 }
 ```
 
@@ -377,30 +317,51 @@ The page maintains a centered, contained layout with a maximum visible width, cr
 ```css
 @theme {
   /* Colors */
-  --color-canvas-white: #ffffff;
-  --color-ghost-gray: #f2f2f2;
-  --color-subtle-ash: #e5e5e5;
-  --color-midtone-gray: #737373;
-  --color-rich-black: #0a0a0a;
-  --color-deep-black: #000000;
-  --color-callout-red: #c22b10;
-  --color-success-green: #10c22b;
+  --color-ink: #101010;
+  --color-action-blue: #0099ff;
+  --color-white: #ffffff;
+  --color-paper: #f4f4f4;
+  --color-graphite: #242424;
+  --color-slate: #6b7280;
+  --color-stone: #898989;
+  --color-silver: #e5e7eb;
+  --color-info-banner-bg: #eff6fe;
+  --color-google-blue: #4285f4;
+  --color-google-yellow: #fbbc04;
+  --color-google-green: #34a853;
+  --color-google-red: #ea4335;
 
   /* Typography */
-  --font-geist: 'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-cal-sans: 'Cal Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-cal-sans-ui-variable-light: 'Cal Sans UI Variable Light', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-matter: 'Matter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
   /* Typography — Scale */
   --text-caption: 12px;
-  --leading-caption: 1.5;
-  --text-body: 14px;
-  --leading-body: 1.43;
-  --text-heading: 18px;
-  --leading-heading: 1.33;
-  --tracking-heading: -0.45px;
-  --text-display: 48px;
-  --leading-display: 1;
-  --tracking-display: -2.4px;
+  --leading-caption: 1.4;
+  --tracking-caption: -0.24px;
+  --text-body-sm: 14px;
+  --leading-body-sm: 1.5;
+  --tracking-body-sm: -0.2px;
+  --text-body: 16px;
+  --leading-body: 1.5;
+  --tracking-body: -0.19px;
+  --text-subheading: 18px;
+  --leading-subheading: 1.4;
+  --tracking-subheading: -0.2px;
+  --text-heading-sm: 20px;
+  --leading-heading-sm: 1.3;
+  --tracking-heading-sm: 0.2px;
+  --text-heading: 24px;
+  --leading-heading: 1.3;
+  --tracking-heading: 0.24px;
+  --text-heading-lg: 48px;
+  --leading-heading-lg: 1.1;
+  --tracking-heading-lg: 0.48px;
+  --text-display: 64px;
+  --leading-display: 1.1;
+  --tracking-display: 0.64px;
 
   /* Spacing */
   --spacing-4: 4px;
@@ -412,23 +373,30 @@ The page maintains a centered, contained layout with a maximum visible width, cr
   --spacing-16: 16px;
   --spacing-20: 20px;
   --spacing-24: 24px;
+  --spacing-28: 28px;
   --spacing-32: 32px;
   --spacing-40: 40px;
+  --spacing-48: 48px;
   --spacing-80: 80px;
-  --spacing-83: 83px;
 
   /* Border Radius */
   --radius-md: 4px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
-  --radius-3xl: 26px;
-  --radius-full: 9996px;
-  --radius-full-2: 9999px;
-  --radius-full-3: 159981px;
-  --radius-full-4: 159984px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 29px;
+  --radius-full: 100px;
+  --radius-full-2: 120px;
+  --radius-full-3: 1000px;
+  --radius-full-4: 9999px;
 
   /* Shadows */
-  --shadow-subtle: lab(100 0 0) 0px 0px 0px 2px;
-  --shadow-subtle-2: oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px;
+  --shadow-sm: rgba(36, 36, 36, 0.7) 0px 1px 5px -4px, rgba(36, 36, 36, 0.05) 0px 4px 8px 0px;
+  --shadow-subtle: rgba(255, 255, 255, 0.15) 0px 2px 0px 0px inset;
+  --shadow-sm-2: rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.1) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-sm-3: rgba(19, 19, 22, 0.7) 0px 1px 5px -4px, rgba(34, 42, 53, 0.08) 0px 0px 0px 1px, rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-sm-4: rgba(34, 42, 53, 0.05) 0px 4px 8px 0px;
+  --shadow-subtle-2: rgb(255, 255, 255) 0px 2px 0px 0px inset;
+  --shadow-subtle-3: rgba(0, 0, 0, 0.1) 0px 1px 3px 0px, rgba(0, 0, 0, 0.06) 0px 0px 2px 0px;
 }
 ```
