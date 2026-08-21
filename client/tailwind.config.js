@@ -64,6 +64,13 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        ink: "var(--color-ink)",
+        paper: "var(--color-paper)",
+        graphite: "var(--color-graphite)",
+        slate: "var(--color-slate)",
+        stone: "var(--color-stone)",
+        silver: "var(--color-silver)",
+        "action-blue": "var(--color-action-blue)",
       },
       borderRadius: {
         sm: "var(--radius-sm)",
