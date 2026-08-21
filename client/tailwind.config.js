@@ -21,8 +21,8 @@ export default {
         heading: "-0.025em",
       },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
+        border: "hsl(var(--border) / <alpha-value>)",
+        input: "hsl(var(--input) / <alpha-value>)",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
@@ -83,6 +83,15 @@ export default {
       boxShadow: {
         card: "var(--shadow-card)",
         "focus-ring": "var(--focus-ring)",
+        float: "0 16px 48px -12px rgb(0 0 0 / 0.18)",
+      },
+      keyframes: {
+        shimmer: {
+          "100%": { transform: "translateX(100%)" },
+        },
+      },
+      animation: {
+        shimmer: "shimmer 1.8s infinite",
       },
       transitionDuration: {
         fast: "150ms",

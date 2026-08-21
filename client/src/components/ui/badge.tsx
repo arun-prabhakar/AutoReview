@@ -4,26 +4,26 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex select-none items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-ring [&_svg]:size-3 [&_svg]:shrink-0",
+  "inline-flex select-none items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus:outline-none focus:ring-2 focus:ring-ring [&_svg]:size-3 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         default:
-          "border-transparent bg-primary text-primary-foreground",
+          "bg-primary text-primary-foreground",
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground",
-        outline: "border-border text-foreground",
+          "bg-secondary text-secondary-foreground",
+        outline: "border border-border/70 text-foreground",
         destructive:
-          "border-transparent bg-destructive text-destructive-foreground",
+          "bg-destructive text-destructive-foreground",
         success:
-          "border-success/20 bg-success/10 text-success",
+          "bg-success/15 text-success",
         warning:
-          "border-warning/20 bg-warning/10 text-warning",
+          "bg-warning/15 text-warning",
         critical:
-          "border-destructive/20 bg-destructive/10 text-destructive",
+          "bg-destructive/10 text-destructive",
         moderate:
-          "border-warning/20 bg-warning/10 text-warning",
-        low: "border-transparent bg-secondary text-muted-foreground",
+          "bg-warning/15 text-warning",
+        low: "bg-muted text-muted-foreground",
       },
     },
     defaultVariants: {
