@@ -34,25 +34,30 @@ export function AboutIcon() {
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors" aria-label="About">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="About AutoReview"
+          >
             <Info className="h-4 w-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="right" align="end">
-          <p className="font-semibold text-foreground mb-2">AutoReview</p>
+        <TooltipContent side="right" align="end" collisionPadding={12} className="rounded-xl border border-border bg-popover px-3 py-2.5 shadow-card">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">AutoReview</p>
           {health ? (
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="flex justify-between gap-6">
-                <span className="text-muted-foreground">Version</span>
-                <span className="font-mono">{health.version}</span>
+                <span className="text-xs text-muted-foreground">Version</span>
+                <span className="font-mono text-xs text-foreground">{health.version}</span>
               </div>
               <div className="flex justify-between gap-6">
-                <span className="text-muted-foreground">Deployed</span>
-                <span>{formatDeployDate(health.deployedAt)}</span>
+                <span className="text-xs text-muted-foreground">Deployed</span>
+                <span className="text-xs text-foreground">{formatDeployDate(health.deployedAt)}</span>
               </div>
             </div>
           ) : (
-            <p className="text-muted-foreground">Loading…</p>
+            <p className="text-xs text-muted-foreground">Loading...</p>
           )}
         </TooltipContent>
       </Tooltip>

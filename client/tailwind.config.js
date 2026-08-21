@@ -12,8 +12,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["Geist", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["Geist Mono", "IBM Plex Mono", "ui-monospace", "monospace"],
+        sans: ["'Geist Sans'", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["'Geist Mono'", "IBM Plex Mono", "ui-monospace", "monospace"],
       },
       letterSpacing: {
         display: "-0.05em",
@@ -51,6 +51,10 @@ export default {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
+        interactive: {
+          DEFAULT: "hsl(var(--interactive) / <alpha-value>)",
+          foreground: "hsl(var(--background))",
+        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
@@ -61,13 +65,24 @@ export default {
         },
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        sm: "var(--radius-sm)",
+        md: "var(--radius-md)",
+        lg: "var(--radius-lg)",
+        xl: "var(--radius-xl)",
+        "3xl": "var(--radius-3xl)",
+        pill: "var(--radius-pill)",
       },
       boxShadow: {
-        card: "oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px",
-        "focus-ring": "lab(100 0 0) 0px 0px 0px 2px",
+        card: "var(--shadow-card)",
+        "focus-ring": "var(--focus-ring)",
+      },
+      transitionDuration: {
+        fast: "150ms",
+        base: "200ms",
+        slow: "300ms",
+      },
+      transitionTimingFunction: {
+        "out-expo": "cubic-bezier(0.16, 1, 0.3, 1)",
       },
     },
   },

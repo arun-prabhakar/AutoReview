@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/format";
 import { FindingCard } from "@/components/review/FindingCard";
+import { CopyButton } from "@/components/shared";
 import {
   Shield,
   GitCommitHorizontal,
@@ -224,53 +225,53 @@ export default function SharedReview() {
         <main className="mx-auto max-w-5xl px-6 py-8 space-y-6">
           <Card className="border-border bg-card print-card">
             <CardContent className="pt-6 pb-5">
-              <div className="flex items-start justify-between gap-6 mb-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      "h-10 w-10 rounded-lg flex items-center justify-center",
-                      worstRisk === "critical"
-                        ? "bg-destructive/10"
-                        : worstRisk === "warning"
-                          ? "bg-warning/10"
-                          : "bg-success/10"
-                    )}
-                  >
-                    <Shield
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-3">
+                    <div
                       className={cn(
-                        "h-5 w-5",
+                        "h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0",
                         worstRisk === "critical"
-                          ? "text-destructive"
+                          ? "bg-destructive/10"
                           : worstRisk === "warning"
-                            ? "text-warning"
-                            : "text-success"
+                            ? "bg-warning/10"
+                            : "bg-success/10"
                       )}
-                    />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">
+                    >
+                      <Shield
+                        className={cn(
+                          "h-5 w-5",
+                          worstRisk === "critical"
+                            ? "text-destructive"
+                            : worstRisk === "warning"
+                              ? "text-warning"
+                              : "text-success"
+                        )}
+                      />
+                    </div>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground break-words">
                       {repoName}
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {isPrReview
-                        ? `Pull Request #${prId}`
-                        : "Commit Review"}
-                      {data.completed_at &&
-                        ` · ${formatDate(String(data.completed_at))}`}
-                    </p>
+                    </h1>
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    {isPrReview
+                      ? `Pull Request #${prId}`
+                      : "Commit Review"}
+                    {data.completed_at &&
+                      ` · ${formatDate(String(data.completed_at))}`}
+                  </p>
                 </div>
                 <Badge
                   variant={
                     data.status === "completed" ? "default" : "destructive"
                   }
-                  className="capitalize"
+                  className="capitalize shrink-0"
                 >
                   {String(data.status)}
                 </Badge>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
                 <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
                   <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
                   <div>
@@ -284,7 +285,7 @@ export default function SharedReview() {
                 </div>
                 <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
                   <GitCommitHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                       Commit
                     </p>
@@ -294,6 +295,12 @@ export default function SharedReview() {
                         : String(data.commit_hash).substring(0, 8)}
                     </p>
                   </div>
+                  <CopyButton
+                    value={String(data.commit_hash)}
+                    label="Copy commit hash"
+                    toastLabel="Commit hash"
+                    className="no-print ml-auto h-6 w-6 shrink-0 [&_svg]:size-3"
+                  />
                 </div>
                 <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
                   <FileSearch className="h-3.5 w-3.5 text-muted-foreground" />

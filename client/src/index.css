@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    /* AutoReview — Monochromatic Light Theme */
+    /* AutoReview — Monochromatic Light Theme (DESIGN.MD) */
     --background: 0 0% 100%;           /* Canvas White #ffffff */
     --foreground: 0 0% 4%;             /* Rich Black #0a0a0a */
 
@@ -21,54 +21,86 @@
     --secondary-foreground: 0 0% 4%;
 
     --muted: 0 0% 95%;                 /* Ghost Gray #f2f2f2 */
-    --muted-foreground: 0 0% 45%;      /* Midtone Gray #737373 */
+    --muted-foreground: 0 0% 40%;      /* #666666 — 5.7:1 contrast for readability */
 
     --accent: 0 0% 95%;                /* Ghost Gray #f2f2f2 */
     --accent-foreground: 0 0% 4%;
 
-    --destructive: 8 82% 42%;          /* Callout Red #c22b10 */
+    /* Interactive accent — the single signal color (links, focus, active states) */
+    --interactive: 221 83% 53%;        /* Blue #2563eb */
+
+    --destructive: 9 85% 41%;          /* Callout Red #c22b10 */
     --destructive-foreground: 0 0% 100%;
 
-    --success: 130 84% 42%;            /* Success Green #10c22b */
-    --warning: 45 93% 47%;             /* Warning Amber #eab308 */
+    --success: 130 85% 41%;            /* Success Green #10c22b */
+    --warning: 26 90% 37%;             /* Warning Amber #b45309 */
 
     --border: 0 0% 90%;                /* Subtle Ash #e5e5e5 */
     --input: 0 0% 90%;
-    --ring: 0 0% 0%;
-    --radius: 0.625rem;
+    --ring: 221 83% 53%;               /* focus ring: accent blue */
+
+    /* Radius scale — 10px base (buttons/inputs), 14px cards, 26px badges */
+    --radius: 0.625rem;                /* 10px — buttons, inputs, default */
+    --radius-sm: 0.25rem;              /* 4px */
+    --radius-md: 0.375rem;             /* 6px */
+    --radius-lg: 0.625rem;             /* 10px */
+    --radius-xl: 0.875rem;             /* 14px — cards */
+    --radius-3xl: 1.625rem;            /* 26px — badges */
+    --radius-pill: 9999px;
+
+    /* Motion — durations + signature easing */
+    --duration-fast: 150ms;
+    --duration-base: 200ms;
+    --duration-slow: 300ms;
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+    /* Typography */
+    --font-geist: 'Geist Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Elevation — 1px hairline shadow, no heavy multi-directional shadows */
+    --shadow-card: oklab(0.145 -0.00000143796 0.00000340492 / 0.1) 0px 0px 0px 1px;
+    --focus-ring: 0 0 0 2px hsl(var(--interactive));
   }
 
   .dark {
-    --background: 0 0% 4%;
-    --foreground: 0 0% 98%;
+    --background: 0 0% 4%;             /* Deep Canvas #0a0a0a */
+    --foreground: 0 0% 98%;            /* Primary Text #fafafa */
 
-    --card: 0 0% 8%;
+    --card: 0 0% 8%;                   /* Elevated Card #141414 */
     --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 15%;
+    --popover: 0 0% 15%;               /* Overlay Surface #262626 */
     --popover-foreground: 0 0% 98%;
 
-    --primary: 0 0% 98%;
+    --primary: 0 0% 98%;               /* CTA #fafafa (inverted) */
     --primary-foreground: 0 0% 4%;
 
-    --secondary: 0 0% 11%;
+    --secondary: 0 0% 11%;             /* Input Surface #1c1c1c */
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 0 0% 11%;
-    --muted-foreground: 0 0% 64%;
+    --muted: 0 0% 11%;                 /* Input Surface #1c1c1c */
+    --muted-foreground: 0 0% 64%;      /* Muted Text #a3a3a3 */
 
-    --accent: 0 0% 11%;
+    --accent: 0 0% 11%;                /* Input Surface #1c1c1c */
     --accent-foreground: 0 0% 98%;
 
-    --destructive: 0 84% 60%;
+    /* Interactive accent — brighter for dark backgrounds */
+    --interactive: 217 91% 60%;        /* Blue #3b82f6 */
+
+    --destructive: 0 84% 60%;          /* Callout Red #ef4444 */
     --destructive-foreground: 0 0% 98%;
 
-    --success: 142 71% 45%;
-    --warning: 48 96% 53%;
+    --success: 142 71% 45%;            /* Success Green #22c55e */
+    --warning: 38 92% 50%;             /* Warning Amber #f59e0b */
 
-    --border: 0 0% 15%;
+    --border: 0 0% 15%;                /* Subtle Border #262626 */
     --input: 0 0% 15%;
-    --ring: 0 0% 98%;
+    --ring: 217 91% 60% / 0.5;         /* focus ring: accent blue, softened */
+
+    /* Dark elevation comes from borders — shadows are invisible on dark */
+    --shadow-card: 0 0 #0000;
+    --focus-ring: 0 0 0 2px hsl(var(--interactive) / 0.5);
   }
 
   .theme {
@@ -89,6 +121,9 @@
   }
   h1, h2, h3, h4, h5, h6 {
     @apply tracking-tight font-semibold;
+  }
+  ::selection {
+    background-color: hsl(var(--interactive) / 0.2);
   }
 }
 
@@ -123,44 +158,42 @@
   }
 }
 
-@theme inline {
-  @keyframes shimmer-slide {
+@keyframes shimmer-slide {
   to {
     transform: translate(calc(100cqw - 100%), 0);
-    }
   }
-  @keyframes spin-around {
-    0% {
-      transform: translateZ(0) rotate(0);
-    }
-    15%, 35% {
-      transform: translateZ(0) rotate(90deg);
-    }
-    65%, 85% {
-      transform: translateZ(0) rotate(270deg);
-    }
-    100% {
-      transform: translateZ(0) rotate(360deg);
-    }
+}
+@keyframes spin-around {
+  0% {
+    transform: translateZ(0) rotate(0);
   }
-  @keyframes shiny-text {
-    0%, 90%, 100% {
-      background-position: calc(-100% - var(--shiny-width)) 0;
-    }
-    30%, 60% {
-      background-position: calc(100% + var(--shiny-width)) 0;
-    }
+  15%, 35% {
+    transform: translateZ(0) rotate(90deg);
   }
-  @keyframes shine {
-    0% {
-      background-position: 0% 0%;
-    }
-    50% {
-      background-position: 100% 100%;
-    }
-    to {
-      background-position: 0% 0%;
-    }
+  65%, 85% {
+    transform: translateZ(0) rotate(270deg);
+  }
+  100% {
+    transform: translateZ(0) rotate(360deg);
+  }
+}
+@keyframes shiny-text {
+  0%, 90%, 100% {
+    background-position: calc(-100% - var(--shiny-width)) 0;
+  }
+  30%, 60% {
+    background-position: calc(100% + var(--shiny-width)) 0;
+  }
+}
+@keyframes shine {
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  to {
+    background-position: 0% 0%;
   }
 }
 

@@ -12,9 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ToastAction } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, FolderGit2, Loader2, Pencil, Layers } from "lucide-react";
 import type { Credential } from "@/types";
+import { FieldError, hasErrors, validateRequiredValue } from "./validation";
+import { ListFilter, NoMatchesState } from "./ListFilter";
 
 function parseBitbucketUrl(url: string): { workspace: string; slug: string } | null {
   try {
@@ -32,7 +35,17 @@ function parseBitbucketUrl(url: string): { workspace: string; slug: string } | n
   return null;
 }
 
-export function RepositoriesTab({ credentials, loadingCredentials: _loadingCredentials }: { credentials: Credential[]; loadingCredentials?: boolean }) {
+export function RepositoriesTab({
+  credentials,
+  loadingCredentials: _loadingCredentials,
+  onNavigateTab,
+  hasProviders,
+}: {
+  credentials: Credential[];
+  loadingCredentials?: boolean;
+  onNavigateTab?: (tab: string) => void;
+  hasProviders?: boolean;
+}) {
   const dispatch = useDispatch<AppDispatch>();
   const { items: repos, loading: loadingRepos } = useSelector((state: RootState) => state.repositories);
   const { toast } = useToast();
@@ -46,29 +59,60 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
   const [editName, setEditName] = useState("");
   const [editCredentialId, setEditCredentialId] = useState("");
   const [editMultiPass, setEditMultiPass] = useState(false);
+  const [query, setQuery] = useState("");
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+  const [editErrors, setEditErrors] = useState<Record<string, string | undefined>>({});
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredRepos = normalizedQuery
+    ? repos.filter((repo) =>
+        [String(repo.name), String(repo.workspace), String(repo.slug)].some((field) =>
+          field.toLowerCase().includes(normalizedQuery)
+        )
+      )
+    : repos;
 
   const handleAdd = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setSaving(true);
-    const fd = new FormData(e.currentTarget);
     const parsed = parseBitbucketUrl(repoUrl);
-    const workspace = parsed?.workspace || fd.get("workspace");
-    const slug = parsed?.slug || fd.get("slug");
-    if (!workspace || !slug) {
-      toast({ title: "Error", description: "Could not parse repository URL. Enter a valid Bitbucket URL", variant: "destructive" });
-      setSaving(false);
+    const nextErrors: Record<string, string | undefined> = {};
+    if (!repoUrl.trim()) {
+      nextErrors.repoUrl = "Repository URL is required.";
+    } else if (!parsed) {
+      nextErrors.repoUrl = "Enter a valid Bitbucket URL, e.g. https://bitbucket.org/workspace/repo-slug";
+    }
+    if (hasErrors(nextErrors)) {
+      setErrors(nextErrors);
       return;
     }
+    setErrors({});
+    setSaving(true);
+    const fd = new FormData(e.currentTarget);
+    const workspace = parsed?.workspace;
+    const slug = parsed?.slug;
     try {
       await api.post("/api/repositories", {
         name: fd.get("name") || slug, slug, workspace,
         credential_id: fd.get("credential_id"),
       });
-      toast({ title: "Repository added", variant: "success" });
       setDialogOpen(false);
       setRepoUrl("");
       setParsedRepo(null);
       dispatch(fetchRepositories());
+      if (onNavigateTab && hasProviders && credentials.length > 0) {
+        toast({
+          title: "Repository added",
+          description: "Setup complete. Configure how reviews run for it next.",
+          variant: "success",
+          action: (
+            <ToastAction altText="Go to review configuration" onClick={() => onNavigateTab("review")}>
+              Next: Configure review
+            </ToastAction>
+          ),
+        });
+      } else {
+        toast({ title: "Repository added", variant: "success" });
+      }
     } catch (err) {
       toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to add repository", variant: "destructive" });
     } finally {
@@ -93,6 +137,12 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
 
   const handleEditRepo = async () => {
     if (!editTarget) return;
+    const nextErrors: Record<string, string | undefined> = { name: validateRequiredValue(editName, "Name") };
+    if (hasErrors(nextErrors)) {
+      setEditErrors(nextErrors);
+      return;
+    }
+    setEditErrors({});
     setSaving(true);
     try {
       await api.put(`/api/repositories/${editTarget.id}`, { name: editName, credential_id: editCredentialId, multi_pass_review: editMultiPass });
@@ -110,39 +160,64 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Connected repositories</p>
-        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setRepoUrl(""); setParsedRepo(null); } }}>
+        <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) { setRepoUrl(""); setParsedRepo(null); setErrors({}); } }}>
           <DialogTrigger asChild><Button size="sm"><Plus className="mr-2 h-4 w-4" />Add Repository</Button></DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Add Repository</DialogTitle></DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Add Repository</DialogTitle>
+              <DialogDescription>Paste a Bitbucket repository URL to connect it for reviews.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAdd} noValidate className="space-y-4">
               <div className="space-y-2">
-                <Label>Repository URL</Label>
+                <Label htmlFor="add-repo-url">Repository URL</Label>
                 <Input
-                  required
+                  id="add-repo-url"
+                  inputMode="url"
                   placeholder="https://bitbucket.org/workspace/repo-slug"
                   value={repoUrl}
-                  onChange={(e) => { setRepoUrl(e.target.value); setParsedRepo(parseBitbucketUrl(e.target.value)); }}
+                  onChange={(e) => {
+                    setRepoUrl(e.target.value);
+                    setParsedRepo(parseBitbucketUrl(e.target.value));
+                    if (errors.repoUrl) setErrors((prev) => ({ ...prev, repoUrl: undefined }));
+                  }}
+                  error={!!errors.repoUrl}
+                  aria-describedby={errors.repoUrl ? "add-repo-url-error" : undefined}
                 />
                 {parsedRepo && (
                   <p className="text-xs text-muted-foreground">
                     Workspace: <span className="font-mono text-foreground">{parsedRepo.workspace}</span> · Slug: <span className="font-mono text-foreground">{parsedRepo.slug}</span>
                   </p>
                 )}
+                <FieldError id="add-repo-url-error" message={errors.repoUrl} />
               </div>
-              <div className="space-y-2"><Label>Name</Label><Input key={parsedRepo?.slug} name="name" placeholder={parsedRepo?.slug || "Repository name"} defaultValue={parsedRepo?.slug || ""} /></div>
-              <div className="space-y-2"><Label>Credential</Label>
+              <div className="space-y-2"><Label htmlFor="add-repo-name">Name</Label><Input id="add-repo-name" key={parsedRepo?.slug} name="name" placeholder={parsedRepo?.slug || "Repository name"} defaultValue={parsedRepo?.slug || ""} /></div>
+              <div className="space-y-2">
+                <Label>Credential</Label>
                 <Select name="credential_id">
                   <SelectTrigger><SelectValue placeholder="Select credential" /></SelectTrigger>
                   <SelectContent>{credentials.map((c) => <SelectItem key={c.id} value={c.id}>{c.username}</SelectItem>)}</SelectContent>
                 </Select>
+                {credentials.length === 0 && <p className="text-xs text-warning">Add a credential first (see Credentials tab).</p>}
               </div>
               <Button type="submit" className="w-full" disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{saving ? "Saving..." : "Add Repository"}</Button>
             </form>
           </DialogContent>
         </Dialog>
       </div>
+
+      {repos.length > 0 && (
+        <ListFilter
+          label="Search repositories"
+          placeholder="Search by name, workspace or slug"
+          value={query}
+          onChange={setQuery}
+          resultCount={filteredRepos.length}
+          totalCount={repos.length}
+        />
+      )}
+
       {loadingRepos && Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-20 rounded-lg bg-secondary animate-pulse" />)}
-      {!loadingRepos && repos.map((repo) => (
+      {!loadingRepos && filteredRepos.map((repo) => (
         <Card key={String(repo.id)}>
           <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -156,7 +231,7 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
                   <Layers className="h-3 w-3" />Multi-Pass
                 </Badge>
               ) : null}
-              <Button variant="ghost" size="icon" aria-label="Edit repository" onClick={() => { setEditTarget({ id: String(repo.id), name: String(repo.name), credential_id: String(repo.credential_id), multi_pass_review: !!repo.multi_pass_review }); setEditName(String(repo.name)); setEditCredentialId(String(repo.credential_id)); setEditMultiPass(!!repo.multi_pass_review); }}><Pencil className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" aria-label="Edit repository" onClick={() => { setEditTarget({ id: String(repo.id), name: String(repo.name), credential_id: String(repo.credential_id), multi_pass_review: !!repo.multi_pass_review }); setEditName(String(repo.name)); setEditCredentialId(String(repo.credential_id)); setEditMultiPass(!!repo.multi_pass_review); setEditErrors({}); }}><Pencil className="h-4 w-4" /></Button>
               <Button variant="ghost" size="icon" aria-label="Delete repository" onClick={() => setDeleteTarget({ id: String(repo.id), name: String(repo.name) })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
             </div>
           </CardContent>
@@ -170,14 +245,30 @@ export function RepositoriesTab({ credentials, loadingCredentials: _loadingCrede
           <Button size="sm" onClick={() => setDialogOpen(true)}><Plus className="mr-2 h-4 w-4" />Add your first repository</Button>
         </div>
       )}
+      {!loadingRepos && repos.length > 0 && filteredRepos.length === 0 && (
+        <NoMatchesState query={query} entityLabel="repositories" onClear={() => setQuery("")} />
+      )}
 
       <Dialog open={!!editTarget} onOpenChange={(open) => { if (!open) setEditTarget(null); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit Repository</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Edit Repository</DialogTitle>
+            <DialogDescription>Update the repository name, credential, and review mode.</DialogDescription>
+          </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+              <Label htmlFor="edit-repo-name">Name</Label>
+              <Input
+                id="edit-repo-name"
+                value={editName}
+                onChange={(e) => {
+                  setEditName(e.target.value);
+                  if (editErrors.name) setEditErrors((prev) => ({ ...prev, name: undefined }));
+                }}
+                error={!!editErrors.name}
+                aria-describedby={editErrors.name ? "edit-repo-name-error" : undefined}
+              />
+              <FieldError id="edit-repo-name-error" message={editErrors.name} />
             </div>
             <div className="space-y-2">
               <Label>Credential</Label>

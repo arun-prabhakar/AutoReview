@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
+import { motion } from "motion/react";
 import { type RootState, type AppDispatch } from "@/store";
 import { fetchReviewDetail } from "@/store/reviewDetailSlice";
 import { markReviewNotificationsRead } from "@/store/notificationsSlice";
@@ -16,8 +17,198 @@ import { cn } from "@/lib/utils";
 import { FAILURE_LABELS } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import { FindingCard } from "@/components/review/FindingCard";
-import { Trash2, Mail, ChevronDown, ChevronUp, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2, XCircle, Search } from "lucide-react";
+import { CopyButton, EmptyState, Kbd, PageHeader, StatCard, StatusBadge, type SeverityLevel } from "@/components/shared";
+import { fadeInUp, useReducedMotionVariants } from "@/lib/motion";
+import { Trash2, Mail, ChevronDown, ChevronUp, ChevronRight, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2, XCircle, Search, ShieldAlert, TriangleAlert, Info, ListChecks } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+type DiffLineType = "file" | "meta" | "hunk" | "add" | "del" | "context";
+
+interface DiffLine {
+  key: string;
+  type: DiffLineType;
+  text: string;
+  oldLine: number | null;
+  newLine: number | null;
+}
+
+interface DiffSection {
+  index: number;
+  file: string;
+  adds: number;
+  dels: number;
+  lines: DiffLine[];
+}
+
+function stripDiffPrefix(path: string): string {
+  return path.replace(/^[ab]\//, "");
+}
+
+function parseUnifiedDiff(diffText: string): DiffSection[] {
+  const sections: DiffSection[] = [];
+  let current: DiffSection | null = null;
+  let headerClosed = false; // current section consumed its "+++" line
+  let hunkStarted = false;
+  let oldLine = 0;
+  let newLine = 0;
+  let pendingOldPath = "";
+
+  const startSection = (file = ""): DiffSection => {
+    const section: DiffSection = { index: sections.length, file, adds: 0, dels: 0, lines: [] };
+    current = section;
+    headerClosed = false;
+    hunkStarted = false;
+    pendingOldPath = "";
+    sections.push(section);
+    return section;
+  };
+
+  diffText.split("\n").forEach((raw, i) => {
+    if (raw.startsWith("diff --git ")) {
+      const match = raw.match(/^diff --git a\/(.*) b\/(.*)$/);
+      const section = startSection(match && match[2] ? match[2].trim() : "");
+      section.lines.push({ key: `l${i}`, type: "file", text: raw, oldLine: null, newLine: null });
+      return;
+    }
+    if (raw.startsWith("--- ")) {
+      if (!current || headerClosed) startSection();
+      if (!current) return;
+      pendingOldPath = stripDiffPrefix(raw.slice(4).trim().split("\t")[0] ?? raw.slice(4).trim());
+      current.lines.push({ key: `l${i}`, type: "meta", text: raw, oldLine: null, newLine: null });
+      return;
+    }
+    if (raw.startsWith("+++ ")) {
+      if (!current || headerClosed) startSection();
+      if (!current) return;
+      const filePath = raw.slice(4).trim().split("\t")[0];
+      if (filePath === "/dev/null") {
+        if (!current.file && pendingOldPath) current.file = pendingOldPath;
+      } else if (!current.file && filePath) {
+        current.file = stripDiffPrefix(filePath);
+      }
+      headerClosed = true;
+      current.lines.push({ key: `l${i}`, type: "meta", text: raw, oldLine: null, newLine: null });
+      return;
+    }
+    if (!current) return;
+    if (!hunkStarted && raw.startsWith("@@")) {
+      const match = raw.match(/^@+ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @/);
+      if (match) {
+        oldLine = parseInt(match[1] ?? "1", 10);
+        newLine = parseInt(match[2] ?? "1", 10);
+      }
+      hunkStarted = true;
+      current.lines.push({ key: `l${i}`, type: "hunk", text: raw, oldLine: null, newLine: null });
+      return;
+    }
+    if (!hunkStarted) {
+      current.lines.push({ key: `l${i}`, type: "meta", text: raw, oldLine: null, newLine: null });
+      return;
+    }
+    if (raw.startsWith("+")) {
+      current.lines.push({ key: `l${i}`, type: "add", text: raw, oldLine: null, newLine });
+      newLine++;
+      current.adds++;
+    } else if (raw.startsWith("-")) {
+      current.lines.push({ key: `l${i}`, type: "del", text: raw, oldLine, newLine: null });
+      oldLine++;
+      current.dels++;
+    } else if (raw.startsWith("\\")) {
+      current.lines.push({ key: `l${i}`, type: "meta", text: raw, oldLine: null, newLine: null });
+    } else {
+      current.lines.push({ key: `l${i}`, type: "context", text: raw, oldLine, newLine });
+      oldLine++;
+      newLine++;
+    }
+  });
+  return sections;
+}
+
+function findDiffAnchor(sections: DiffSection[], filePath: string, lineNumber: number | null): string | null {
+  const normalized = stripDiffPrefix(filePath);
+  let sectionIndex = sections.findIndex((s) => s.file === normalized);
+  if (sectionIndex === -1) {
+    sectionIndex = sections.findIndex((s) => s.file.endsWith(`/${normalized}`));
+  }
+  const section = sectionIndex !== -1 ? sections[sectionIndex] : undefined;
+  if (!section) return null;
+  if (lineNumber != null) {
+    if (section.lines.some((l) => l.newLine === lineNumber)) return `diff-line-${section.index}-n${lineNumber}`;
+    if (section.lines.some((l) => l.oldLine === lineNumber)) return `diff-line-${section.index}-o${lineNumber}`;
+  }
+  return `diff-section-${section.index}`;
+}
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+const diffRowClasses: Record<DiffLineType, string> = {
+  file: "text-muted-foreground/60",
+  meta: "text-muted-foreground/70",
+  hunk: "bg-secondary text-muted-foreground",
+  add: "bg-success/10",
+  del: "bg-destructive/10",
+  context: "",
+};
+
+function DiffViewer({ sections, highlightId }: { sections: DiffSection[]; highlightId: string | null }) {
+  return (
+    <div className="mt-4 space-y-4" aria-label="Reviewed changes">
+      {sections.map((section) => (
+        <div key={section.index} id={`diff-section-${section.index}`}>
+          <div className="sticky top-0 z-10 flex items-center gap-2 rounded-t-lg border border-b border-border bg-card/95 px-3 py-2 backdrop-blur-sm">
+            <FileCode className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="truncate font-mono text-xs text-foreground" title={section.file}>{section.file}</span>
+            <span className="ml-auto flex shrink-0 items-center gap-2 font-mono text-xs font-medium tabular-nums">
+              <span className="text-success">+{section.adds}</span>
+              <span className="text-destructive">−{section.dels}</span>
+            </span>
+          </div>
+          <div className="overflow-x-auto rounded-b-lg border border-t-0 border-border bg-card">
+            <div className="w-max min-w-full font-mono text-xs leading-relaxed">
+              {section.lines.map((line) => {
+                const anchorId = line.newLine != null
+                  ? `diff-line-${section.index}-n${line.newLine}`
+                  : line.oldLine != null
+                    ? `diff-line-${section.index}-o${line.oldLine}`
+                    : undefined;
+                const highlighted = anchorId != null && anchorId === highlightId;
+                return (
+                  <div
+                    key={line.key}
+                    id={anchorId}
+                    className={cn(
+                      "flex transition-colors duration-300",
+                      diffRowClasses[line.type],
+                      highlighted && "bg-accent ring-1 ring-inset ring-ring"
+                    )}
+                  >
+                    <span className="w-12 shrink-0 select-none border-r border-border/60 pr-2 text-right text-muted-foreground/50">{line.oldLine ?? ""}</span>
+                    <span className="w-12 shrink-0 select-none border-r border-border/60 pr-2 text-right text-muted-foreground/50">{line.newLine ?? ""}</span>
+                    <span className="whitespace-pre px-3">{line.text || " "}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+type GroupMode = "severity" | "file";
+const GROUP_MODE_STORAGE_KEY = "autoreview:review-detail:group-mode";
+const KNOWN_CATEGORIES = ["security", "performance", "correctness", "maintainability", "style"];
+const SEVERITY_LEVELS: SeverityLevel[] = ["must_fix", "should_fix_soon", "ignore"];
+
+interface FileGroup {
+  path: string;
+  items: Finding[];
+  hasMustFix: boolean;
+  hasShouldFix: boolean;
+}
 
 export default function ReviewDetail() {
   const { id } = useParams<{ id: string }>();
@@ -46,6 +237,24 @@ export default function ReviewDetail() {
   const [findingSearch, setFindingSearch] = useState("");
   const [findingStatus, setFindingStatus] = useState("open");
   const [findingLimit, setFindingLimit] = useState(10);
+  const [selectedCategories, setSelectedCategories] = useState<ReadonlySet<string>>(new Set());
+  const [groupMode, setGroupMode] = useState<GroupMode>(() => {
+    try {
+      return window.localStorage.getItem(GROUP_MODE_STORAGE_KEY) === "file" ? "file" : "severity";
+    } catch {
+      return "severity";
+    }
+  });
+  const [collapsedFiles, setCollapsedFiles] = useState<ReadonlySet<string>>(new Set());
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [pendingGroupScroll, setPendingGroupScroll] = useState<SeverityLevel | null>(null);
+
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const keyboardIdsRef = useRef<string[]>([]);
+  const highlightTimer = useRef<number | undefined>(undefined);
+  const cardVariants = useReducedMotionVariants(fadeInUp);
 
   useEffect(() => {
     if (id) dispatch(fetchReviewDetail(id));
@@ -61,13 +270,74 @@ export default function ReviewDetail() {
     if (id) dispatch(markReviewNotificationsRead(id));
   }, [id, dispatch]);
 
-  useEffect(() => { setFindingLimit(10); }, [findingSearch, findingStatus]);
+  useEffect(() => { setFindingLimit(10); }, [findingSearch, findingStatus, selectedCategories]);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(GROUP_MODE_STORAGE_KEY, groupMode); } catch { /* storage unavailable */ }
+  }, [groupMode]);
 
   useEffect(() => {
     if (id) {
       api.get<ReviewChainItem[]>(`/api/reviews/${id}/chain`).then(setChain).catch(() => {});
     }
   }, [id]);
+
+  useEffect(() => () => window.clearTimeout(highlightTimer.current), []);
+
+  const diffSections = useMemo(
+    () => (review?.diff_text ? parseUnifiedDiff(review.diff_text) : []),
+    [review?.diff_text]
+  );
+
+  /* Diff jump-links: expand, scroll, and flash the target line. */
+  useEffect(() => {
+    if (!diffVisible || !pendingAnchor) return;
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.getElementById(pendingAnchor);
+      if (el) {
+        el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "center" });
+        if (pendingAnchor.startsWith("diff-line-")) {
+          setHighlightId(pendingAnchor);
+          window.clearTimeout(highlightTimer.current);
+          highlightTimer.current = window.setTimeout(() => setHighlightId(null), 2200);
+        }
+      }
+      setPendingAnchor(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [diffVisible, pendingAnchor]);
+
+  /* Severity stat cards scroll to the matching group; this effect waits for the
+     group (and any filter resets from the same batch) to land in the DOM first. */
+  useEffect(() => {
+    if (!pendingGroupScroll || groupMode !== "severity") return;
+    const frame = window.requestAnimationFrame(() => {
+      const el = document.getElementById(`severity-group-${pendingGroupScroll}`);
+      if (el) el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+      setPendingGroupScroll(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pendingGroupScroll, groupMode]);
+
+  const handleViewInDiff = (finding: Finding) => {
+    setDiffVisible(true);
+    const anchor = findDiffAnchor(diffSections, finding.file_path, finding.line_number);
+    if (!anchor) {
+      toast({ title: "File not found in diff", description: finding.file_path });
+      return;
+    }
+    setPendingAnchor(anchor);
+  };
+
+  const handleSeverityStatClick = (level: SeverityLevel) => {
+    setGroupMode("severity");
+    if (grouped[level].length === 0) {
+      setFindingSearch("");
+      setSelectedCategories(new Set());
+      setFindingStatus("all");
+    }
+    setPendingGroupScroll(level);
+  };
 
   const handleRereview = async () => {
     if (!id) return;
@@ -153,6 +423,31 @@ export default function ReviewDetail() {
     }
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.del(`/api/reviews/${id}`);
+      toast({ title: "Review deleted", variant: "success" });
+      navigate("/");
+    } catch (err) {
+      toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
+  };
+
+  const updateDisposition = async (findingId: string, disposition: "open" | "resolved" | "false_positive" | "accepted_risk") => {
+    if (!id) return;
+    try {
+      await api.patch(`/api/reviews/${id}/findings/${findingId}`, { disposition });
+      await dispatch(fetchReviewDetail(id));
+      toast({ title: disposition === "open" ? "Finding reopened" : "Finding updated", variant: "success" });
+    } catch (err) {
+      toast({ title: "Could not update finding", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    }
+  };
+
   if (loading) return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>;
   if (!review) return (
     <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -165,18 +460,109 @@ export default function ReviewDetail() {
 
   const visibleFindings = findings.filter((finding) => {
     const matchesStatus = findingStatus === "all" || (finding.disposition || "open") === findingStatus;
+    const matchesCategory = selectedCategories.size === 0 || (finding.category != null && selectedCategories.has(finding.category));
     const query = findingSearch.trim().toLowerCase();
-    return matchesStatus && (!query || `${finding.summary} ${finding.file_path} ${finding.category || ""}`.toLowerCase().includes(query));
+    return matchesStatus && matchesCategory && (!query || `${finding.summary} ${finding.file_path} ${finding.category || ""}`.toLowerCase().includes(query));
   });
-  const grouped = {
+  const grouped: Record<SeverityLevel, Finding[]> = {
     must_fix: visibleFindings.filter((f) => f.risk_level === "must_fix"),
     should_fix_soon: visibleFindings.filter((f) => f.risk_level === "should_fix_soon"),
     ignore: visibleFindings.filter((f) => f.risk_level === "ignore"),
   };
 
+  const displayedFindings = visibleFindings.filter((_, idx) => idx < findingLimit);
+  const displayedBySeverity: Record<SeverityLevel, Finding[]> = {
+    must_fix: displayedFindings.filter((f) => f.risk_level === "must_fix"),
+    should_fix_soon: displayedFindings.filter((f) => f.risk_level === "should_fix_soon"),
+    ignore: displayedFindings.filter((f) => f.risk_level === "ignore"),
+  };
+
+  const fileGroups: FileGroup[] = (() => {
+    const byPath = new Map<string, Finding[]>();
+    for (const finding of displayedFindings) {
+      const list = byPath.get(finding.file_path);
+      if (list) list.push(finding);
+      else byPath.set(finding.file_path, [finding]);
+    }
+    const groups: FileGroup[] = Array.from(byPath.entries()).map(([path, items]) => ({
+      path,
+      items,
+      hasMustFix: items.some((f) => f.risk_level === "must_fix"),
+      hasShouldFix: items.some((f) => f.risk_level === "should_fix_soon"),
+    }));
+    groups.sort((a, b) =>
+      Number(b.hasMustFix) - Number(a.hasMustFix) ||
+      Number(b.hasShouldFix) - Number(a.hasShouldFix) ||
+      b.items.length - a.items.length ||
+      a.path.localeCompare(b.path)
+    );
+    return groups;
+  })();
+
+  const keyboardIds = groupMode === "severity"
+    ? SEVERITY_LEVELS.flatMap((level) => displayedBySeverity[level].map((f) => f.id))
+    : fileGroups.filter((g) => !collapsedFiles.has(g.path)).flatMap((g) => g.items.map((f) => f.id));
+  keyboardIdsRef.current = keyboardIds;
+
+  const toggleFileGroup = (path: string) => {
+    setCollapsedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const toggleCategory = (category: string) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  };
+
+  /* Keyboard navigation: j/k or arrows move between finding cards, Escape blurs filters. */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      const isFormTarget = (el: HTMLElement | null): boolean =>
+        !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+
+      if (event.key === "Escape") {
+        if (isFormTarget(target)) target?.blur();
+        return;
+      }
+      const isNext = event.key === "j" || event.key === "ArrowDown";
+      const isPrev = event.key === "k" || event.key === "ArrowUp";
+      if (!isNext && !isPrev) return;
+      if (isFormTarget(target) || target?.closest('[role="dialog"]')) return;
+
+      const ids = keyboardIdsRef.current;
+      if (ids.length === 0) return;
+      event.preventDefault();
+      const currentIndex = focusedId != null ? ids.indexOf(focusedId) : -1;
+      const nextIndex = currentIndex === -1
+        ? (isNext ? 0 : ids.length - 1)
+        : (isNext ? Math.min(currentIndex + 1, ids.length - 1) : Math.max(currentIndex - 1, 0));
+      const nextId = ids[nextIndex];
+      if (nextId === undefined) return;
+      setFocusedId(nextId);
+      const el = cardRefs.current.get(nextId);
+      if (el) {
+        el.focus({ preventScroll: true });
+        el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "nearest" });
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [focusedId]);
+
   const isPrReview = String(review.commit_hash).startsWith("pr:");
   const prId = isPrReview ? String(review.commit_hash).split(":")[1] : null;
   const reviewedCommit = isPrReview ? String(review.commit_hash).split(":")[2] : String(review.commit_hash);
+  const shortHash = String(reviewedCommit).substring(0, 8);
   const repoName = String(review.repository_name || review.repository_id);
   const branch = String(review.branch || "N/A");
   const aiOverview = String(review.ai_overview || "Review completed.");
@@ -191,18 +577,40 @@ export default function ReviewDetail() {
 
   const totalFindings = findings.length;
   const durationSeconds = review.completed_at ? Math.max(0, Math.round((new Date(review.completed_at).getTime() - new Date(review.created_at).getTime()) / 1000)) : null;
-  const updateDisposition = async (findingId: string, disposition: "open" | "resolved" | "false_positive" | "accepted_risk") => {
-    if (!id) return;
-    try {
-      await api.patch(`/api/reviews/${id}/findings/${findingId}`, { disposition });
-      await dispatch(fetchReviewDetail(id));
-      toast({ title: disposition === "open" ? "Finding reopened" : "Finding updated", variant: "success" });
-    } catch (err) {
-      toast({ title: "Could not update finding", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
-    }
-  };
-  const displayedFindingIds = new Set(visibleFindings.slice(0, findingLimit).map((finding) => finding.id));
   const worstRisk = grouped.must_fix.length > 0 ? "critical" : grouped.should_fix_soon.length > 0 ? "warning" : "clean";
+
+  const presentCategories = Array.from(new Set(findings.map((f) => f.category).filter((c): c is string => c != null)));
+  const categoryOrder = [
+    ...KNOWN_CATEGORIES.filter((c) => presentCategories.includes(c)),
+    ...presentCategories.filter((c) => !KNOWN_CATEGORIES.includes(c)).sort(),
+  ];
+  const categoryCount = (category: string) => findings.filter((f) => f.category === category).length;
+
+  const tabbableId = focusedId != null && keyboardIds.includes(focusedId) ? focusedId : keyboardIds[0];
+
+  const renderFindingCard = (finding: Finding) => (
+    <motion.div
+      key={finding.id}
+      role="listitem"
+      ref={(el) => {
+        if (el) cardRefs.current.set(finding.id, el);
+        else cardRefs.current.delete(finding.id);
+      }}
+      tabIndex={tabbableId === finding.id ? 0 : -1}
+      onFocus={() => setFocusedId(finding.id)}
+      className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      variants={cardVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      <FindingCard
+        {...finding}
+        sourceUrl={review.repository_workspace && review.repository_slug ? `https://bitbucket.org/${review.repository_workspace}/${review.repository_slug}/src/${reviewedCommit}/${finding.file_path}${finding.line_number ? `#lines-${finding.line_number}` : ""}` : undefined}
+        onDisposition={(disposition) => updateDisposition(finding.id, disposition)}
+        onViewInDiff={review.diff_text ? () => handleViewInDiff(finding) : undefined}
+      />
+    </motion.div>
+  );
 
   const formatFinding = (f: Finding, index: number) => {
     const location = f.file_path + (f.line_number ? `:${f.line_number}` : "");
@@ -237,7 +645,7 @@ export default function ReviewDetail() {
         .sort(([, a], [, b]) => b - a)
         .map(([cat, count]) => `     ${cat.padEnd(20)} ${count}`)
         .join("\n")
-    : "     (none)";
+    : "(none)";
 
   const riskAssessment = grouped.must_fix.length > 0
     ? "⛔ HIGH RISK — Action required before merge"
@@ -255,9 +663,9 @@ export default function ReviewDetail() {
 
 AutoReview has completed an automated code review for ${repoName}.
 
-══════════════════════════════════════════════════
+═════════════════════════════════════════════════
   RISK ASSESSMENT: ${riskAssessment}
-══════════════════════════════════════════════════
+═════════════════════════════════════════════════
 
 ┌──────────────────────────────────────────────┐
 │  REVIEW DETAILS                               │
@@ -294,7 +702,7 @@ ${categoryLines}
 │  DETAILED FINDINGS                             │
 └──────────────────────────────────────────────┘
 
-${findingsBody}══════════════════════════════════════════════════
+${findingsBody}════════════════════════════════════════════════
 
 This review was generated automatically by AutoReview.
 Review findings are AI-generated and should be validated by a human reviewer.
@@ -302,62 +710,63 @@ Review findings are AI-generated and should be validated by a human reviewer.
 Regards,
 AutoReview`;
 
-  const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      await api.del(`/api/reviews/${id}`);
-      toast({ title: "Review deleted", variant: "success" });
-      navigate("/");
-    } catch (err) {
-      toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
-    } finally {
-      setDeleting(false);
-      setDeleteOpen(false);
-    }
-  };
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h2 className="text-lg font-bold tracking-tight">Review Detail</h2>
-          <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-            <button onClick={() => navigate("/")} className="hover:text-foreground transition-colors">Dashboard</button>
-            <span>/</span>
-            <span className="text-foreground font-medium">Review</span>
-          </nav>
-        </div>
-        <div className="flex items-center gap-2">
-          {review?.status === "pending" && (
-            <Button variant="outline" size="sm" onClick={handleCancel} disabled={cancelling}>
-              {cancelling ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5 mr-1.5" />}
-              Cancel
+      <PageHeader
+        title={isPrReview ? `Pull Request #${prId}` : `Commit ${shortHash}`}
+        description={
+          <span>
+            {review.completed_at ? formatDate(String(review.completed_at)) : formatDate(review.created_at)}
+            {review.commit_author && ` · by ${review.commit_author}`}
+            {` · ${String(review.review_mode)} review`}
+          </span>
+        }
+        breadcrumb={
+          <span className="flex items-center gap-1.5">
+            <button type="button" onClick={() => navigate("/")} className="hover:text-foreground transition-colors">Dashboard</button>
+            <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <button type="button" onClick={() => navigate("/")} className="max-w-[180px] truncate hover:text-foreground transition-colors" title={repoName}>{repoName}</button>
+            <ChevronRight className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="font-mono">{isPrReview ? `#${prId}` : shortHash}</span>
+            <CopyButton
+              value={String(reviewedCommit)}
+              label="Copy full commit hash"
+              toastLabel="Commit hash"
+              className="h-5 w-5 [&_svg]:size-3"
+            />
+          </span>
+        }
+        actions={
+          <>
+            {review?.status === "pending" && (
+              <Button variant="outline" size="sm" onClick={handleCancel} disabled={cancelling}>
+                {cancelling ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <XCircle className="h-3.5 w-3.5 mr-1.5" />}
+                Cancel
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={shareData ? undefined : () => setShareOpen(true)} disabled={shareLoading}>
+              <Share2 className="h-3.5 w-3.5 mr-1.5" />
+              {shareLoading ? "Sharing..." : "Share"}
             </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={shareData ? undefined : () => setShareOpen(true)} disabled={shareLoading}>
-            <Share2 className="h-3.5 w-3.5 mr-1.5" />
-            {shareLoading ? "Sharing..." : "Share"}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setRereviewOpen(true)} disabled={rereviewing || review?.status === "pending"}>
-            <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
-            {rereviewing ? "Reviewing..." : review?.status === "failed" || review?.status === "cancelled" ? "Retry" : "Re-review"}
-          </Button>
-
-          {user?.role === "admin" && (
-            <Button variant="outline" size="sm" onClick={handleOpenAiResponse}>
-              <FileCode className="h-3.5 w-3.5 mr-1.5" />
-              AI Response
+            <Button variant="outline" size="sm" onClick={() => setRereviewOpen(true)} disabled={rereviewing || review?.status === "pending"}>
+              <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+              {rereviewing ? "Reviewing..." : review?.status === "failed" || review?.status === "cancelled" ? "Retry" : "Re-review"}
             </Button>
-          )}
-
-          {user?.role === "admin" && (
-            <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
-              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-              Delete
-            </Button>
-          )}
-        </div>
-       </div>
+            {user?.role === "admin" && (
+              <Button variant="outline" size="sm" onClick={handleOpenAiResponse}>
+                <FileCode className="h-3.5 w-3.5 mr-1.5" />
+                AI Response
+              </Button>
+            )}
+            {user?.role === "admin" && (
+              <Button variant="outline" size="sm" className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                Delete
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {shareData && (
         <Card className="border-border bg-card">
@@ -367,7 +776,7 @@ AutoReview`;
                 <Link2 className={cn("h-4 w-4", shareData.enabled ? "text-success" : "text-muted-foreground")} />
               </div>
               <div className="flex-1 min-w-0 flex items-center gap-2">
-                <code className="text-xs font-mono text-foreground truncate flex-1 block">
+                <code className="text-xs font-mono text-interactive truncate flex-1 block">
                   {shareData.url?.startsWith("http") ? shareData.url : `${window.location.origin}${shareData.url}`}
                 </code>
                 <Button variant="outline" size="sm" className="h-7 text-xs flex-shrink-0" onClick={handleCopyLink}>
@@ -407,6 +816,7 @@ AutoReview`;
         <Card className="border-border bg-card">
           <button
             onClick={() => setChainVisible(!chainVisible)}
+            aria-expanded={chainVisible}
             className="w-full flex items-center justify-between px-4 py-3 hover:bg-accent transition-colors rounded-lg"
           >
             <div className="flex items-center gap-2">
@@ -444,48 +854,138 @@ AutoReview`;
       )}
 
       <div className="flex flex-col lg:flex-row gap-6">
-        <div className="w-full lg:w-[42%] min-w-0 space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl border border-border bg-card text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-destructive">Must Fix</p>
-              <span className="text-2xl font-bold tabular-nums text-destructive">{grouped.must_fix.length}</span>
-            </div>
-            <div className="p-3 rounded-xl border border-border bg-card text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-warning">Should Fix</p>
-              <span className="text-2xl font-bold tabular-nums text-warning">{grouped.should_fix_soon.length}</span>
-            </div>
-            <div className="p-3 rounded-xl border border-border bg-card text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Ignored</p>
-              <span className="text-xl font-bold tabular-nums text-foreground">{grouped.ignore.length}</span>
-            </div>
-            <div className="p-3 rounded-xl border border-border bg-card text-center">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Total</p>
-              <span className="text-xl font-bold tabular-nums text-foreground">{totalFindings}</span>
-            </div>
+        <section className="w-full lg:w-[42%] min-w-0 space-y-4" aria-label="Findings">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <StatCard
+              label="Must fix"
+              value={grouped.must_fix.length}
+              tone="critical"
+              icon={<ShieldAlert />}
+              className="p-4 [&>p:last-child]:text-xl"
+              onClick={() => handleSeverityStatClick("must_fix")}
+            />
+            <StatCard
+              label="Should fix"
+              value={grouped.should_fix_soon.length}
+              tone="warning"
+              icon={<TriangleAlert />}
+              className="p-4 [&>p:last-child]:text-xl"
+              onClick={() => handleSeverityStatClick("should_fix_soon")}
+            />
+            <StatCard
+              label="Ignored"
+              value={grouped.ignore.length}
+              icon={<Info />}
+              className="p-4 [&>p:last-child]:text-xl"
+              onClick={() => handleSeverityStatClick("ignore")}
+            />
+            <StatCard
+              label="Total"
+              value={totalFindings}
+              icon={<ListChecks />}
+              className="p-4 [&>p:last-child]:text-xl"
+            />
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative flex-1">
-              <label htmlFor="finding-search" className="sr-only">Search findings or files</label>
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input id="finding-search" value={findingSearch} onChange={(e) => setFindingSearch(e.target.value)} placeholder="Search findings or files" className="pl-9" />
-            </div>
-            <label htmlFor="finding-status" className="sr-only">Finding status</label>
-            <select id="finding-status" value={findingStatus} onChange={(e) => setFindingStatus(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-              <option value="open">Open findings</option>
-              <option value="resolved">Resolved</option>
-              <option value="false_positive">False positives</option>
-              <option value="accepted_risk">Accepted risks</option>
-              <option value="all">All findings</option>
-            </select>
-          </div>
+          <Card className="border-border bg-card">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="relative flex-1">
+                  <label htmlFor="finding-search" className="sr-only">Search findings or files</label>
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input id="finding-search" value={findingSearch} onChange={(e) => setFindingSearch(e.target.value)} placeholder="Search findings or files" className="pl-9" />
+                </div>
+                <label htmlFor="finding-status" className="sr-only">Finding status</label>
+                <select id="finding-status" value={findingStatus} onChange={(e) => setFindingStatus(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="open">Open findings</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="false_positive">False positives</option>
+                  <option value="accepted_risk">Accepted risks</option>
+                  <option value="all">All findings</option>
+                </select>
+              </div>
 
-          {(["must_fix", "should_fix_soon", "ignore"] as const).map((level) => {
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <div role="group" aria-label="Group findings by" className="inline-flex h-8 items-center rounded-lg border border-border bg-secondary p-0.5">
+                  <button
+                    type="button"
+                    aria-pressed={groupMode === "severity"}
+                    onClick={() => setGroupMode("severity")}
+                    className={cn(
+                      "h-7 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      groupMode === "severity" ? "bg-card text-foreground shadow-[inset_0_-2px_0_hsl(var(--interactive))]" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    By Severity
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={groupMode === "file"}
+                    onClick={() => setGroupMode("file")}
+                    className={cn(
+                      "h-7 rounded-md px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      groupMode === "file" ? "bg-card text-foreground shadow-[inset_0_-2px_0_hsl(var(--interactive))]" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    By File
+                  </button>
+                </div>
+
+                {categoryOrder.length > 0 && (
+                  <div role="group" aria-label="Filter by category" className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-pressed={selectedCategories.size === 0}
+                      onClick={() => setSelectedCategories(new Set())}
+                      className={cn(
+                        "inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        selectedCategories.size === 0
+                          ? "border-interactive/40 bg-interactive/10 text-interactive"
+                          : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+                      )}
+                    >
+                      All
+                    </button>
+                    {categoryOrder.map((category) => {
+                      const active = selectedCategories.has(category);
+                      return (
+                        <button
+                          key={category}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => toggleCategory(category)}
+                          className={cn(
+                            "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            active
+                              ? "border-interactive/40 bg-interactive/10 text-interactive"
+                              : "border-border text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+                          )}
+                        >
+                          {category}
+                          <span className="tabular-nums opacity-70">{categoryCount(category)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {visibleFindings.length > 0 && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Kbd>j</Kbd>
+                  <Kbd>k</Kbd>
+                  <span>or arrow keys move between findings · Escape leaves the search field</span>
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {groupMode === "severity" && SEVERITY_LEVELS.map((level) => {
             const items = grouped[level];
-            const displayedItems = items.filter((finding) => displayedFindingIds.has(finding.id));
+            const displayedItems = displayedBySeverity[level];
             if (displayedItems.length === 0) return null;
             return (
-              <div key={level} className="space-y-3">
+              <div key={level} id={`severity-group-${level}`} className="space-y-3 scroll-mt-4">
                 <div className="flex items-center gap-3 pt-2">
                   <div className={cn(
                     "h-3 w-3 rounded-full",
@@ -494,15 +994,63 @@ AutoReview`;
                   <h3 className="text-lg font-bold tracking-tight capitalize text-foreground">{level.replace(/_/g, " ")}</h3>
                   <span className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "finding" : "findings"}</span>
                 </div>
-                {displayedItems.map((finding) => (
-                  <FindingCard key={finding.id} {...finding} sourceUrl={review.repository_workspace && review.repository_slug ? `https://bitbucket.org/${review.repository_workspace}/${review.repository_slug}/src/${reviewedCommit}/${finding.file_path}${finding.line_number ? `#lines-${finding.line_number}` : ""}` : undefined} onDisposition={(disposition) => updateDisposition(finding.id, disposition)} />
-                ))}
+                <div role="list" aria-label={`${level.replace(/_/g, " ")} findings`} className="space-y-3">
+                  {displayedItems.map(renderFindingCard)}
+                </div>
               </div>
             );
           })}
+
+          {groupMode === "file" && fileGroups.map((group, groupIndex) => {
+            const collapsed = collapsedFiles.has(group.path);
+            return (
+              <div key={group.path} className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => toggleFileGroup(group.path)}
+                  aria-expanded={!collapsed}
+                  aria-controls={`file-group-${groupIndex}`}
+                  className="flex w-full items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-left transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <ChevronDown
+                    className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-fast", collapsed && "-rotate-90")}
+                    aria-hidden="true"
+                  />
+                  <FileCode className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <span className="truncate font-mono text-xs text-foreground" title={group.path}>{group.path}</span>
+                  <span className="ml-auto flex shrink-0 items-center gap-2.5">
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        group.hasMustFix ? "bg-destructive" : group.hasShouldFix ? "bg-warning" : "bg-muted-foreground"
+                      )}
+                    />
+                    <Badge variant="outline" className="tabular-nums">
+                      {group.items.length} {group.items.length === 1 ? "finding" : "findings"}
+                    </Badge>
+                  </span>
+                </button>
+                {!collapsed && (
+                  <div id={`file-group-${groupIndex}`} role="list" aria-label={`Findings in ${group.path}`} className="space-y-3">
+                    {group.items.map(renderFindingCard)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
           {visibleFindings.length > findingLimit && <Button variant="outline" className="w-full" onClick={() => setFindingLimit((limit) => limit + 10)}>Show 10 more findings</Button>}
-          {visibleFindings.length === 0 && <div className="rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No findings match the current filters.</div>}
-        </div>
+          {visibleFindings.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border">
+              <EmptyState
+                icon={<Search />}
+                title="No findings match the current filters."
+                description="Adjust the search, status, or category filters to see more findings."
+              />
+            </div>
+          )}
+        </section>
 
         <div className="flex-1 min-w-0 space-y-4">
           <Card className="border-border bg-card">
@@ -530,7 +1078,7 @@ AutoReview`;
                 <div className="flex items-center gap-2">
                   {review.incremental && <Badge variant="outline">Incremental</Badge>}
                   {review.policy_status && <Badge variant={review.policy_status === "passed" ? "default" : "destructive"}>Policy {review.policy_status}</Badge>}
-                  <Badge variant={review.status === "completed" ? "default" : "destructive"} className="capitalize">{String(review.status)}</Badge>
+                  <StatusBadge status={review.status} />
                 </div>
               </div>
 
@@ -546,7 +1094,7 @@ AutoReview`;
                   <GitCommitHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
                   <div>
                     <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Commit</p>
-                    <p className="text-sm font-mono text-foreground">{isPrReview ? `PR #${prId}` : String(review.commit_hash).substring(0, 8)}</p>
+                    <p className="text-sm font-mono text-foreground">{isPrReview ? `PR #${prId}` : shortHash}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
@@ -608,39 +1156,18 @@ AutoReview`;
                   <span className="text-sm font-semibold text-foreground">Diff</span>
                   {!diffVisible && <span className="text-xs text-muted-foreground">Click to view the reviewed changes</span>}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   {diffVisible && (
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(review.diff_text!); toast({ title: "Diff copied to clipboard", variant: "success" }); }}>
-                      Copy
-                    </Button>
+                    <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                      <CopyButton value={review.diff_text} label="Copy diff" toastLabel="Diff" />
+                    </span>
                   )}
                   {diffVisible ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                 </div>
               </button>
               {diffVisible && (
                 <CardContent id="diff-content" className="pt-0 pb-4 border-t border-border">
-                  <div className="overflow-x-auto mt-4 rounded-md border border-border bg-secondary/50">
-                    <div className="text-xs font-mono leading-relaxed whitespace-pre">
-                      {review.diff_text.split("\n").map((line, i) => (
-                        <div
-                          key={i}
-                          className={cn(
-                            "flex",
-                            line.startsWith("+") && !line.startsWith("++")
-                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                              : line.startsWith("-") && !line.startsWith("--")
-                                ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                                : line.startsWith("@@")
-                                  ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                                  : ""
-                          )}
-                        >
-                          <span className="inline-block w-10 shrink-0 select-none text-right pr-3 text-muted-foreground/40 border-r border-border/50 mr-3">{i + 1}</span>
-                          <span className="px-1 flex-1">{line}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <DiffViewer sections={diffSections} highlightId={highlightId} />
                 </CardContent>
               )}
             </Card>
@@ -659,11 +1186,11 @@ AutoReview`;
                   <span className="text-sm font-semibold text-foreground">Email Draft</span>
                   {!emailVisible && <span className="text-xs text-muted-foreground">Click to preview</span>}
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   {emailVisible && (
-                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(emailBody); toast({ title: "Copied to clipboard", variant: "success" }); }}>
-                      Copy
-                    </Button>
+                    <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                      <CopyButton value={emailBody} label="Copy email draft" toastLabel="Email draft" />
+                    </span>
                   )}
                   {emailVisible ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
                 </div>
@@ -689,7 +1216,7 @@ AutoReview`;
               Raw model output captured for this review. Only admins can view it.
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-secondary/50">
+          <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-secondary/50">
             {aiResponseLoading ? (
               <div className="p-4 space-y-2">
                 <Skeleton className="h-4 w-2/3" />
@@ -704,17 +1231,15 @@ AutoReview`;
               <p className="p-4 text-sm text-muted-foreground">No AI response was stored for this review.</p>
             )}
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setAiResponseOpen(false)}>Close</Button>
-            <Button
-              onClick={() => {
-                navigator.clipboard.writeText(formattedAiResponse);
-                toast({ title: "AI response copied", variant: "success" });
-              }}
+          <DialogFooter className="gap-2 sm:gap-0" aria-live="polite">
+            <CopyButton
+              variant="outline"
+              value={formattedAiResponse}
+              label="Copy AI response"
+              toastLabel="AI response"
               disabled={!formattedAiResponse}
-            >
-              Copy
-            </Button>
+            />
+            <Button variant="outline" onClick={() => setAiResponseOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
