@@ -4,30 +4,30 @@
 
 @layer base {
   :root {
-    /* AutoReview — Monochromatic Light Theme (DESIGN.MD), refined */
-    --background: 0 0% 98%;            /* Canvas #fafafa — tinted so white cards layer above it */
-    --foreground: 0 0% 4%;             /* Rich Black #0a0a0a */
+    /* AutoReview — Monochrome Utility, Human Touch (DESIGN.MD) */
+    --background: 0 0% 96%;            /* Paper #f4f4f4 — page canvas */
+    --foreground: 0 0% 14%;            /* Graphite #242424 */
 
-    --card: 0 0% 100%;                 /* Card White #ffffff */
-    --card-foreground: 0 0% 4%;
+    --card: 0 0% 100%;                 /* White #ffffff */
+    --card-foreground: 0 0% 14%;
 
-    --popover: 0 0% 100%;              /* Card White #ffffff */
-    --popover-foreground: 0 0% 4%;
+    --popover: 0 0% 100%;              /* White #ffffff */
+    --popover-foreground: 0 0% 14%;
 
-    --primary: 0 0% 7%;                /* Near-black CTA #121212 */
+    --primary: 0 0% 6%;                /* Ink #101010 — CTA */
     --primary-foreground: 0 0% 100%;   /* White on CTA */
 
-    --secondary: 0 0% 96%;             /* Ghost Gray #f5f5f5 */
-    --secondary-foreground: 0 0% 4%;
+    --secondary: 0 0% 94%;             /* Ghost fill between Paper and Silver */
+    --secondary-foreground: 0 0% 14%;
 
-    --muted: 0 0% 96%;                 /* Ghost Gray #f5f5f5 */
-    --muted-foreground: 0 0% 40%;      /* #666666 — 5.7:1 contrast for readability */
+    --muted: 0 0% 94%;
+    --muted-foreground: 219 9% 45%;    /* Slate #6b7280 */
 
-    --accent: 0 0% 96%;                /* Ghost Gray #f5f5f5 */
-    --accent-foreground: 0 0% 4%;
+    --accent: 0 0% 94%;
+    --accent-foreground: 0 0% 14%;
 
-    /* Interactive accent — the single signal color (links, focus, active states) */
-    --interactive: 221 83% 53%;        /* Blue #2563eb */
+    /* Interactive accent — Action Blue, reserved for links/infos/highlights */
+    --interactive: 201 100% 50%;       /* #0099ff */
 
     --destructive: 9 85% 41%;          /* Callout Red #c22b10 */
     --destructive-foreground: 0 0% 100%;
@@ -35,16 +35,16 @@
     --success: 130 85% 41%;            /* Success Green #10c22b */
     --warning: 26 90% 37%;             /* Warning Amber #b45309 */
 
-    --border: 0 0% 0% / 0.08;          /* adaptive black-alpha hairline */
-    --input: 0 0% 0% / 0.10;
-    --ring: 221 83% 53%;               /* focus ring: accent blue */
+    --border: 220 13% 91%;             /* Silver #e5e7eb */
+    --input: 220 13% 91%;
+    --ring: 201 100% 50%;              /* focus ring: action blue */
 
-    /* Radius scale — 10px base (buttons/inputs), 14px cards, 26px badges */
-    --radius: 0.625rem;                /* 10px — buttons, inputs, default */
+    /* Radius scale — 8px inputs/rect buttons, 12px cards, pills for CTAs */
+    --radius: 0.5rem;                  /* 8px — inputs, rectangular buttons */
     --radius-sm: 0.25rem;              /* 4px */
     --radius-md: 0.375rem;             /* 6px */
-    --radius-lg: 0.625rem;             /* 10px */
-    --radius-xl: 0.875rem;             /* 14px — cards */
+    --radius-lg: 0.5rem;               /* 8px */
+    --radius-xl: 0.75rem;              /* 12px — cards */
     --radius-3xl: 1.625rem;            /* 26px — badges */
     --radius-pill: 9999px;
 
@@ -58,8 +58,8 @@
     --font-geist: 'Geist Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-geist-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-    /* Elevation — border for hairline, soft layered shadow for depth */
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 2px 8px -2px rgb(0 0 0 / 0.06);
+    /* Elevation — spec: diffuse soft shadow, no borders on cards */
+    --shadow-card: rgb(36 36 36 / 0.05) 0px 4px 8px 0px;
     --focus-ring: 0 0 0 2px hsl(var(--interactive));
   }
 
@@ -86,7 +86,7 @@
     --accent-foreground: 0 0% 98%;
 
     /* Interactive accent — brighter for dark backgrounds */
-    --interactive: 217 91% 60%;        /* Blue #3b82f6 */
+    --interactive: 201 100% 60%;       /* #33b1ff */
 
     --destructive: 0 84% 60%;          /* Callout Red #ef4444 */
     --destructive-foreground: 0 0% 98%;
@@ -117,10 +117,13 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    letter-spacing: -0.01em;
   }
   h1, h2, h3, h4, h5, h6 {
-    @apply tracking-tight font-semibold;
+    font-family: 'Cal Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    @apply font-semibold;
+    letter-spacing: 0.01em;
   }
   ::selection {
     background-color: hsl(var(--interactive) / 0.2);

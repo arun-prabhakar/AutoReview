@@ -12,7 +12,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["'Geist Sans'", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        heading: ["'Cal Sans'", "Inter", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["'Geist Mono'", "IBM Plex Mono", "ui-monospace", "monospace"],
       },
       letterSpacing: {
