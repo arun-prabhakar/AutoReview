@@ -319,6 +319,44 @@ export default function ReviewDetail() {
     return () => window.cancelAnimationFrame(frame);
   }, [pendingGroupScroll, groupMode]);
 
+  /* Keyboard navigation: j/k or arrows move between finding cards, Escape blurs filters.
+     Must live ABOVE the loading/not-found early returns — hooks cannot be conditional. */
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      const isFormTarget = (el: HTMLElement | null): boolean =>
+        !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
+
+      if (event.key === "Escape") {
+        if (isFormTarget(target)) target?.blur();
+        return;
+      }
+      const isNext = event.key === "j" || event.key === "ArrowDown";
+      const isPrev = event.key === "k" || event.key === "ArrowUp";
+      if (!isNext && !isPrev) return;
+      if (isFormTarget(target) || target?.closest('[role="dialog"]')) return;
+
+      const ids = keyboardIdsRef.current;
+      if (ids.length === 0) return;
+      event.preventDefault();
+      const currentIndex = focusedId != null ? ids.indexOf(focusedId) : -1;
+      const nextIndex = currentIndex === -1
+        ? (isNext ? 0 : ids.length - 1)
+        : (isNext ? Math.min(currentIndex + 1, ids.length - 1) : Math.max(currentIndex - 1, 0));
+      const nextId = ids[nextIndex];
+      if (nextId === undefined) return;
+      setFocusedId(nextId);
+      const el = cardRefs.current.get(nextId);
+      if (el) {
+        el.focus({ preventScroll: true });
+        el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "nearest" });
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [focusedId]);
+
   const handleViewInDiff = (finding: Finding) => {
     setDiffVisible(true);
     const anchor = findDiffAnchor(diffSections, finding.file_path, finding.line_number);
@@ -521,43 +559,6 @@ export default function ReviewDetail() {
       return next;
     });
   };
-
-  /* Keyboard navigation: j/k or arrows move between finding cards, Escape blurs filters. */
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      const target = event.target as HTMLElement | null;
-      const isFormTarget = (el: HTMLElement | null): boolean =>
-        !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
-
-      if (event.key === "Escape") {
-        if (isFormTarget(target)) target?.blur();
-        return;
-      }
-      const isNext = event.key === "j" || event.key === "ArrowDown";
-      const isPrev = event.key === "k" || event.key === "ArrowUp";
-      if (!isNext && !isPrev) return;
-      if (isFormTarget(target) || target?.closest('[role="dialog"]')) return;
-
-      const ids = keyboardIdsRef.current;
-      if (ids.length === 0) return;
-      event.preventDefault();
-      const currentIndex = focusedId != null ? ids.indexOf(focusedId) : -1;
-      const nextIndex = currentIndex === -1
-        ? (isNext ? 0 : ids.length - 1)
-        : (isNext ? Math.min(currentIndex + 1, ids.length - 1) : Math.max(currentIndex - 1, 0));
-      const nextId = ids[nextIndex];
-      if (nextId === undefined) return;
-      setFocusedId(nextId);
-      const el = cardRefs.current.get(nextId);
-      if (el) {
-        el.focus({ preventScroll: true });
-        el.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "nearest" });
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [focusedId]);
 
   const isPrReview = String(review.commit_hash).startsWith("pr:");
   const prId = isPrReview ? String(review.commit_hash).split(":")[1] : null;
