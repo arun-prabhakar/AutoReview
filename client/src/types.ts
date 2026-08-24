@@ -27,6 +27,8 @@ export interface Review {
   diff_text?: string | null;
   must_fix_count?: number;
   should_fix_count?: number;
+  open_must_fix_count?: number;
+  open_should_fix_count?: number;
   cancel_requested?: boolean;
   policy_status?: 'passed' | 'failed' | null;
   incremental?: boolean;

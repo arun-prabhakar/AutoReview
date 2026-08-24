@@ -158,7 +158,9 @@ reviewsRouter.get("/", async (req: Request, res: Response, next: NextFunction) =
         lr.estimated_cost, lr.project_context, lr.commit_author, lr.diff_text, lr.pr_head_commit,
         lr.llm_model, lr.repository_name,
         COALESCE((SELECT COUNT(*) FROM findings f WHERE f.review_id = lr.id AND f.risk_level = 'must_fix'), 0) as must_fix_count,
-        COALESCE((SELECT COUNT(*) FROM findings f WHERE f.review_id = lr.id AND f.risk_level = 'should_fix_soon'), 0) as should_fix_count
+        COALESCE((SELECT COUNT(*) FROM findings f WHERE f.review_id = lr.id AND f.risk_level = 'should_fix_soon'), 0) as should_fix_count,
+        COALESCE((SELECT COUNT(*) FROM findings f WHERE f.review_id = lr.id AND f.risk_level = 'must_fix' AND f.disposition = 'open'), 0) as open_must_fix_count,
+        COALESCE((SELECT COUNT(*) FROM findings f WHERE f.review_id = lr.id AND f.risk_level = 'should_fix_soon' AND f.disposition = 'open'), 0) as open_should_fix_count
       FROM latest_reviews lr
       ${latestWhere}
       ORDER BY lr.created_at DESC

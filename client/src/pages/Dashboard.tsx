@@ -137,12 +137,18 @@ function AuthorAvatar({ author, className }: { author: string; className?: strin
 
 function SeverityDots({ review }: { review: Review }) {
   if (review.status !== "completed") return null;
-  const must = review.must_fix_count ?? 0;
-  const should = review.should_fix_count ?? 0;
+  const must = review.open_must_fix_count ?? review.must_fix_count ?? 0;
+  const should = review.open_should_fix_count ?? review.should_fix_count ?? 0;
+  const totalRaw = (review.must_fix_count ?? 0) + (review.should_fix_count ?? 0);
+  const triaged = totalRaw - (must + should);
   if (must === 0 && should === 0) {
     return (
-      <span className="inline-flex items-center gap-1" title="No issues found">
+      <span
+        className="inline-flex items-center gap-1"
+        title={triaged > 0 ? `All ${totalRaw} finding${totalRaw === 1 ? "" : "s"} triaged` : "No issues found"}
+      >
         <span className="h-1.5 w-1.5 rounded-full bg-success" />
+        {triaged > 0 && <span className="text-xs leading-none text-success">✓</span>}
       </span>
     );
   }
@@ -152,7 +158,10 @@ function SeverityDots({ review }: { review: Review }) {
   ];
   const overflow = must + should - dots.length;
   return (
-    <span className="inline-flex items-center gap-1" title={`${must} must-fix, ${should} should-fix`}>
+    <span
+      className="inline-flex items-center gap-1"
+      title={`${must} open must-fix, ${should} open should-fix${triaged > 0 ? ` · ${triaged} triaged` : ""}`}
+    >
       {dots.map((tone, i) => (
         <span key={i} className={cn("h-1.5 w-1.5 rounded-full", tone === "destructive" ? "bg-destructive" : "bg-warning")} />
       ))}
@@ -517,8 +526,8 @@ export default function Dashboard() {
 
   const rowSeverityBorder = (review: Review): string => {
     if (review.status === "completed") {
-      const must = review.must_fix_count ?? 0;
-      const should = review.should_fix_count ?? 0;
+      const must = review.open_must_fix_count ?? review.must_fix_count ?? 0;
+      const should = review.open_should_fix_count ?? review.should_fix_count ?? 0;
       if (must > 0) return "border-l-2 border-l-destructive";
       if (should > 0) return "border-l-2 border-l-warning";
       return "border-l-2 border-l-success";
@@ -914,8 +923,8 @@ export default function Dashboard() {
                     >
                       {visibleReviews.map((review) => {
                         const isSelected = effectiveSelectedIds.has(review.id);
-                        const must = review.must_fix_count ?? 0;
-                        const should = review.should_fix_count ?? 0;
+                        const must = review.open_must_fix_count ?? review.must_fix_count ?? 0;
+                        const should = review.open_should_fix_count ?? review.should_fix_count ?? 0;
                         const failLabel = failureLabel(review);
                         return (
                           <motion.tr
