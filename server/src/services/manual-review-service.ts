@@ -11,6 +11,28 @@ import { v4 as uuid } from "uuid";
 import { logger } from "../middleware/index.js";
 import { NotFoundError, ValidationError } from "../errors.js";
 
+const MAX_DIFF_CHARS = 200_000;
+const MAX_FILES_CHANGED = 50;
+
+function countChangedFiles(diff: string): number {
+  const matches = diff.match(/^diff --git a\/(.+?) b\/(.+?)$/gm) || [];
+  return matches.length;
+}
+
+function validateDiffLimits(diff: string, label: string): void {
+  const fileCount = countChangedFiles(diff);
+  if (fileCount > MAX_FILES_CHANGED) {
+    throw new ValidationError(
+      `AI review is not possible for ${label}: ${fileCount} files changed exceeds the ${MAX_FILES_CHANGED}-file limit. Break the change into smaller commits.`
+    );
+  }
+  if (diff.length > MAX_DIFF_CHARS) {
+    throw new ValidationError(
+      `AI review is not possible for ${label}: diff size ${(diff.length / 1000).toFixed(0)}KB exceeds the ${(MAX_DIFF_CHARS / 1000).toFixed(0)}KB limit. Break the change into smaller commits.`
+    );
+  }
+}
+
 type DedupKey = string;
 type ReviewMode = "manual" | "pr";
 
@@ -442,6 +464,8 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
     repo.workspace, repo.slug, commitHash, password, username
   );
 
+  validateDiffLimits(diff, `commit ${commitHash.slice(0, 8)}`);
+
   const dedupKey = commit.hash;
   const dedupResult = await performDedup(repositoryId, dedupKey, force);
   if (dedupResult.action === "cached") return { review: dedupResult.review, findings: dedupResult.findings, cached: true, reviewId: dedupResult.review.id };
@@ -482,6 +506,8 @@ export async function runPrReview(repositoryId: string, prId: string, force = fa
   const { diff, pr, truncated } = canReviewIncrementally
     ? await fetchPrDiffSince(repo.workspace, repo.slug, prId, previousReview!.pr_head_commit!, password, username)
     : await fetchPrDiff(repo.workspace, repo.slug, prId, password, username);
+
+  validateDiffLimits(diff, `PR #${prId}`);
 
   const syntheticCommit: CommitInfo = {
     hash: pr.commitHash,
@@ -563,6 +589,9 @@ export async function preflightReview(
     diff = result.diff;
     truncated = result.truncated;
   }
+
+  const label = mode === "pr" ? `PR #${target}` : `commit ${target.slice(0, 8)}`;
+  validateDiffLimits(diff, label);
 
   const reviewDiff = prepareDiffForAnalysis(diff, repo.excluded_paths);
   const estimatedInputTokens = Math.ceil(reviewDiff.length / 4);

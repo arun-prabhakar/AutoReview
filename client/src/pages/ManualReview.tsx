@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { EmptyState, Kbd, PageHeader, SeverityBadge, StatusBadge } from "@/components/shared";
+import { FindingCard } from "@/components/review/FindingCard";
 import { useToast } from "@/hooks/use-toast";
 import { fadeInUp, useReducedMotionVariants } from "@/lib/motion";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,7 @@ import {
   RefreshCw,
   XCircle,
 } from "lucide-react";
-import type { Repository } from "@/types";
+import type { Finding, Repository } from "@/types";
 
 type ReviewResult = {
   cached?: boolean;
@@ -138,6 +139,8 @@ export default function ManualReview() {
   const [estimating, setEstimating] = useState(false);
   const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const [cancelRequested, setCancelRequested] = useState(false);
+  const [localFindings, setLocalFindings] = useState<Finding[]>([]);
+  const [showAllFindings, setShowAllFindings] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeReviewRef = useRef<string | null>(null);
   const cancellationRequestedRef = useRef(false);
@@ -324,6 +327,7 @@ export default function ManualReview() {
       }
 
       setResult(data);
+      setLocalFindings((data.findings as unknown as Finding[]) ?? []);
       toast({ title: "Review Completed", description: "Findings are ready." });
     } catch (err) {
       const recoveryId = activeReviewRef.current;
@@ -399,6 +403,19 @@ export default function ManualReview() {
     }
   };
 
+  const handleDisposition = async (findingId: string, disposition: Finding["disposition"]) => {
+    if (!result?.reviewId) return;
+    try {
+      await api.patch(`/api/reviews/${result.reviewId}/findings/${findingId}`, { disposition });
+      setLocalFindings((prev) =>
+        prev.map((f) => (f.id === findingId ? { ...f, disposition } : f))
+      );
+      toast({ title: disposition === "open" ? "Finding reopened" : "Finding updated", variant: "success" });
+    } catch (err) {
+      toast({ title: "Could not update finding", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
@@ -421,7 +438,7 @@ export default function ManualReview() {
     ? commitHash.substring(0, 12)
     : `PR #${prId}`;
 
-  const findings = result?.findings ?? [];
+  const findings = localFindings;
   const mustFixCount = findings.filter((f) => f.risk_level === "must_fix").length;
   const shouldFixCount = findings.filter((f) => f.risk_level === "should_fix_soon").length;
   const ignoreCount = findings.filter((f) => f.risk_level === "ignore").length;
@@ -485,6 +502,48 @@ export default function ManualReview() {
         title="Manual Review"
         description="Run an AI review on a specific commit or pull request. Confirm the scope, then follow the live progress."
       />
+
+      {!submitting && !result && visibleRecents.length > 0 && (
+        <Card>
+          <CardContent className="pt-5">
+            <h3 className="text-sm font-medium text-foreground mb-3">Quick start</h3>
+            <div className="space-y-2">
+              {visibleRecents.slice(0, 3).map((target) => (
+                <div
+                  key={`${target.repoId}:${target.hash}`}
+                  className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 hover:bg-accent transition-colors"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-foreground">
+                      {target.repoName}
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground font-mono">
+                      {target.hash}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setRepoId(target.repoId);
+                      setMode("commit");
+                      setCommitHash(target.hash);
+                      setTouched({ repo: true, commit: true, pr: false });
+                      setTimeout(() => {
+                        setStep(2);
+                        const form = document.querySelector("form");
+                        if (form) form.requestSubmit();
+                      }, 50);
+                    }}
+                  >
+                    <Play className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {noRepos ? (
         <Card>
@@ -868,13 +927,13 @@ export default function ManualReview() {
             <div className="flex items-center gap-3">
               <StatusBadge status="completed" />
               <span className="text-sm font-medium text-foreground">
-                {findings.length === 0
+                {localFindings.length === 0
                   ? "AI analysis completed — no issues found"
-                  : `Found ${findings.length} ${findings.length === 1 ? "issue" : "issues"}`}
+                  : `Found ${localFindings.length} ${localFindings.length === 1 ? "issue" : "issues"}`}
               </span>
             </div>
 
-            {findings.length > 0 ? (
+            {localFindings.length > 0 ? (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 {mustFixCount > 0 && (
                   <span className="inline-flex items-center gap-1.5">
@@ -906,12 +965,38 @@ export default function ManualReview() {
               </div>
             )}
 
+            {localFindings.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-foreground">Findings</h4>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAllFindings(!showAllFindings)}
+                  >
+                    {showAllFindings ? "Show open only" : "Show all"}
+                  </Button>
+                </div>
+                <div className="space-y-3">
+                  {(showAllFindings ? localFindings : localFindings.filter((f) => f.disposition === "open" || !f.disposition)).map((finding) => (
+                    <FindingCard
+                      key={finding.id}
+                      {...finding}
+                      disposition={finding.disposition ?? "open"}
+                      onDisposition={(d) => handleDisposition(finding.id, d)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {result.reviewId && (
               <Button
-                className="w-full font-bold"
+                variant="outline"
+                className="w-full"
                 onClick={() => navigate(`/reviews/${result.reviewId}`)}
               >
-                View detailed findings
+                View full review details
                 <ArrowRight />
               </Button>
             )}
