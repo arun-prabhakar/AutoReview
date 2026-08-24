@@ -961,7 +961,11 @@ export default function Dashboard() {
                             )}
                             <TableCell className="w-40 py-2">
                               <div className="flex items-center gap-1.5">
-                                <StatusBadge status={review.status} title={failLabel ?? undefined} />
+                                {review.status === "completed" ? (
+                                  <SeverityDots review={review} />
+                                ) : (
+                                  <StatusBadge status={review.status} title={failLabel ?? undefined} />
+                                )}
                                 {review.status === "completed" && must + should > 0 && (
                                   <SeverityBadge
                                     level={must > 0 ? "must_fix" : "should_fix_soon"}
@@ -1092,9 +1096,13 @@ export default function Dashboard() {
                             <span title={formatDateTime(review.created_at)}>{formatRelativeTime(review.created_at)}</span>
                           </div>
                         </div>
-                        <StatusBadge status={review.status} />
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          {review.status === "completed" ? (
+                            <SeverityDots review={review} />
+                          ) : (
+                            <StatusBadge status={review.status} />
+                          )}
+                        </div>
                         <div className="flex min-w-0 items-center gap-2">
                           {review.commit_author && (
                             <>
@@ -1103,9 +1111,7 @@ export default function Dashboard() {
                                 {review.commit_author}
                               </span>
                             </>
-                          )}
-                          <SeverityDots review={review} />
-                        </div>
+                          )}</div>
                         <div className="flex items-center gap-1">
                           {isAdmin && (
                             <button
