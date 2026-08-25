@@ -13,6 +13,7 @@ import { NotFoundError, ValidationError } from "../errors.js";
 
 const MAX_DIFF_CHARS = 200_000;
 const MAX_FILES_CHANGED = 50;
+const MULTIPASS_DIFF_THRESHOLD = 10000;
 
 function countChangedFiles(diff: string): number {
   const matches = diff.match(/^diff --git a\/(.+?) b\/(.+?)$/gm) || [];
@@ -229,7 +230,7 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     let tokenUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
     let aiResponse: string;
 
-    if (ctx.repo.multi_pass_review) {
+    if (ctx.repo.multi_pass_review && ctx.diff.length > MULTIPASS_DIFF_THRESHOLD) {
       await run("UPDATE reviews SET progress_stage = 'Running specialized AI passes' WHERE id = $1", [reviewId]);
       const multiResult = await multiPassReview(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal);
       rawFindings = multiResult.findings;

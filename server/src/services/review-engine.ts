@@ -10,20 +10,20 @@ export const FIXED_OUTPUT_FORMAT = `
 
 ## Output Format
 
-Respond with a single valid JSON array of findings only. Do NOT include any other text, markdown, or explanation outside the JSON array. Sort findings by risk: \`must_fix\` first, then \`should_fix_soon\`, then \`ignore\`.
+Return a single valid JSON array of findings only. No other text. Sort by risk: must_fix first, then should_fix_soon, then ignore. Max 30 findings.
 
-Use the 1-based \`file_index\` from the Changed Files list in the prompt. Do not repeat file paths, finding ids, repository, branch, commit hash, or line end values in the response.
+Use 1-based file_index from Changed Files. Do not repeat file paths or repository metadata.
 
 \`\`\`json
 [
   {
-    "file_index": <integer from Changed Files>,
-    "line_start": <integer or null>,
-    "category": "<security | performance | correctness | maintainability | style>",
-    "risk": "<must_fix | should_fix_soon | ignore>",
-    "title": "<concise one-line summary>",
-    "explanation": "<detailed explanation of why this is a problem, including potential impact>",
-    "suggested_fix": "<concrete fix — code snippet preferred where applicable, or null if not applicable>"
+    "file_index": 1,
+    "line_start": 10,
+    "category": "security | performance | correctness | maintainability | style",
+    "risk": "must_fix | should_fix_soon | ignore",
+    "title": "concise summary",
+    "explanation": "why this is a problem, including impact",
+    "suggested_fix": "specific correction or null"
   }
 ]
 \`\`\``;
@@ -48,7 +48,7 @@ export type TokenUsage = {
 
 export const INITIAL_ANALYSIS_TOKENS = 6144;
 export const MAX_ANALYSIS_TOKENS = 8192;
-export const MAX_REVIEW_DIFF_CHARS = 60000;
+export const MAX_REVIEW_DIFF_CHARS = 30000;
 const MIN_RETRY_TOKENS = 8192;
 
 type AnalysisCompletion = {
@@ -99,7 +99,7 @@ export async function analyzeDiff(
     .replace("{{repository}}", repo.name);
 
   if (projectContext) {
-    prompt += `\n\n## Project-Specific Context\nUse these repository rules when they apply:\n${projectContext.slice(0, 6000)}`;
+    prompt += `\n\n## Project-Specific Context\nUse these repository rules when they apply:\n${projectContext.slice(0, 3000)}`;
   }
 
   prompt += CENTRAL_FIXED_OUTPUT_FORMAT;
@@ -110,7 +110,8 @@ export async function analyzeDiff(
 
   const adapter = createAdapter(provider);
 
-  const initialTokens = Math.min(repo.llm_max_tokens, INITIAL_ANALYSIS_TOKENS);
+  const dynamicTokens = Math.max(2048, Math.min(repo.llm_max_tokens, Math.ceil(reviewDiff.length / 8)));
+  const initialTokens = Math.min(dynamicTokens, INITIAL_ANALYSIS_TOKENS);
   const initialResponse = await requestAnalysisCompletion(adapter, repo, prompt, initialTokens, signal);
   let response = initialResponse;
   let totalUsage = initialResponse.tokenUsage;
@@ -223,7 +224,7 @@ async function requestAnalysisCompletion(
     model: repo.llm_model,
     messages: [{ role: "user", content: prompt }],
     maxTokens,
-    temperature: Math.min(repo.llm_temperature, 0.2),
+    temperature: 0.0,
     signal,
   });
 
