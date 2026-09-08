@@ -55,10 +55,11 @@ export function RepositoriesTab({
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
-  const [editTarget, setEditTarget] = useState<{ id: string; name: string; credential_id: string; multi_pass_review: boolean } | null>(null);
+  const [editTarget, setEditTarget] = useState<{ id: string; name: string; credential_id: string; multi_pass_review: boolean; agent_review: boolean } | null>(null);
   const [editName, setEditName] = useState("");
   const [editCredentialId, setEditCredentialId] = useState("");
   const [editMultiPass, setEditMultiPass] = useState(false);
+  const [editAgentReview, setEditAgentReview] = useState(false);
   const [query, setQuery] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string | undefined>>({});
@@ -145,7 +146,7 @@ export function RepositoriesTab({
     setEditErrors({});
     setSaving(true);
     try {
-      await api.put(`/api/repositories/${editTarget.id}`, { name: editName, credential_id: editCredentialId, multi_pass_review: editMultiPass });
+      await api.put(`/api/repositories/${editTarget.id}`, { name: editName, credential_id: editCredentialId, multi_pass_review: editMultiPass, agent_review: editAgentReview });
       toast({ title: "Repository updated", variant: "success" });
       setEditTarget(null);
       dispatch(fetchRepositories());
@@ -231,7 +232,12 @@ export function RepositoriesTab({
                   <Layers className="h-3 w-3" />Multi-Pass
                 </Badge>
               ) : null}
-              <Button variant="ghost" size="icon" aria-label="Edit repository" onClick={() => { setEditTarget({ id: String(repo.id), name: String(repo.name), credential_id: String(repo.credential_id), multi_pass_review: !!repo.multi_pass_review }); setEditName(String(repo.name)); setEditCredentialId(String(repo.credential_id)); setEditMultiPass(!!repo.multi_pass_review); setEditErrors({}); }}><Pencil className="h-4 w-4" /></Button>
+              {repo.agent_review ? (
+                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 flex items-center gap-1">
+                  <Layers className="h-3 w-3" />Agent
+                </Badge>
+              ) : null}
+              <Button variant="ghost" size="icon" aria-label="Edit repository" onClick={() => { setEditTarget({ id: String(repo.id), name: String(repo.name), credential_id: String(repo.credential_id), multi_pass_review: !!repo.multi_pass_review, agent_review: !!repo.agent_review }); setEditName(String(repo.name)); setEditCredentialId(String(repo.credential_id)); setEditMultiPass(!!repo.multi_pass_review); setEditAgentReview(!!repo.agent_review); setEditErrors({}); }}><Pencil className="h-4 w-4" /></Button>
               <Button variant="ghost" size="icon" aria-label="Delete repository" onClick={() => setDeleteTarget({ id: String(repo.id), name: String(repo.name) })}><Trash2 className="h-4 w-4 text-destructive" /></Button>
             </div>
           </CardContent>
@@ -280,12 +286,24 @@ export function RepositoriesTab({
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
               <div className="space-y-0.5">
                 <Label className="text-sm font-medium">Multi-Pass Review</Label>
-                <p className="text-xs text-muted-foreground">Run specialized security, performance &amp; maintainability passes</p>
+                <p className="text-xs text-muted-foreground">Run specialized security, performance, maintainability &amp; coding-standards passes</p>
               </div>
               <input
                 type="checkbox"
                 checked={editMultiPass}
                 onChange={(e) => setEditMultiPass(e.target.checked)}
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-medium">Agent Mode</Label>
+                <p className="text-xs text-muted-foreground">Let the AI explore repository files before reviewing (slower, more context-aware)</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={editAgentReview}
+                onChange={(e) => setEditAgentReview(e.target.checked)}
                 className="h-4 w-4 rounded border-border accent-primary"
               />
             </div>
