@@ -42,6 +42,8 @@ export type FindingRow = {
   risk_level: string;
   suggested_fix: string | null;
   category: string | null;
+  confidence: number | null;
+  test_gap: string | null;
   disposition: string;
   disposition_reason: string | null;
   disposition_by: string | null;
@@ -93,17 +95,17 @@ export async function updateReviewStatus(
 export async function insertFindings(reviewId: string, findings: RawFindingInput[]): Promise<void> {
   if (findings.length === 0) return;
   const { v4: uuid } = await import("uuid");
-  const cols = 9;
+  const cols = 11;
   const values: unknown[] = [];
   const placeholders: string[] = [];
   for (const f of findings) {
     const id = uuid();
     const offset = values.length;
     placeholders.push(`(${Array.from({ length: cols }, (_, i) => `$${offset + i + 1}`).join(", ")})`);
-    values.push(id, reviewId, f.file_path, f.line_number, f.summary, f.explanation, f.risk_level, f.suggested_fix, f.category);
+    values.push(id, reviewId, f.file_path, f.line_number, f.summary, f.explanation, f.risk_level, f.suggested_fix, f.category, f.confidence ?? null, f.test_gap ?? null);
   }
   await getPool().query(
-    `INSERT INTO findings (id, review_id, file_path, line_number, summary, explanation, risk_level, suggested_fix, category) VALUES ${placeholders.join(", ")}`,
+    `INSERT INTO findings (id, review_id, file_path, line_number, summary, explanation, risk_level, suggested_fix, category, confidence, test_gap) VALUES ${placeholders.join(", ")}`,
     values
   );
 }
@@ -321,6 +323,8 @@ export type RawFindingInput = {
   risk_level: string;
   suggested_fix: string | null;
   category: string | null;
+  confidence?: number | null;
+  test_gap?: string | null;
 };
 
 // --- Cross-Review Finding Deduplication (Feature 6) ---
@@ -348,5 +352,27 @@ export async function linkFindings(findingIds: string[], persistentIssueId: stri
   await run(
     `UPDATE findings SET persistent_issue_id = $1 WHERE id IN (${placeholders})`,
     [persistentIssueId, ...findingIds]
+  );
+}
+
+// --- False-Positive Feedback Loop ---
+
+export type FalsePositiveRow = {
+  file_path: string;
+  summary: string;
+  category: string | null;
+  reason: string | null;
+};
+
+export async function getFalsePositiveFeedback(repositoryId: string): Promise<FalsePositiveRow[]> {
+  return all<FalsePositiveRow>(
+    `SELECT DISTINCT ON (LOWER(SUBSTRING(f.summary, 1, 80)), f.file_path)
+       f.file_path, f.summary, f.category, f.disposition_reason AS reason
+     FROM findings f
+     JOIN reviews r ON f.review_id = r.id
+     WHERE r.repository_id = $1 AND f.disposition = 'false_positive'
+     ORDER BY LOWER(SUBSTRING(f.summary, 1, 80)), f.file_path, f.disposition_at DESC NULLS LAST
+     LIMIT 20`,
+    [repositoryId]
   );
 }

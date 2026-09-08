@@ -3,7 +3,7 @@ import type { RepositoryConfig } from "./repository-service.js";
 import { createAdapter, type ProviderConfig } from "./llm/index.js";
 import type { LlmAdapter } from "./llm/types.js";
 import { logger } from "../middleware/index.js";
-import { buildRetryPrompt, buildSpecializedTemplate, FIXED_OUTPUT_FORMAT as CENTRAL_FIXED_OUTPUT_FORMAT, SPECIALIZED_PROMPTS } from "../prompts/index.js";
+import { buildRetryPrompt, buildSpecializedTemplate, FIXED_OUTPUT_FORMAT as CENTRAL_FIXED_OUTPUT_FORMAT, REVIEW_METHOD_RULES, SPECIALIZED_PROMPTS } from "../prompts/index.js";
 
 export const FIXED_OUTPUT_FORMAT = `
 ---
@@ -36,6 +36,8 @@ export type RawFinding = {
   risk_level: string;
   suggested_fix: string | null;
   category: string | null;
+  confidence: number | null;
+  test_gap: string | null;
 };
 
 export type { ProviderConfig } from "./llm/index.js";
@@ -67,6 +69,33 @@ export class LlmResponseError extends Error {
   }
 }
 
+export type FeedbackEntry = {
+  file_path: string;
+  summary: string;
+  category: string | null;
+  reason: string | null;
+};
+
+export function buildFeedbackContext(entries: FeedbackEntry[]): string | undefined {
+  if (entries.length === 0) return undefined;
+  const lines = entries.slice(0, 20).map((e, i) => {
+    const summary = e.summary.trim().replace(/\s+/g, " ").slice(0, 140);
+    const category = e.category ? ` [${e.category}]` : "";
+    const reason = e.reason ? ` — team reason: ${e.reason.trim().replace(/\s+/g, " ").slice(0, 160)}` : "";
+    return `${i + 1}. ${e.file_path}${category}: "${summary}"${reason}`;
+  });
+  return lines.join("\n");
+}
+
+export function renderFeedbackContext(feedbackContext?: string): string {
+  if (!feedbackContext) return "";
+  return `
+
+## False-Positive Feedback (team-verified)
+The findings below were previously reported on this repository and marked as false positives by the team. Do NOT report these issues again — a semantically equivalent finding (the same conceptual issue rephrased, or the same location from a different angle) is a repeat. If a genuinely new and materially different issue emerges at the same place, you may report it with confidence below 70 and an explanation of what changed.
+${feedbackContext.slice(0, 2500)}`;
+}
+
 export async function analyzeDiff(
   diff: string,
   commit: CommitInfo,
@@ -76,6 +105,7 @@ export async function analyzeDiff(
   truncated = false,
   projectContext?: string,
   signal?: AbortSignal,
+  feedbackContext?: string,
 ): Promise<{ findings: RawFinding[]; incomplete: boolean; tokenUsage: TokenUsage; aiResponse: string }> {
   const reviewDiff = prepareDiffForAnalysis(diff, repo.excluded_paths);
   const effectiveIncomplete = truncated || reviewDiff.length === MAX_REVIEW_DIFF_CHARS;
@@ -102,6 +132,8 @@ export async function analyzeDiff(
     prompt += `\n\n## Project-Specific Context\nUse these repository rules when they apply:\n${projectContext.slice(0, 3000)}`;
   }
 
+  prompt += renderFeedbackContext(feedbackContext);
+  prompt += REVIEW_METHOD_RULES;
   prompt += CENTRAL_FIXED_OUTPUT_FORMAT;
 
   if (effectiveIncomplete) {
@@ -175,7 +207,18 @@ function parseAnalysisFindings(
     );
   }
 
-  return filterExcludedPaths(parseFindingsStrict(response.content, changedFiles), excludedPaths);
+  return filterExcludedPaths(filterLowConfidence(parseFindingsStrict(response.content, changedFiles)), excludedPaths);
+}
+
+export const MIN_FINDING_CONFIDENCE = 50;
+
+export function filterLowConfidence(findings: RawFinding[]): RawFinding[] {
+  const kept = findings.filter((f) => f.confidence === null || f.confidence >= MIN_FINDING_CONFIDENCE);
+  const dropped = findings.length - kept.length;
+  if (dropped > 0) {
+    logger.info("Dropped low-confidence findings", { dropped, kept: kept.length, threshold: MIN_FINDING_CONFIDENCE });
+  }
+  return kept;
 }
 
 function buildAnalysisResult(
@@ -513,6 +556,8 @@ function parseFindingsStrict(content: string, changedFiles: string[]): RawFindin
         risk_level: String(item.risk ?? item.risk_level ?? "ignore"),
         suggested_fix: normalizeNullableString(item.suggested_fix),
         category: normalizeNullableString(item.category),
+        confidence: normalizeConfidence(item.confidence),
+        test_gap: normalizeNullableString(item.test_gap),
       };
     });
 
@@ -542,6 +587,13 @@ function normalizeLineNumber(value: unknown): number | null {
   if (value == null || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isInteger(n) ? n : null;
+}
+
+function normalizeConfidence(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 function normalizeNullableString(value: unknown): string | null {
@@ -617,6 +669,7 @@ export async function multiPassReview(
   truncated: boolean,
   projectContext?: string,
   signal?: AbortSignal,
+  feedbackContext?: string,
 ): Promise<MultiPassResult> {
   const passes: { focus: string; findings: number }[] = [];
   const allFindings: RawFinding[] = [];
@@ -629,7 +682,7 @@ export async function multiPassReview(
     focuses.map(async (focus) => {
       const template = buildSpecializedTemplate(baseTemplate, focus);
 
-      const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext, signal);
+      const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext, signal, feedbackContext);
       return { focus, findings, tokenUsage, aiResponse };
     })
   );

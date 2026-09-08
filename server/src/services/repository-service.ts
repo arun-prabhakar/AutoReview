@@ -24,6 +24,7 @@ export type RepositoryConfig = {
   llm_max_tokens: number;
   llm_temperature: number;
   multi_pass_review: boolean;
+  agent_review: boolean;
   policy_fail_on_must_fix?: boolean;
   policy_max_should_fix?: number | null;
   policy_post_build_status?: boolean;

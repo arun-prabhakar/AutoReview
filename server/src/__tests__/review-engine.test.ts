@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseFindings, filterExcludedPaths, extractFilePaths, cleanOverviewText, fallbackOverview, isUsableOverview, MAX_REVIEW_DIFF_CHARS, prepareDiffForAnalysis } from "../services/review-engine.js";
+import { parseFindings, filterExcludedPaths, filterLowConfidence, extractFilePaths, cleanOverviewText, fallbackOverview, isUsableOverview, MAX_REVIEW_DIFF_CHARS, prepareDiffForAnalysis, buildFeedbackContext, renderFeedbackContext } from "../services/review-engine.js";
 import type { RawFinding } from "../services/review-engine.js";
 import type { CommitInfo } from "../services/bitbucket-client.js";
 import type { RepositoryConfig } from "../services/repository-service.js";
@@ -81,15 +81,15 @@ describe("parseFindings", () => {
 
 describe("filterExcludedPaths", () => {
   const findings: RawFinding[] = [
-    { file_path: "src/app.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-    { file_path: "node_modules/lodash/index.js", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-    { file_path: "vendor/golang/pkg.go", line_number: 3, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-    { file_path: "dist/bundle.min.js", line_number: 4, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-    { file_path: "dist/bundle.min.css", line_number: 4, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-    { file_path: "package-lock.json", line_number: 5, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-    { file_path: "yarn.lock", line_number: 6, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-    { file_path: "build/output.js", line_number: 7, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-    { file_path: "src/something.generated.ts", line_number: 8, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+    { file_path: "src/app.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: 90, test_gap: null },
+    { file_path: "node_modules/lodash/index.js", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+    { file_path: "vendor/golang/pkg.go", line_number: 3, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+    { file_path: "dist/bundle.min.js", line_number: 4, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+    { file_path: "dist/bundle.min.css", line_number: 4, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+    { file_path: "package-lock.json", line_number: 5, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+    { file_path: "yarn.lock", line_number: 6, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+    { file_path: "build/output.js", line_number: 7, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+    { file_path: "src/something.generated.ts", line_number: 8, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
   ];
 
   it("should filter default exclusions", () => {
@@ -100,8 +100,8 @@ describe("filterExcludedPaths", () => {
 
   it("should filter custom excluded paths", () => {
     const customFindings: RawFinding[] = [
-      { file_path: "src/app.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-      { file_path: "test/spec.ts", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+      { file_path: "src/app.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+      { file_path: "test/spec.ts", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
     ];
     const result = filterExcludedPaths(customFindings, "test/*");
     expect(result).toHaveLength(1);
@@ -110,8 +110,8 @@ describe("filterExcludedPaths", () => {
 
   it("should filter with wildcard patterns", () => {
     const customFindings: RawFinding[] = [
-      { file_path: "src/app.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-      { file_path: "src/generated.types.ts", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+      { file_path: "src/app.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+      { file_path: "src/generated.types.ts", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
     ];
     const result = filterExcludedPaths(customFindings, "src/generated*");
     expect(result).toHaveLength(1);
@@ -120,11 +120,58 @@ describe("filterExcludedPaths", () => {
 
   it("should return all findings if no exclusions match", () => {
     const clean: RawFinding[] = [
-      { file_path: "src/a.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
-      { file_path: "src/b.ts", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null },
+      { file_path: "src/a.ts", line_number: 1, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
+      { file_path: "src/b.ts", line_number: 2, summary: "s", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: null, test_gap: null },
     ];
     const result = filterExcludedPaths(clean, null);
     expect(result).toHaveLength(2);
+  });
+});
+
+describe("confidence handling", () => {
+  it("should parse confidence and test_gap from findings", () => {
+    const content = '[{"file_index":1,"line_start":10,"title":"s","explanation":"e","risk":"must_fix","confidence":92,"suggested_fix":null,"category":"security","test_gap":"no test covers invalid input"}]';
+    const result = parseFindings(content, ["src/a.ts"]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].confidence).toBe(92);
+    expect(result[0].test_gap).toBe("no test covers invalid input");
+  });
+
+  it("should clamp out-of-range confidence values", () => {
+    const content = '[{"file":"a.ts","line_start":1,"title":"s","explanation":"e","risk":"ignore","confidence":150,"suggested_fix":null,"category":null},{"file":"a.ts","line_start":2,"title":"s2","explanation":"e","risk":"ignore","confidence":-10,"suggested_fix":null,"category":null}]';
+    const result = parseFindings(content);
+
+    expect(result[0].confidence).toBe(100);
+    expect(result[1].confidence).toBe(0);
+  });
+
+  it("should default confidence to null when absent", () => {
+    const content = '[{"file":"a.ts","line_start":1,"title":"s","explanation":"e","risk":"must_fix","suggested_fix":null,"category":null}]';
+    const result = parseFindings(content);
+
+    expect(result[0].confidence).toBeNull();
+    expect(result[0].test_gap).toBeNull();
+  });
+
+  it("should drop findings below the confidence threshold and keep null-confidence findings", () => {
+    const findings: RawFinding[] = [
+      { file_path: "a.ts", line_number: 1, summary: "solid", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: 92, test_gap: null },
+      { file_path: "a.ts", line_number: 2, summary: "weak", explanation: "e", risk_level: "should_fix_soon", suggested_fix: null, category: null, confidence: 40, test_gap: null },
+      { file_path: "a.ts", line_number: 3, summary: "legacy", explanation: "e", risk_level: "ignore", suggested_fix: null, category: null, confidence: null, test_gap: null },
+    ];
+    const result = filterLowConfidence(findings);
+
+    expect(result).toHaveLength(2);
+    expect(result.map((f) => f.summary)).toEqual(["solid", "legacy"]);
+  });
+
+  it("should keep findings at exactly the confidence threshold", () => {
+    const findings: RawFinding[] = [
+      { file_path: "a.ts", line_number: 1, summary: "edge", explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: 50, test_gap: null },
+    ];
+
+    expect(filterLowConfidence(findings)).toHaveLength(1);
   });
 });
 
@@ -186,6 +233,71 @@ describe("overview cleanup", () => {
   });
 });
 
+describe("false-positive feedback context", () => {
+  it("builds a numbered feedback list with category and reason", () => {
+    const context = buildFeedbackContext([
+      { file_path: "src/app.ts", summary: "Missing   input validation", category: "security", reason: "validation exists in caller" },
+      { file_path: "src/util.ts", summary: "Magic number", category: null, reason: null },
+    ]);
+
+    expect(context).toContain('1. src/app.ts [security]: "Missing input validation" — team reason: validation exists in caller');
+    expect(context).toContain('2. src/util.ts: "Magic number"');
+  });
+
+  it("returns undefined for empty feedback", () => {
+    expect(buildFeedbackContext([])).toBeUndefined();
+  });
+
+  it("renders the do-not-repeat block only when feedback exists", () => {
+    expect(renderFeedbackContext(undefined)).toBe("");
+    const rendered = renderFeedbackContext('1. src/app.ts: "Something"');
+    expect(rendered).toContain("False-Positive Feedback");
+    expect(rendered).toContain("Do NOT report these issues again");
+    expect(rendered).toContain('1. src/app.ts: "Something"');
+  });
+
+  it("injects feedback context into the analysis prompt", async () => {
+    vi.resetModules();
+    const mockFindings = [{ file: "src/app.ts", line_start: 1, title: "s", explanation: "e", risk: "must_fix", suggested_fix: null, category: null }];
+    const completeMock = vi.fn(async (_request: { messages: { content: string }[] }) => ({
+      content: JSON.stringify(mockFindings),
+      finishReason: "stop",
+      tokenUsage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+    }));
+
+    vi.doMock("../services/llm/index.js", () => ({
+      createAdapter: () => ({ complete: completeMock }),
+      ProviderConfig: {},
+    }));
+
+    const { analyzeDiff } = await import("../services/review-engine.js");
+
+    const commit: CommitInfo = { hash: "abc123", message: "fix bug", author: { raw: "dev" }, date: "2024-01-01" };
+    const repo: RepositoryConfig = {
+      id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
+      branch: "main", strictness: "strict", llm_model: "gpt-test",
+      llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
+      review_mode: "auto", trigger_on_pr_update: false,
+      auto_review_enabled: true, poll_interval_minutes: 5, trigger_on_commit: true,
+      generate_email: true, post_to_bitbucket: false, notification_recipients: null,
+      include_commit_author: false, llm_provider: "openai", llm_provider_id: "prov-1",
+      multi_pass_review: false, agent_review: false,
+    };
+
+    const diff = "diff --git a/src/app.ts b/src/app.ts\n@@ -1 +1 @@\n-old\n+new";
+    await analyzeDiff(
+      diff, commit, repo, "Review this: {{diff}}",
+      { providerType: "openai_compatible", apiBase: "https://api.example.com/v1", apiKey: "k" },
+      false, undefined, undefined, '1. src/app.ts [security]: "Missing validation"',
+    );
+
+    const prompt = String(completeMock.mock.calls[0][0].messages[0].content);
+    expect(prompt).toContain("False-Positive Feedback");
+    expect(prompt).toContain('1. src/app.ts [security]: "Missing validation"');
+    expect(prompt.indexOf("False-Positive Feedback")).toBeLessThan(prompt.indexOf("Review Rules"));
+  });
+});
+
 describe("analyzeDiff", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -216,7 +328,7 @@ describe("analyzeDiff", () => {
       auto_review_enabled: true, poll_interval_minutes: 5, trigger_on_commit: true,
       generate_email: true, post_to_bitbucket: false, notification_recipients: null,
       include_commit_author: false, llm_provider: "google", llm_provider_id: "prov-1",
-      multi_pass_review: false,
+      multi_pass_review: false, agent_review: false,
     };
 
     const provider = { providerType: "openai_compatible", apiBase: "https://api.example.com/v1", apiKey: "test-key" };
@@ -254,7 +366,7 @@ describe("analyzeDiff", () => {
       auto_review_enabled: true, poll_interval_minutes: 5, trigger_on_commit: true,
       generate_email: true, post_to_bitbucket: false, notification_recipients: null,
       include_commit_author: false, llm_provider: "google", llm_provider_id: "prov-1",
-      multi_pass_review: false,
+      multi_pass_review: false, agent_review: false,
     };
 
     await expect(analyzeDiff("fake diff", commit, repo, "Review this: {{diff}}", { providerType: "openai_compatible", apiBase: "https://api.example.com/v1", apiKey: "test-key" }, false))
@@ -296,7 +408,7 @@ describe("analyzeDiff", () => {
       auto_review_enabled: true, poll_interval_minutes: 5, trigger_on_commit: true,
       generate_email: true, post_to_bitbucket: false, notification_recipients: null,
       include_commit_author: false, llm_provider: "google", llm_provider_id: "prov-1",
-      multi_pass_review: false,
+      multi_pass_review: false, agent_review: false,
     };
 
     const diff = "diff --git a/src/app.ts b/src/app.ts\n@@ -1 +1 @@\n-old\n+new";
@@ -306,5 +418,46 @@ describe("analyzeDiff", () => {
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0].file_path).toBe("src/app.ts");
     expect(result.tokenUsage.total_tokens).toBe(37);
+  });
+
+  it("should drop low-confidence findings and keep null-confidence findings", async () => {
+    const mockFindings = [
+      { file_index: 1, line_start: 1, title: "solid", explanation: "e", risk: "must_fix", confidence: 95, suggested_fix: null, category: "security", test_gap: "tests never pass invalid input" },
+      { file_index: 1, line_start: 2, title: "speculative", explanation: "e", risk: "should_fix_soon", confidence: 30, suggested_fix: null, category: "style", test_gap: null },
+      { file_index: 1, line_start: 3, title: "legacy-format", explanation: "e", risk: "ignore", suggested_fix: null, category: null },
+    ];
+
+    vi.doMock("../services/llm/index.js", () => ({
+      createAdapter: () => ({
+        complete: async () => ({
+          content: JSON.stringify(mockFindings),
+          finishReason: "stop",
+          tokenUsage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }),
+      }),
+      ProviderConfig: {},
+    }));
+
+    const { analyzeDiff } = await import("../services/review-engine.js");
+
+    const commit: CommitInfo = { hash: "abc123", message: "fix bug", author: { raw: "dev" }, date: "2024-01-01" };
+    const repo: RepositoryConfig = {
+      id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
+      branch: "main", strictness: "strict", llm_model: "gemini-flash-latest",
+      llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
+      review_mode: "auto", trigger_on_pr_update: false,
+      auto_review_enabled: true, poll_interval_minutes: 5, trigger_on_commit: true,
+      generate_email: true, post_to_bitbucket: false, notification_recipients: null,
+      include_commit_author: false, llm_provider: "google", llm_provider_id: "prov-1",
+      multi_pass_review: false, agent_review: false,
+    };
+
+    const diff = "diff --git a/src/app.ts b/src/app.ts\n@@ -1,3 +1,3 @@\n-a\n+b\n+c";
+    const result = await analyzeDiff(diff, commit, repo, "Review this: {{diff}}", { providerType: "openai_compatible", apiBase: "https://api.example.com/v1", apiKey: "test-key" }, false);
+
+    expect(result.findings).toHaveLength(2);
+    expect(result.findings.map((f) => f.summary)).toEqual(["solid", "legacy-format"]);
+    expect(result.findings[0].confidence).toBe(95);
+    expect(result.findings[0].test_gap).toBe("tests never pass invalid input");
   });
 });
