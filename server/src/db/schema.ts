@@ -395,6 +395,21 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `ALTER TABLE reviews ADD COLUMN IF NOT EXISTS progress_stage TEXT`,
     ],
   },
+  {
+    id: "016",
+    description: "Add finding confidence and test-gap grounding columns",
+    sql: [
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS confidence INTEGER`,
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS test_gap TEXT`,
+    ],
+  },
+  {
+    id: "017",
+    description: "Add agent-mode repository exploration toggle",
+    sql: [
+      `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS agent_review BOOLEAN NOT NULL DEFAULT false`,
+    ],
+  },
 ];
 
 function buildTimestampMigrations(): string[] {
