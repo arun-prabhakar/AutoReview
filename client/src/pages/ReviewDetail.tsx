@@ -480,7 +480,11 @@ export default function ReviewDetail() {
     try {
       await api.patch(`/api/reviews/${id}/findings/${findingId}`, { disposition });
       await dispatch(fetchReviewDetail(id));
-      toast({ title: disposition === "open" ? "Finding reopened" : "Finding updated", variant: "success" });
+      const message =
+        disposition === "false_positive" ? "Marked false positive — future reviews will not repeat it"
+        : disposition === "open" ? "Finding reopened"
+        : "Finding updated";
+      toast({ title: message, variant: "success" });
     } catch (err) {
       toast({ title: "Could not update finding", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
     }

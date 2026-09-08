@@ -305,7 +305,9 @@ reviewsRouter.patch("/:reviewId/findings/:findingId", async (req: Request, res: 
     }
     await run(
       `UPDATE findings SET disposition = $1, disposition_reason = $2, disposition_by = $3,
-       disposition_at = CASE WHEN $1 = 'open' THEN NULL ELSE NOW() END WHERE id = $4`,
+       disposition_at = CASE WHEN $1 = 'open' THEN NULL ELSE NOW() END,
+       suppressed = CASE WHEN $1 = 'false_positive' THEN true ELSE false END
+       WHERE id = $4`,
       [disposition, req.body.reason || null, req.user?.username || null, req.params.findingId],
     );
     res.json(await get("SELECT * FROM findings WHERE id = $1", [req.params.findingId]));
