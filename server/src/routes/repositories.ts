@@ -61,7 +61,7 @@ const ALLOWED_UPDATE_FIELDS: readonly string[] = [
   "poll_interval_minutes", "trigger_on_commit", "trigger_on_pr_update", "strictness",
   "generate_email", "post_to_bitbucket", "excluded_paths", "notification_recipients",
   "include_commit_author", "llm_provider", "llm_provider_id", "llm_model", "llm_max_tokens",
-  "llm_temperature", "multi_pass_review",
+  "llm_temperature", "multi_pass_review", "agent_review",
   "policy_fail_on_must_fix", "policy_max_should_fix", "policy_post_build_status",
 ] as const;
 

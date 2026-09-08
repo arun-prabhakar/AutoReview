@@ -296,6 +296,57 @@ export async function fetchFileFromRepo(
   }
 }
 
+export async function fetchFileFromRepoAtRef(
+  workspace: string,
+  repoSlug: string,
+  filePath: string,
+  ref: string,
+  appPassword: string,
+  username: string
+): Promise<string | null> {
+  const headers = makeAuthHeader(appPassword, username);
+  try {
+    const res = await retryFetch(
+      `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/src/${ref}/${filePath}`,
+      { headers }
+    );
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchRepoDirListing(
+  workspace: string,
+  repoSlug: string,
+  dirPath: string,
+  ref: string,
+  appPassword: string,
+  username: string
+): Promise<string[] | null> {
+  const headers = makeAuthHeader(appPassword, username);
+  const cleanPath = dirPath.replace(/^\/+|\/+$/g, "");
+  const url = `${BITBUCKET_API_BASE}/repositories/${workspace}/${repoSlug}/src/${ref}/${cleanPath}?pagelen=100`;
+  try {
+    const res = await retryFetch(url, { headers });
+    if (!res.ok) return null;
+    const text = await res.text();
+    let parsed: { values?: { path?: string; type?: string }[] };
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(parsed.values)) return null;
+    return parsed.values
+      .filter((v) => typeof v.path === "string")
+      .map((v) => (v.type === "commit_directory" ? `${v.path}/` : v.path as string));
+  } catch {
+    return null;
+  }
+}
+
 export async function postBuildStatus(
   workspace: string,
   repoSlug: string,

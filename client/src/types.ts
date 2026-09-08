@@ -75,6 +75,7 @@ export interface Repository {
   llm_max_tokens: number;
   llm_temperature: number;
   multi_pass_review: number;
+  agent_review: number;
   policy_fail_on_must_fix?: boolean | number;
   policy_max_should_fix?: number | null;
   policy_post_build_status?: boolean | number;
