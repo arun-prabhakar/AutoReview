@@ -38,6 +38,7 @@ export type RawFinding = {
   category: string | null;
   confidence: number | null;
   test_gap: string | null;
+  source_pass?: string | null;
 };
 
 export type { ProviderConfig } from "./llm/index.js";
@@ -217,6 +218,21 @@ export function filterLowConfidence(findings: RawFinding[]): RawFinding[] {
   const dropped = findings.length - kept.length;
   if (dropped > 0) {
     logger.info("Dropped low-confidence findings", { dropped, kept: kept.length, threshold: MIN_FINDING_CONFIDENCE });
+  }
+  return kept;
+}
+
+function suppressedKey(filePath: string, summary: string): string {
+  return `${filePath}:${summary.trim().replace(/\s+/g, " ").toLowerCase().substring(0, 80)}`;
+}
+
+export function filterSuppressedFindings(findings: RawFinding[], suppressed: { file_path: string; summary: string }[]): RawFinding[] {
+  if (suppressed.length === 0) return findings;
+  const suppressedKeys = new Set(suppressed.map((s) => suppressedKey(s.file_path, s.summary)));
+  const kept = findings.filter((f) => !suppressedKeys.has(suppressedKey(f.file_path, f.summary)));
+  const dropped = findings.length - kept.length;
+  if (dropped > 0) {
+    logger.info("Dropped findings matching suppressed false positives", { dropped, kept: kept.length });
   }
   return kept;
 }
@@ -690,7 +706,8 @@ export async function multiPassReview(
   for (const result of results) {
     if (result.status === "fulfilled") {
       const { focus, findings, tokenUsage, aiResponse } = result.value;
-      allFindings.push(...findings);
+      const tagged = findings.map((f) => ({ ...f, source_pass: f.source_pass ?? focus }));
+      allFindings.push(...tagged);
       totalUsage = {
         prompt_tokens: totalUsage.prompt_tokens + tokenUsage.prompt_tokens,
         completion_tokens: totalUsage.completion_tokens + tokenUsage.completion_tokens,

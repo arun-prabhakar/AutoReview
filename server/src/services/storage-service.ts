@@ -44,6 +44,7 @@ export type FindingRow = {
   category: string | null;
   confidence: number | null;
   test_gap: string | null;
+  source_pass: string | null;
   disposition: string;
   disposition_reason: string | null;
   disposition_by: string | null;
@@ -95,17 +96,17 @@ export async function updateReviewStatus(
 export async function insertFindings(reviewId: string, findings: RawFindingInput[]): Promise<void> {
   if (findings.length === 0) return;
   const { v4: uuid } = await import("uuid");
-  const cols = 11;
+  const cols = 12;
   const values: unknown[] = [];
   const placeholders: string[] = [];
   for (const f of findings) {
     const id = uuid();
     const offset = values.length;
     placeholders.push(`(${Array.from({ length: cols }, (_, i) => `$${offset + i + 1}`).join(", ")})`);
-    values.push(id, reviewId, f.file_path, f.line_number, f.summary, f.explanation, f.risk_level, f.suggested_fix, f.category, f.confidence ?? null, f.test_gap ?? null);
+    values.push(id, reviewId, f.file_path, f.line_number, f.summary, f.explanation, f.risk_level, f.suggested_fix, f.category, f.confidence ?? null, f.test_gap ?? null, f.source_pass ?? null);
   }
   await getPool().query(
-    `INSERT INTO findings (id, review_id, file_path, line_number, summary, explanation, risk_level, suggested_fix, category, confidence, test_gap) VALUES ${placeholders.join(", ")}`,
+    `INSERT INTO findings (id, review_id, file_path, line_number, summary, explanation, risk_level, suggested_fix, category, confidence, test_gap, source_pass) VALUES ${placeholders.join(", ")}`,
     values
   );
 }
@@ -325,6 +326,7 @@ export type RawFindingInput = {
   category: string | null;
   confidence?: number | null;
   test_gap?: string | null;
+  source_pass?: string | null;
 };
 
 // --- Cross-Review Finding Deduplication (Feature 6) ---

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseFindings, filterExcludedPaths, filterLowConfidence, extractFilePaths, cleanOverviewText, fallbackOverview, isUsableOverview, MAX_REVIEW_DIFF_CHARS, prepareDiffForAnalysis, buildFeedbackContext, renderFeedbackContext } from "../services/review-engine.js";
+import { parseFindings, filterExcludedPaths, filterLowConfidence, filterSuppressedFindings, extractFilePaths, cleanOverviewText, fallbackOverview, isUsableOverview, MAX_REVIEW_DIFF_CHARS, prepareDiffForAnalysis, buildFeedbackContext, renderFeedbackContext } from "../services/review-engine.js";
 import type { RawFinding } from "../services/review-engine.js";
 import type { CommitInfo } from "../services/bitbucket-client.js";
 import type { RepositoryConfig } from "../services/repository-service.js";
@@ -230,6 +230,88 @@ describe("overview cleanup", () => {
     const diff = "diff --git a/server/src/services/review-engine.ts b/server/src/services/review-engine.ts";
 
     expect(fallbackOverview(commit, diff)).toBe("Update server/src/services/review-engine.ts.");
+  });
+});
+
+describe("filterSuppressedFindings", () => {
+  const base = { line_number: 1, explanation: "e", risk_level: "must_fix", suggested_fix: null, category: null, confidence: 90, test_gap: null };
+
+  it("drops findings matching a suppressed file and summary prefix", () => {
+    const findings: RawFinding[] = [
+      { ...base, file_path: "src/app.ts", summary: "Missing input validation" },
+      { ...base, file_path: "src/app.ts", summary: "Race condition in cache" },
+    ];
+    const result = filterSuppressedFindings(findings, [
+      { file_path: "src/app.ts", summary: "Missing   input validation" },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].summary).toBe("Race condition in cache");
+  });
+
+  it("keeps the same summary on a different file", () => {
+    const findings: RawFinding[] = [
+      { ...base, file_path: "src/other.ts", summary: "Missing input validation" },
+    ];
+    const result = filterSuppressedFindings(findings, [
+      { file_path: "src/app.ts", summary: "Missing input validation" },
+    ]);
+    expect(result).toHaveLength(1);
+  });
+
+  it("returns findings unchanged when suppression list is empty", () => {
+    const findings: RawFinding[] = [{ ...base, file_path: "src/app.ts", summary: "s" }];
+    expect(filterSuppressedFindings(findings, [])).toEqual(findings);
+  });
+});
+
+describe("multiPassReview source pass tagging", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it("tags each finding with the pass that produced it", async () => {
+    let call = 0;
+    vi.doMock("../services/llm/index.js", () => ({
+      createAdapter: () => ({
+        complete: vi.fn(async () => {
+          call++;
+          return {
+            content: JSON.stringify([{ file: "src/app.ts", line_start: 1, title: `Issue ${call}`, explanation: "e", risk: "must_fix", suggested_fix: null, category: null }]),
+            finishReason: "stop",
+            tokenUsage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          };
+        }),
+        testConnection: async () => ({ message: "ok" }),
+        listModels: async () => [],
+      }),
+      ProviderConfig: {},
+    }));
+
+    const { multiPassReview } = await import("../services/review-engine.js");
+
+    const commit: CommitInfo = { hash: "abc123", message: "m", author: { raw: "dev" }, date: "2024-01-01" };
+    const repo: RepositoryConfig = {
+      id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
+      branch: "main", strictness: "strict", llm_model: "gpt-test",
+      llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
+      review_mode: "auto", trigger_on_pr_update: false,
+      auto_review_enabled: true, poll_interval_minutes: 5, trigger_on_commit: true,
+      generate_email: true, post_to_bitbucket: false, notification_recipients: null,
+      include_commit_author: false, llm_provider: "openai", llm_provider_id: "prov-1",
+      multi_pass_review: true, agent_review: false,
+    };
+
+    const diff = "diff --git a/src/app.ts b/src/app.ts\n@@ -1 +1 @@\n-old\n+new";
+    const result = await multiPassReview(
+      diff, commit, repo, "Review: {{diff}}",
+      { providerType: "openai_compatible", apiBase: "https://api.example.com/v1", apiKey: "k" },
+      false,
+    );
+
+    expect(result.passes).toHaveLength(4);
+    expect(result.findings).toHaveLength(4);
+    const passes = result.findings.map((f) => f.source_pass).sort();
+    expect(passes).toEqual(["maintainability", "performance", "security", "standards"]);
   });
 });
 

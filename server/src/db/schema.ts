@@ -410,6 +410,13 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `ALTER TABLE repositories ADD COLUMN IF NOT EXISTS agent_review BOOLEAN NOT NULL DEFAULT false`,
     ],
   },
+  {
+    id: "018",
+    description: "Add finding source pass attribution",
+    sql: [
+      `ALTER TABLE findings ADD COLUMN IF NOT EXISTS source_pass TEXT`,
+    ],
+  },
 ];
 
 function buildTimestampMigrations(): string[] {
