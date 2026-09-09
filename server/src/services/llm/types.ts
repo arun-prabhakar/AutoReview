@@ -26,4 +26,6 @@ export interface LlmAdapter {
   complete(request: LlmCompletionRequest): Promise<LlmCompletionResult>;
   testConnection(): Promise<{ message: string }>;
   listModels(): Promise<string[]>;
+  /** Optional: batch text embeddings for RAG indexing/retrieval. Providers without an embeddings endpoint simply omit it. */
+  embed?(input: string[], model: string): Promise<number[][]>;
 }

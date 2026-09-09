@@ -65,4 +65,10 @@ export class OpenAIAdapter implements LlmAdapter {
     const response = await this.client.models.list();
     return (response.data || []).map((m) => m.id).sort();
   }
+
+  async embed(input: string[], model: string): Promise<number[][]> {
+    const response = await this.client.embeddings.create({ model, input });
+    const sorted = [...response.data].sort((a, b) => a.index - b.index);
+    return sorted.map((d) => d.embedding);
+  }
 }
