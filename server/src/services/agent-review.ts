@@ -3,7 +3,7 @@ import { fetchFileFromRepoAtRef, fetchRepoDirListing } from "./bitbucket-client.
 import type { RepositoryConfig } from "./repository-service.js";
 import { createAdapter, type ProviderConfig } from "./llm/index.js";
 import type { LlmAdapter, LlmMessage } from "./llm/types.js";
-import { parseFindings, filterExcludedPaths, prepareDiffForAnalysis, renderFeedbackContext, type RawFinding, type TokenUsage } from "./review-engine.js";
+import { parseFindings, filterExcludedPaths, prepareDiffForAnalysis, renderFeedbackContext, renderRetrievedContext, type RawFinding, type TokenUsage } from "./review-engine.js";
 import { FIXED_OUTPUT_FORMAT, REVIEW_METHOD_RULES } from "../prompts/index.js";
 import { logger } from "../middleware/index.js";
 
@@ -150,6 +150,7 @@ export async function runAgentReview(params: {
   truncated: boolean;
   projectContext?: string;
   feedbackContext?: string;
+  retrievedContext?: string;
   signal?: AbortSignal;
   onProgress?: AgentProgressFn;
 }): Promise<AgentReviewResult> {
@@ -171,6 +172,7 @@ export async function runAgentReview(params: {
     basePrompt += `\n\n## Project-Specific Context\nUse these repository rules when they apply:\n${params.projectContext.slice(0, 3000)}`;
   }
   basePrompt += renderFeedbackContext(params.feedbackContext);
+  basePrompt += renderRetrievedContext(params.retrievedContext);
   basePrompt += REVIEW_METHOD_RULES;
   basePrompt += FIXED_OUTPUT_FORMAT;
 

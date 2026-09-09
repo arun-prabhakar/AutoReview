@@ -248,9 +248,9 @@ describe("filterSuppressedFindings", () => {
     expect(result[0].summary).toBe("Race condition in cache");
   });
 
-  it("keeps the same summary on a different file", () => {
+  it("keeps moderately similar summaries on a different file", () => {
     const findings: RawFinding[] = [
-      { ...base, file_path: "src/other.ts", summary: "Missing input validation" },
+      { ...base, file_path: "src/other.ts", summary: "Missing input validation on the import endpoint" },
     ];
     const result = filterSuppressedFindings(findings, [
       { file_path: "src/app.ts", summary: "Missing input validation" },

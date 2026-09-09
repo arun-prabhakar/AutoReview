@@ -97,6 +97,16 @@ The findings below were previously reported on this repository and marked as fal
 ${feedbackContext.slice(0, 2500)}`;
 }
 
+export function renderRetrievedContext(retrievedContext?: string): string {
+  if (!retrievedContext) return "";
+  return `
+
+## Codebase Context (retrieved from repository index)
+The snippets below are semantically related to this change, retrieved from the repository's indexed code. Use them as ground truth for surrounding code: existing patterns, callers, and conventions. They may be partial — absence of evidence is not evidence of absence.
+
+${retrievedContext.slice(0, 6500)}`;
+}
+
 export async function analyzeDiff(
   diff: string,
   commit: CommitInfo,
@@ -107,6 +117,7 @@ export async function analyzeDiff(
   projectContext?: string,
   signal?: AbortSignal,
   feedbackContext?: string,
+  retrievedContext?: string,
 ): Promise<{ findings: RawFinding[]; incomplete: boolean; tokenUsage: TokenUsage; aiResponse: string }> {
   const reviewDiff = prepareDiffForAnalysis(diff, repo.excluded_paths);
   const effectiveIncomplete = truncated || reviewDiff.length === MAX_REVIEW_DIFF_CHARS;
@@ -134,6 +145,7 @@ export async function analyzeDiff(
   }
 
   prompt += renderFeedbackContext(feedbackContext);
+  prompt += renderRetrievedContext(retrievedContext);
   prompt += REVIEW_METHOD_RULES;
   prompt += CENTRAL_FIXED_OUTPUT_FORMAT;
 
@@ -226,10 +238,29 @@ function suppressedKey(filePath: string, summary: string): string {
   return `${filePath}:${summary.trim().replace(/\s+/g, " ").toLowerCase().substring(0, 80)}`;
 }
 
+function summaryTokens(text: string): Set<string> {
+  return new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((t) => t.length > 2));
+}
+
+export function tokenSimilarity(a: string, b: string): number {
+  const ta = summaryTokens(a);
+  const tb = summaryTokens(b);
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let intersection = 0;
+  for (const t of ta) if (tb.has(t)) intersection++;
+  return intersection / (ta.size + tb.size - intersection);
+}
+
 export function filterSuppressedFindings(findings: RawFinding[], suppressed: { file_path: string; summary: string }[]): RawFinding[] {
   if (suppressed.length === 0) return findings;
   const suppressedKeys = new Set(suppressed.map((s) => suppressedKey(s.file_path, s.summary)));
-  const kept = findings.filter((f) => !suppressedKeys.has(suppressedKey(f.file_path, f.summary)));
+  const kept = findings.filter((f) => {
+    if (suppressedKeys.has(suppressedKey(f.file_path, f.summary))) return false;
+    return !suppressed.some((s) => {
+      const similarity = tokenSimilarity(f.summary, s.summary);
+      return (s.file_path === f.file_path && similarity >= 0.55) || similarity >= 0.85;
+    });
+  });
   const dropped = findings.length - kept.length;
   if (dropped > 0) {
     logger.info("Dropped findings matching suppressed false positives", { dropped, kept: kept.length });
@@ -686,6 +717,7 @@ export async function multiPassReview(
   projectContext?: string,
   signal?: AbortSignal,
   feedbackContext?: string,
+  retrievedContext?: string,
 ): Promise<MultiPassResult> {
   const passes: { focus: string; findings: number }[] = [];
   const allFindings: RawFinding[] = [];
@@ -698,7 +730,7 @@ export async function multiPassReview(
     focuses.map(async (focus) => {
       const template = buildSpecializedTemplate(baseTemplate, focus);
 
-      const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext, signal, feedbackContext);
+      const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext, signal, feedbackContext, retrievedContext);
       return { focus, findings, tokenUsage, aiResponse };
     })
   );
