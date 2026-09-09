@@ -49,6 +49,9 @@ export interface Finding {
   disposition?: 'open' | 'resolved' | 'false_positive' | 'accepted_risk';
   disposition_reason?: string | null;
   disposition_by?: string | null;
+  confidence?: number | null;
+  test_gap?: string | null;
+  source_pass?: string | null;
 }
 
 export interface Repository {

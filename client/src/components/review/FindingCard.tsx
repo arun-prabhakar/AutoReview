@@ -15,6 +15,7 @@ interface FindingCardProps {
   risk_level: "must_fix" | "should_fix_soon" | "ignore";
   suggested_fix: string | null;
   category: string | null;
+  source_pass?: string | null;
   className?: string;
   disposition?: "open" | "resolved" | "false_positive" | "accepted_risk";
   onDisposition?: (disposition: "open" | "resolved" | "false_positive" | "accepted_risk") => void;
@@ -45,6 +46,7 @@ export function FindingCard({
   explanation,
   suggested_fix,
   category,
+  source_pass,
   className,
   disposition = "open",
   onDisposition,
@@ -78,6 +80,11 @@ export function FindingCard({
             {category != null && (
               <Badge variant="outline" className="text-xs border-border">
                 {category}
+              </Badge>
+            )}
+            {source_pass != null && source_pass !== "base" && (
+              <Badge variant="outline" className="text-xs border-primary/20 bg-primary/10 text-primary capitalize">
+                {source_pass.replace(/_/g, " ")}
               </Badge>
             )}
           </div>
