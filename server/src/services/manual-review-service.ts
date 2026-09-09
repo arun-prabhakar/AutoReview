@@ -1,9 +1,9 @@
-import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, findPreviousPrReview, getFalsePositiveFeedback, type RawFindingInput } from "./storage-service.js";
+import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, findPreviousPrReview, getFalsePositiveFeedback, type FalsePositiveRow, type RawFindingInput } from "./storage-service.js";
 import { fetchCommitDiff, fetchPrDiff, fetchPrDiffSince, fetchPrInfo, findPullRequestForCommit, postPrComment, postInlinePrComment, postBuildStatus, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
-import { analyzeDiff, buildFeedbackContext, extractFilePaths, fallbackOverview, INITIAL_ANALYSIS_TOKENS, LlmResponseError, multiPassReview, prepareDiffForAnalysis, type RawFinding } from "./review-engine.js";
+import { analyzeDiff, buildFeedbackContext, extractFilePaths, fallbackOverview, filterSuppressedFindings, INITIAL_ANALYSIS_TOKENS, LlmResponseError, multiPassReview, prepareDiffForAnalysis, type RawFinding } from "./review-engine.js";
 import { runAgentReview } from "./agent-review.js";
 import { SPECIALIZED_PROMPTS } from "../prompts/index.js";
 import { type ProviderConfig } from "./llm/index.js";
@@ -15,6 +15,7 @@ import { NotFoundError, ValidationError } from "../errors.js";
 
 const MAX_DIFF_CHARS = 200_000;
 const MAX_FILES_CHANGED = 50;
+const ESTIMATED_AGENT_TURNS = 5;
 
 function countChangedFiles(diff: string): number {
   const matches = diff.match(/^diff --git a\/(.+?) b\/(.+?)$/gm) || [];
@@ -227,8 +228,10 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     const provider = await resolveProvider(ctx.repo);
 
     let feedbackContext: string | undefined;
+    let falsePositives: FalsePositiveRow[] = [];
     try {
-      feedbackContext = buildFeedbackContext(await getFalsePositiveFeedback(ctx.repo.id));
+      falsePositives = await getFalsePositiveFeedback(ctx.repo.id);
+      feedbackContext = buildFeedbackContext(falsePositives);
     } catch (err) {
       logger.warn(`Failed to load false-positive feedback`, { error: String(err) });
     }
@@ -252,6 +255,12 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
         projectContext,
         feedbackContext,
         signal: abortController.signal,
+        onProgress: (turn, maxTurns, detail) => {
+          void run(
+            "UPDATE reviews SET progress_stage = $1 WHERE id = $2",
+            [`Exploring repository with AI agent (turn ${turn}/${maxTurns}): ${detail}`.substring(0, 200), reviewId]
+          ).catch(() => undefined);
+        },
       });
       rawFindings = agentResult.findings;
       incomplete = ctx.truncated;
@@ -267,11 +276,13 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     } else {
       await run("UPDATE reviews SET progress_stage = 'Analyzing changes with AI' WHERE id = $1", [reviewId]);
       const singleResult = await analyzeDiff(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal, feedbackContext);
-      rawFindings = singleResult.findings;
+      rawFindings = singleResult.findings.map((f) => ({ ...f, source_pass: f.source_pass ?? "base" }));
       incomplete = singleResult.incomplete;
       tokenUsage = singleResult.tokenUsage;
       aiResponse = singleResult.aiResponse;
     }
+
+    rawFindings = filterSuppressedFindings(rawFindings, falsePositives);
 
     await ensureNotCancelled(reviewId);
     await run("UPDATE reviews SET progress_stage = 'Saving and linking findings' WHERE id = $1", [reviewId]);
@@ -625,7 +636,11 @@ export async function preflightReview(
 
   const reviewDiff = prepareDiffForAnalysis(diff, repo.excluded_paths);
   const estimatedInputTokens = Math.ceil(reviewDiff.length / 4);
-  const passCount = repo.multi_pass_review ? Object.keys(SPECIALIZED_PROMPTS).length : 1;
+  const passCount = repo.agent_review
+    ? ESTIMATED_AGENT_TURNS
+    : repo.multi_pass_review
+      ? Object.keys(SPECIALIZED_PROMPTS).length
+      : 1;
   const estimatedMaxOutputTokens = Math.min(repo.llm_max_tokens, INITIAL_ANALYSIS_TOKENS) * passCount;
   const estimatedMaxCost = estimateCost(repo.llm_model, {
     prompt_tokens: estimatedInputTokens * passCount,
