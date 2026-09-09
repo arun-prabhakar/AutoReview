@@ -5,6 +5,7 @@ import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
 import { analyzeDiff, buildFeedbackContext, extractFilePaths, fallbackOverview, filterSuppressedFindings, INITIAL_ANALYSIS_TOKENS, LlmResponseError, multiPassReview, prepareDiffForAnalysis, type RawFinding } from "./review-engine.js";
 import { runAgentReview } from "./agent-review.js";
+import { indexChangedFiles, retrieveCodeContext } from "./rag-service.js";
 import { SPECIALIZED_PROMPTS } from "../prompts/index.js";
 import { type ProviderConfig } from "./llm/index.js";
 import { sendReviewEmail, type ReviewMetadata } from "./email-draft-service.js";
@@ -169,10 +170,11 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
   const reviewId = uuid();
 
   let projectContext: string | undefined;
+  let credentials: { password: string; username: string } | undefined;
   try {
-    const { password, username } = await resolveCredentials(ctx.repo);
+    credentials = await resolveCredentials(ctx.repo);
     projectContext = await fetchFileFromRepo(
-      ctx.repo.workspace, ctx.repo.slug, ".autoreview.md", ctx.repo.branch, password, username
+      ctx.repo.workspace, ctx.repo.slug, ".autoreview.md", ctx.repo.branch, credentials.password, credentials.username
     ) ?? undefined;
   } catch (err) {
     logger.warn(`Failed to fetch .autoreview.md`, { error: String(err) });
@@ -236,6 +238,31 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       logger.warn(`Failed to load false-positive feedback`, { error: String(err) });
     }
 
+    let retrievedContext: string | undefined;
+    try {
+      await run("UPDATE reviews SET progress_stage = 'Indexing repository context' WHERE id = $1", [reviewId]);
+      if (credentials) {
+        await indexChangedFiles({
+          repositoryId: ctx.repo.id,
+          workspace: ctx.repo.workspace,
+          slug: ctx.repo.slug,
+          commitHash: ctx.commit.hash,
+          diff: ctx.diff,
+          provider,
+          password: credentials.password,
+          username: credentials.username,
+        });
+      }
+      retrievedContext = await retrieveCodeContext({
+        repositoryId: ctx.repo.id,
+        diff: ctx.diff,
+        commitMessage: ctx.commit.message,
+        provider,
+      });
+    } catch (err) {
+      logger.warn(`RAG context step failed; continuing without it`, { error: String(err) });
+    }
+
     let rawFindings: RawFinding[];
     let incomplete: boolean;
     let tokenUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
@@ -243,17 +270,18 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
 
     if (ctx.repo.agent_review) {
       await run("UPDATE reviews SET progress_stage = 'Exploring repository with AI agent' WHERE id = $1", [reviewId]);
-      const { password, username } = await resolveCredentials(ctx.repo);
+      const agentCreds = credentials ?? (await resolveCredentials(ctx.repo));
       const agentResult = await runAgentReview({
         diff: ctx.diff,
         commit: ctx.commit,
         repo: ctx.repo,
         promptTemplate: template,
         provider,
-        credentials: { password, username },
+        credentials: agentCreds,
         truncated: ctx.truncated,
         projectContext,
         feedbackContext,
+        retrievedContext,
         signal: abortController.signal,
         onProgress: (turn, maxTurns, detail) => {
           void run(
@@ -268,14 +296,14 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
       aiResponse = agentResult.aiResponse;
     } else if (ctx.repo.multi_pass_review) {
       await run("UPDATE reviews SET progress_stage = 'Running specialized AI passes' WHERE id = $1", [reviewId]);
-      const multiResult = await multiPassReview(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal, feedbackContext);
+      const multiResult = await multiPassReview(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal, feedbackContext, retrievedContext);
       rawFindings = multiResult.findings;
       incomplete = ctx.truncated;
       tokenUsage = multiResult.tokenUsage;
       aiResponse = multiResult.aiResponse;
     } else {
       await run("UPDATE reviews SET progress_stage = 'Analyzing changes with AI' WHERE id = $1", [reviewId]);
-      const singleResult = await analyzeDiff(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal, feedbackContext);
+      const singleResult = await analyzeDiff(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal, feedbackContext, retrievedContext);
       rawFindings = singleResult.findings.map((f) => ({ ...f, source_pass: f.source_pass ?? "base" }));
       incomplete = singleResult.incomplete;
       tokenUsage = singleResult.tokenUsage;
