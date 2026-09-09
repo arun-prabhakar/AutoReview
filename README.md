@@ -17,10 +17,12 @@ The app supports both manual review from the UI and scheduled automatic review t
 - **AI overview**: each completed review gets a compact, complete overview sentence for dashboards and email drafts.
 - **Raw AI response storage**: stores the model's raw review output in `reviews.ai_response` for admin inspection.
 - **Admin AI response viewer**: admins can open a formatted raw-response viewer from the review detail page.
-- **Structured findings**: findings are grouped as `must_fix`, `should_fix_soon`, and `ignore`, with file, line, category, explanation, and suggested fix.
+- **Structured findings**: findings are grouped as `must_fix`, `should_fix_soon`, and `ignore`, with file, line, category, explanation, suggested fix, calibrated confidence (0-100, below 50 auto-filtered), test-gap grounding, and the pass that produced them.
 - **Configurable review strictness**: per-repository strictness controls how aggressively issues are flagged.
 - **Prompt templates**: admins can manage prompt templates, view the fixed output format, test prompts, and enhance prompts with an LLM.
-- **Multi-pass review mode**: optionally run specialized passes for security, performance, and maintainability, then deduplicate findings.
+- **Multi-pass review mode**: run specialized passes for security, performance, maintainability, and coding standards on every diff, then deduplicate findings. Each finding is tagged with its source pass.
+- **Agent mode**: let the AI explore repository files (list directories, read files at the reviewed commit) before producing the review, verifying suspected issues against real code. Takes priority over multi-pass.
+- **False-positive feedback loop**: mark findings as false positives and future reviews receive the suppressed patterns as do-not-repeat context, plus a deterministic post-filter that drops exact repeats.
 - **Path exclusions**: default and custom exclusion patterns prevent generated, vendor, build, and configured paths from being reported.
 - **Bitbucket comments**: optionally post PR comments and inline comments back to Bitbucket.
 - **Email drafts and SMTP delivery**: generate review email text and optionally send notifications via repository SMTP settings.

@@ -343,7 +343,8 @@ AutoReview
 
 | Service | File | Purpose |
 |---|---|---|
-| review-engine | `services/review-engine.ts` | Core AI analysis: builds prompt, calls OpenAI-compatible API, parses and filters findings |
+| review-engine | `services/review-engine.ts` | Core AI analysis: builds prompt, calls OpenAI-compatible API, parses and filters findings (confidence, exclusions), multi-pass orchestration |
+| agent-review | `services/agent-review.ts` | Agent mode: iterative TOOL_CALL/FINAL loop exploring repository files via Bitbucket API before finalizing findings |
 | manual-review-service | `services/manual-review-service.ts` | Orchestrates manual review flow: dedup → Bitbucket fetch → AI analysis → store → notify |
 | automatic-review-service | `services/automatic-review-service.ts` | Background polling loop for auto-review on enabled repos |
 | bitbucket-client | `services/bitbucket-client.ts` | Bitbucket REST API client: diffs, commits, PRs, comments, retry with backoff |
@@ -437,6 +438,8 @@ PostgreSQL. Schema versioned with `ensureSchema` check on startup. All tables cr
 | llm_model | TEXT | Model name (default: `gpt-4`) |
 | llm_max_tokens | INTEGER | Max response tokens (default: 4096) |
 | llm_temperature | REAL | Sampling temperature (default: 0.2) |
+| multi_pass_review | INTEGER | 0 or 1 (default: 0) — run specialized security/performance/maintainability/coding-standards passes on every diff |
+| agent_review | INTEGER | 0 or 1 (default: 0) — AI explores repository files before reviewing; takes priority over multi-pass |
 | smtp_host | TEXT | SMTP server |
 | smtp_port | INTEGER | SMTP port |
 | smtp_user | TEXT | SMTP username |
@@ -475,6 +478,9 @@ PostgreSQL. Schema versioned with `ensureSchema` check on startup. All tables cr
 | risk_level | TEXT | `must_fix`, `should_fix_soon`, `ignore` |
 | suggested_fix | TEXT | Fix suggestion (nullable) |
 | category | TEXT | `security`, `performance`, `correctness`, `maintainability`, `style` |
+| confidence | INTEGER | 0-100 calibrated confidence; findings below 50 are auto-filtered (nullable for legacy findings) |
+| test_gap | TEXT | Which test should catch this issue and why it does not (nullable) |
+| source_pass | TEXT | Pass that produced the finding: `base`, `security`, `performance`, `maintainability`, `standards`, or `agent` (nullable for legacy findings) |
 
 ### prompt_templates
 
@@ -822,6 +828,13 @@ AutoReview should be:
 - Configurable
 - Privacy-first
 - Modular
+
+---
+
+## Platform Constraints
+
+- **Serverless-first**: AutoReview is designed to run on serverless infrastructure. Any feature proposal must work without persistent processes, background workers beyond scheduled invocations, or long-lived connections. Time-boxed work per invocation (bounded loops, turn budgets) is the pattern to follow.
+- **Zero non-LLM cost**: Every component except LLM API calls must run on free tiers (hosting, PostgreSQL/Supabase, VCS APIs). Feature suggestions that would introduce paid infrastructure (vector databases, message queues, dedicated WebSocket servers) are out of scope unless a free-tier-compatible alternative exists (e.g., pgvector on the existing Postgres instead of a managed vector service).
 
 ---
 
