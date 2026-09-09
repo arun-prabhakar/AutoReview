@@ -22,7 +22,8 @@ The app supports both manual review from the UI and scheduled automatic review t
 - **Prompt templates**: admins can manage prompt templates, view the fixed output format, test prompts, and enhance prompts with an LLM.
 - **Multi-pass review mode**: run specialized passes for security, performance, maintainability, and coding standards on every diff, then deduplicate findings. Each finding is tagged with its source pass.
 - **Agent mode**: let the AI explore repository files (list directories, read files at the reviewed commit) before producing the review, verifying suspected issues against real code. Takes priority over multi-pass.
-- **False-positive feedback loop**: mark findings as false positives and future reviews receive the suppressed patterns as do-not-repeat context, plus a deterministic post-filter that drops exact repeats.
+- **RAG codebase context**: changed files are chunked and embedded into a pgvector index on the existing Postgres; each review retrieves semantically related code and injects it as ground-truth context. Incremental (grows per review), free-tier only, degrades gracefully when pgvector or embeddings are unavailable.
+- **False-positive feedback loop**: mark findings as false positives and future reviews receive the suppressed patterns as do-not-repeat context, plus a fuzzy post-filter (token similarity) that drops rephrased repeats.
 - **Path exclusions**: default and custom exclusion patterns prevent generated, vendor, build, and configured paths from being reported.
 - **Bitbucket comments**: optionally post PR comments and inline comments back to Bitbucket.
 - **Email drafts and SMTP delivery**: generate review email text and optionally send notifications via repository SMTP settings.

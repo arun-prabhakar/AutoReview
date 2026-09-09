@@ -345,6 +345,7 @@ AutoReview
 |---|---|---|
 | review-engine | `services/review-engine.ts` | Core AI analysis: builds prompt, calls OpenAI-compatible API, parses and filters findings (confidence, exclusions), multi-pass orchestration |
 | agent-review | `services/agent-review.ts` | Agent mode: iterative TOOL_CALL/FINAL loop exploring repository files via Bitbucket API before finalizing findings |
+| rag-service | `services/rag-service.ts` | RAG: chunk/embed changed files into pgvector on the existing Postgres and retrieve semantically related context per review; bounded per-invocation, degrades gracefully |
 | manual-review-service | `services/manual-review-service.ts` | Orchestrates manual review flow: dedup → Bitbucket fetch → AI analysis → store → notify |
 | automatic-review-service | `services/automatic-review-service.ts` | Background polling loop for auto-review on enabled repos |
 | bitbucket-client | `services/bitbucket-client.ts` | Bitbucket REST API client: diffs, commits, PRs, comments, retry with backoff |
