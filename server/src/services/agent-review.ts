@@ -138,6 +138,8 @@ export type AgentReviewResult = {
   toolsUsed: string[];
 };
 
+export type AgentProgressFn = (turn: number, maxTurns: number, detail: string) => void;
+
 export async function runAgentReview(params: {
   diff: string;
   commit: CommitInfo;
@@ -149,6 +151,7 @@ export async function runAgentReview(params: {
   projectContext?: string;
   feedbackContext?: string;
   signal?: AbortSignal;
+  onProgress?: AgentProgressFn;
 }): Promise<AgentReviewResult> {
   const reviewDiff = prepareDiffForAnalysis(params.diff, params.repo.excluded_paths);
   const changedFiles = (reviewDiff.match(/^diff --git a\/(.+?) b\/(.+?)$/gm) || [])
@@ -201,7 +204,8 @@ export async function runAgentReview(params: {
     transcript.push(entry);
 
     if (turn.action === "FINAL") {
-      const findings = filterExcludedPaths(parseFindings(turn.content, changedFiles), params.repo.excluded_paths);
+      const findings = filterExcludedPaths(parseFindings(turn.content, changedFiles), params.repo.excluded_paths)
+        .map((f) => ({ ...f, source_pass: f.source_pass ?? "agent" }));
       logger.info("Agent review finished", {
         turns,
         toolsUsed: toolsUsed.length,
@@ -242,6 +246,9 @@ export async function runAgentReview(params: {
     entry.toolResult = toolResult;
     messages.push({ role: "assistant", content: result.content });
     messages.push({ role: "user", content: `TOOL_RESULT:\n${toolResult}\n\nTurn ${turns}/${MAX_AGENT_TURNS} used. Continue exploring or return FINAL.` });
+    try {
+      params.onProgress?.(turns, MAX_AGENT_TURNS, `${turn.tool} ${sanitizePath(turn.args?.path) ?? ""}`.trim());
+    } catch { /* progress reporting must never break the review loop */ }
   }
 
   messages.push({ role: "user", content: `Turn budget exhausted. Return {"action":"FINAL","content":"<findings JSON array as string>"} now.` });
@@ -259,7 +266,8 @@ export async function runAgentReview(params: {
 
   const turn = parseAgentTurn(final.content);
   const finalContent = turn.action === "FINAL" ? turn.content : final.content;
-  const findings = filterExcludedPaths(parseFindings(finalContent, changedFiles), params.repo.excluded_paths);
+  const findings = filterExcludedPaths(parseFindings(finalContent, changedFiles), params.repo.excluded_paths)
+    .map((f) => ({ ...f, source_pass: f.source_pass ?? "agent" }));
   logger.info("Agent review hit turn budget", { turns, findings: findings.length, repository: params.repo.name });
   return { findings, tokenUsage, aiResponse: JSON.stringify(transcript, null, 2), turns, toolsUsed };
 }
