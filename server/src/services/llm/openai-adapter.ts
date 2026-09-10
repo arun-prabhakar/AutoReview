@@ -4,11 +4,14 @@ import { logger } from "../../middleware/index.js";
 
 const clientCache = new Map<string, OpenAI>();
 
-function getClient(apiBase: string, apiKey: string): OpenAI {
-  const cacheKey = `${apiBase}:${apiKey.substring(0, 8)}`;
+const DEFAULT_HEADERS = { "User-Agent": "autoreview/1.0" };
+
+function getClient(apiBase: string, apiKey: string, customHeaders?: Record<string, string>): OpenAI {
+  const defaultHeaders = { ...DEFAULT_HEADERS, ...customHeaders };
+  const cacheKey = `${apiBase}:${apiKey.substring(0, 8)}:${JSON.stringify(defaultHeaders)}`;
   let client = clientCache.get(cacheKey);
   if (!client) {
-    client = new OpenAI({ apiKey, baseURL: apiBase });
+    client = new OpenAI({ apiKey, baseURL: apiBase, defaultHeaders });
     clientCache.set(cacheKey, client);
     if (clientCache.size > 20) {
       const firstKey = clientCache.keys().next().value;
@@ -24,8 +27,9 @@ export class OpenAIAdapter implements LlmAdapter {
   constructor(
     private apiBase: string,
     private apiKey: string,
+    customHeaders?: Record<string, string>,
   ) {
-    this.client = getClient(apiBase, apiKey);
+    this.client = getClient(apiBase, apiKey, customHeaders);
   }
 
   async complete(request: LlmCompletionRequest): Promise<LlmCompletionResult> {

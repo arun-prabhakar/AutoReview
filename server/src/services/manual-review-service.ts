@@ -2,7 +2,7 @@ import { findExistingReview, findFindingsByReviewId, createReview, updateReviewS
 import { fetchCommitDiff, fetchPrDiff, fetchPrDiffSince, fetchPrInfo, findPullRequestForCommit, postPrComment, postInlinePrComment, postBuildStatus, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
 import { getRepoById, type RepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
-import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
+import { getDecryptedApiKey, getProviderById, parseCustomHeaders } from "./provider-service.js";
 import { analyzeDiff, buildFeedbackContext, extractFilePaths, fallbackOverview, filterSuppressedFindings, INITIAL_ANALYSIS_TOKENS, LlmResponseError, multiPassReview, prepareDiffForAnalysis, type RawFinding } from "./review-engine.js";
 import { runAgentReview } from "./agent-review.js";
 import { indexChangedFiles, retrieveCodeContext } from "./rag-service.js";
@@ -136,6 +136,7 @@ async function resolveProvider(repo: RepositoryConfig): Promise<ProviderConfig> 
     apiBase: provider.api_base,
     apiKey,
     awsRegion: provider.aws_region || undefined,
+    customHeaders: parseCustomHeaders(provider.custom_headers),
   };
 }
 

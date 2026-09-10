@@ -7,6 +7,7 @@ export type ProviderConfig = {
   apiBase: string;
   apiKey: string;
   awsRegion?: string;
+  customHeaders?: Record<string, string>;
 };
 
 export { ProviderConfig as LlmProviderConfig };
@@ -31,6 +32,6 @@ export function createAdapter(config: ProviderConfig): LlmAdapter {
 
     case "openai_compatible":
     default:
-      return new OpenAIAdapter(config.apiBase, config.apiKey);
+      return new OpenAIAdapter(config.apiBase, config.apiKey, config.customHeaders);
   }
 }
