@@ -2,6 +2,7 @@ import { Router } from "express";
 import { all, run, get } from "../db/queries.js";
 import { encrypt } from "../services/encryption-service.js";
 import { getDecryptedApiKey, getProviderById, parseCustomHeaders } from "../services/provider-service.js";
+import { upsertGlobalLlmSettings } from "../services/repository-service.js";
 import { createAdapter } from "../services/llm/index.js";
 import { logger } from "../middleware/index.js";
 import { CONNECTION_TEST_PROMPT } from "../prompts/index.js";
@@ -13,6 +14,31 @@ settingsRouter.get("/llm", async (_req, res) => {
     "SELECT id, name, llm_provider, llm_provider_id, llm_model, llm_max_tokens, llm_temperature FROM repositories"
   );
   res.json(repos);
+});
+
+settingsRouter.get("/llm-global", async (_req, res) => {
+  const row = await get("SELECT id, provider_id, model, max_tokens, temperature FROM llm_settings WHERE id = 'global'");
+  res.json(row || { id: "global", provider_id: null, model: null, max_tokens: null, temperature: null });
+});
+
+settingsRouter.put("/llm-global", async (req, res) => {
+  const { provider_id, model, max_tokens, temperature } = req.body;
+  if (!provider_id || !model) {
+    res.status(400).json({ error: "provider_id and model are required" });
+    return;
+  }
+  try {
+    await upsertGlobalLlmSettings({
+      provider_id: String(provider_id),
+      model: String(model),
+      max_tokens: Number(max_tokens) || 4096,
+      temperature: Number(temperature) || 0.2,
+    });
+    res.json({ updated: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error";
+    res.status(500).json({ error: message });
+  }
 });
 
 settingsRouter.get("/smtp", async (_req, res) => {
@@ -42,7 +68,14 @@ settingsRouter.put("/llm/:repo_id", async (req, res) => {
   try {
     await run(
       `UPDATE repositories SET llm_provider = $1, llm_provider_id = $2, llm_model = $3, llm_max_tokens = $4, llm_temperature = $5, updated_at = NOW() WHERE id = $6`,
-      [llm_provider, llm_provider_id, llm_model, llm_max_tokens, llm_temperature, req.params.repo_id]
+      [
+        llm_provider || null,
+        llm_provider_id || null,
+        llm_model || null,
+        llm_max_tokens === "" || llm_max_tokens == null ? null : Number(llm_max_tokens),
+        llm_temperature === "" || llm_temperature == null ? null : Number(llm_temperature),
+        req.params.repo_id,
+      ]
     );
     res.json({ updated: true });
   } catch (error) {
