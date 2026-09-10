@@ -18,6 +18,7 @@ export function NotificationsTab({ repositoryId = "all" }: { repositoryId?: stri
   const { smtp } = useSelector((state: RootState) => state.settings);
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
+  const [togglingEmail, setTogglingEmail] = useState(false);
   const [savingRepo, setSavingRepo] = useState<Record<string, boolean>>({});
   const [smtpForm, setSmtpForm] = useState({
     smtp_host: "",
@@ -27,6 +28,7 @@ export function NotificationsTab({ repositoryId = "all" }: { repositoryId?: stri
     smtp_from_address: "",
   });
   const visibleRepos = repositoryId === "all" ? repos : repos.filter((repo) => String(repo.id) === repositoryId);
+  const emailEnabled = smtp ? smtp.enabled !== false : true;
 
   useEffect(() => {
     if (smtp) {
@@ -43,13 +45,28 @@ export function NotificationsTab({ repositoryId = "all" }: { repositoryId?: stri
   const saveSmtp = async () => {
     setSaving(true);
     try {
-      await api.put("/api/settings/smtp", smtpForm);
+      const body: Record<string, unknown> = { ...smtpForm };
+      if (!body.smtp_password) delete body.smtp_password;
+      await api.put("/api/settings/smtp", body);
       toast({ title: "SMTP settings saved", variant: "success" });
       dispatch(fetchSettings());
     } catch {
       toast({ title: "Failed to save SMTP settings", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleEmailEnabled = async (checked: boolean) => {
+    setTogglingEmail(true);
+    try {
+      await api.put("/api/settings/smtp", { enabled: checked });
+      dispatch(fetchSettings());
+      toast({ title: checked ? "Email notifications enabled" : "Email notifications disabled", variant: "success" });
+    } catch {
+      toast({ title: "Failed to toggle email notifications", variant: "destructive" });
+    } finally {
+      setTogglingEmail(false);
     }
   };
 
@@ -72,94 +89,128 @@ export function NotificationsTab({ repositoryId = "all" }: { repositoryId?: stri
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base">SMTP Configuration</CardTitle>
+            <CardTitle className="text-base">Email Notifications</CardTitle>
           </div>
-          {saving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          {(togglingEmail || saving) && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">Global SMTP settings used by all repositories for sending review notifications.</p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>SMTP Host</Label>
-              <Input
-                value={smtpForm.smtp_host}
-                onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_host: e.target.value }))}
-                onBlur={saveSmtp}
-                disabled={saving}
-                placeholder="smtp.example.com"
-              />
+        <CardContent>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">{emailEnabled ? "Enabled" : "Disabled"}</Label>
+              <p className="text-xs text-muted-foreground">
+                {emailEnabled
+                  ? "Review results are sent via SMTP after each review. Configure the server and recipients below."
+                  : "No review emails are sent. Enable to configure the SMTP server and recipients."}
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label>SMTP Port</Label>
-              <Input
-                type="number"
-                value={smtpForm.smtp_port}
-                onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_port: e.target.value }))}
-                onBlur={saveSmtp}
-                disabled={saving}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>SMTP User</Label>
-              <Input
-                value={smtpForm.smtp_user}
-                onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_user: e.target.value }))}
-                onBlur={saveSmtp}
-                disabled={saving}
-                placeholder="user@example.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>SMTP Password</Label>
-              <Input
-                type="password"
-                value={smtpForm.smtp_password}
-                onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_password: e.target.value }))}
-                onBlur={saveSmtp}
-                disabled={saving}
-                placeholder={smtp?.smtp_user ? "Leave blank to keep current" : ""}
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>From Address</Label>
-            <Input
-              value={smtpForm.smtp_from_address}
-              onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_from_address: e.target.value }))}
-              onBlur={saveSmtp}
-              disabled={saving}
-              placeholder="autoreview@example.com"
+            <input
+              type="checkbox"
+              checked={emailEnabled}
+              onChange={(e) => toggleEmailEnabled(e.target.checked)}
+              disabled={togglingEmail}
+              aria-label="Enable email notifications"
+              className="h-4 w-4 rounded border-border accent-primary"
             />
           </div>
         </CardContent>
       </Card>
 
-      <Separator />
+      {emailEnabled && (
+        <>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">SMTP Configuration</CardTitle>
+              </div>
+              {saving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">Global SMTP settings used by all repositories for sending review notifications.</p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>SMTP Host</Label>
+                  <Input
+                    value={smtpForm.smtp_host}
+                    onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_host: e.target.value }))}
+                    onBlur={saveSmtp}
+                    disabled={saving}
+                    placeholder="smtp.example.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>SMTP Port</Label>
+                  <Input
+                    type="number"
+                    value={smtpForm.smtp_port}
+                    onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_port: e.target.value }))}
+                    onBlur={saveSmtp}
+                    disabled={saving}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>SMTP User</Label>
+                  <Input
+                    value={smtpForm.smtp_user}
+                    onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_user: e.target.value }))}
+                    onBlur={saveSmtp}
+                    disabled={saving}
+                    placeholder="user@example.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>SMTP Password</Label>
+                  <Input
+                    type="password"
+                    value={smtpForm.smtp_password}
+                    onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_password: e.target.value }))}
+                    onBlur={saveSmtp}
+                    disabled={saving}
+                    placeholder={smtp?.smtp_user ? "Leave blank to keep current" : ""}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>From Address</Label>
+                <Input
+                  value={smtpForm.smtp_from_address}
+                  onChange={(e) => setSmtpForm((f) => ({ ...f, smtp_from_address: e.target.value }))}
+                  onBlur={saveSmtp}
+                  disabled={saving}
+                  placeholder="autoreview@example.com"
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-      <p className="text-sm text-muted-foreground">Per-repository notification settings</p>
-      {visibleRepos.map((repo) => (
-        <Card key={String(repo.id)}>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base break-all">{String(repo.name)}</CardTitle>
-            {savingRepo[String(repo.id)] && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Recipients (comma-separated)</Label>
-              <Input defaultValue={String(repo.notification_recipients || "")} onBlur={(e) => updateRepo(String(repo.id), { notification_recipients: e.target.value })} disabled={savingRepo[String(repo.id)]} />
-            </div>
-            <div className="flex items-center gap-4">
-              <Label className="text-sm">Include Commit Author</Label>
-              <Select defaultValue={Number(repo.include_commit_author) ? "on" : "off"} onValueChange={(v) => updateRepo(String(repo.id), { include_commit_author: v === "on" ? 1 : 0 })} disabled={savingRepo[String(repo.id)]}>
-                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="on">On</SelectItem><SelectItem value="off">Off</SelectItem></SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+          <Separator />
+
+          <p className="text-sm text-muted-foreground">Per-repository notification settings</p>
+          {visibleRepos.map((repo) => (
+            <Card key={String(repo.id)}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle className="text-base break-all">{String(repo.name)}</CardTitle>
+                {savingRepo[String(repo.id)] && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Recipients (comma-separated)</Label>
+                  <Input defaultValue={String(repo.notification_recipients || "")} onBlur={(e) => updateRepo(String(repo.id), { notification_recipients: e.target.value })} disabled={savingRepo[String(repo.id)]} />
+                </div>
+                <div className="flex items-center gap-4">
+                  <Label className="text-sm">Include Commit Author</Label>
+                  <Select defaultValue={Number(repo.include_commit_author) ? "on" : "off"} onValueChange={(v) => updateRepo(String(repo.id), { include_commit_author: v === "on" ? 1 : 0 })} disabled={savingRepo[String(repo.id)]}>
+                    <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="on">On</SelectItem><SelectItem value="off">Off</SelectItem></SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </>
+      )}
     </>
   );
 }

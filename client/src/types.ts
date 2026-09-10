@@ -129,6 +129,7 @@ export interface SmtpSettings {
   smtp_port: number | null;
   smtp_user: string | null;
   smtp_from_address: string | null;
+  enabled?: boolean;
 }
 
 export interface Notification {
