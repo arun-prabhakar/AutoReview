@@ -24,6 +24,20 @@ export function validateHttpUrl(value: FormDataEntryValue | null, label: string)
   return undefined;
 }
 
+export function validateHeaderJson(value: FormDataEntryValue | null): string | undefined {
+  const raw = String(value ?? "").trim();
+  if (!raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return "Custom headers must be a JSON object, e.g. {\"x-session\": \"value\"}";
+    }
+  } catch {
+    return "Custom headers must be valid JSON";
+  }
+  return undefined;
+}
+
 export function validateEmail(value: string): string | undefined {
   if (!value.trim()) return "Atlassian email is required.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) return "Enter a valid email address.";

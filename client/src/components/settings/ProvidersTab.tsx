@@ -11,7 +11,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { Plus, Trash2, Pencil, Cpu, Loader2, Zap } from "lucide-react";
 import type { Provider } from "./types";
 import { PROVIDER_PRESETS } from "./types";
-import { FieldError, hasErrors, validateHttpUrl, validateRequired } from "./validation";
+import { FieldError, hasErrors, validateHttpUrl, validateRequired, validateHeaderJson } from "./validation";
 import { ListFilter, NoMatchesState } from "./ListFilter";
 
 const BEDROCK_REGIONS = [
@@ -124,6 +124,7 @@ export function ProvidersTab({
     } else {
       nextErrors.api_base = validateHttpUrl(fd.get("api_base"), "API Base URL");
       nextErrors.api_key = validateRequired(fd.get("api_key"), "API Key");
+      nextErrors.custom_headers = validateHeaderJson(fd.get("custom_headers"));
     }
     if (hasErrors(nextErrors)) {
       setErrors(nextErrors);
@@ -147,6 +148,7 @@ export function ProvidersTab({
       } else {
         body.api_base = fd.get("api_base") as string;
         body.api_key = fd.get("api_key") as string;
+        body.custom_headers = String(fd.get("custom_headers") ?? "").trim();
       }
 
       await api.post("/api/providers", body);
@@ -172,6 +174,7 @@ export function ProvidersTab({
     };
     if (!isBedrock) {
       nextErrors.api_base = validateHttpUrl(fd.get("api_base"), "API Base URL");
+      nextErrors.custom_headers = validateHeaderJson(fd.get("custom_headers"));
     }
     if (hasErrors(nextErrors)) {
       setEditErrors(nextErrors);
@@ -200,6 +203,7 @@ export function ProvidersTab({
         body.api_base = fd.get("api_base") as string;
         const apiKey = fd.get("api_key") as string;
         if (apiKey) body.api_key = apiKey;
+        body.custom_headers = String(fd.get("custom_headers") ?? "").trim();
       }
 
       await api.put(`/api/providers/${editingProvider.id}`, body);
@@ -329,6 +333,18 @@ export function ProvidersTab({
                     />
                     <FieldError id="add-provider-api-key-error" message={errors.api_key} />
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-provider-custom-headers">Custom Headers (JSON, optional)</Label>
+                    <Input
+                      id="add-provider-custom-headers"
+                      name="custom_headers"
+                      inputMode="text"
+                      placeholder='{"x-opencode-session": "autoreview"}'
+                      error={!!errors.custom_headers}
+                      aria-describedby={errors.custom_headers ? "add-provider-custom-headers-error" : undefined}
+                    />
+                    <FieldError id="add-provider-custom-headers-error" message={errors.custom_headers} />
+                  </div>
                 </>
               )}
               <Button type="submit" className="w-full" disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{saving ? "Saving..." : "Save"}</Button>
@@ -439,6 +455,18 @@ export function ProvidersTab({
                   <FieldError id="edit-provider-api-base-error" message={editErrors.api_base} />
                 </div>
                 <div className="space-y-2"><Label htmlFor="edit-provider-api-key">API Key</Label><Input id="edit-provider-api-key" name="api_key" type="password" placeholder="Leave blank to keep current key" /></div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-provider-custom-headers">Custom Headers (JSON, optional)</Label>
+                  <Input
+                    id="edit-provider-custom-headers"
+                    name="custom_headers"
+                    placeholder='{"x-opencode-session": "autoreview"}'
+                    defaultValue={editingProvider?.custom_headers || ""}
+                    error={!!editErrors.custom_headers}
+                    aria-describedby={editErrors.custom_headers ? "edit-provider-custom-headers-error" : undefined}
+                  />
+                  <FieldError id="edit-provider-custom-headers-error" message={editErrors.custom_headers} />
+                </div>
               </>
             )}
             <Button type="submit" className="w-full" disabled={editing}>{editing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{editing ? "Saving..." : "Update"}</Button>
