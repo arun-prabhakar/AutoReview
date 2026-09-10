@@ -339,7 +339,7 @@ export function ProvidersTab({
                       id="add-provider-custom-headers"
                       name="custom_headers"
                       inputMode="text"
-                      placeholder='{"x-opencode-session": "autoreview"}'
+                      placeholder='{"x-opencode-session": "${reviewId}"}'
                       error={!!errors.custom_headers}
                       aria-describedby={errors.custom_headers ? "add-provider-custom-headers-error" : undefined}
                     />
@@ -460,7 +460,7 @@ export function ProvidersTab({
                   <Input
                     id="edit-provider-custom-headers"
                     name="custom_headers"
-                    placeholder='{"x-opencode-session": "autoreview"}'
+                    placeholder='{"x-opencode-session": "${reviewId}"}'
                     defaultValue={editingProvider?.custom_headers || ""}
                     error={!!editErrors.custom_headers}
                     aria-describedby={editErrors.custom_headers ? "edit-provider-custom-headers-error" : undefined}

@@ -36,6 +36,10 @@ export function recordLlmCall(entry: LlmCallEntry): void {
   if (ctx) ctx.calls.push(entry);
 }
 
+export function currentLlmReviewId(): string | undefined {
+  return storage.getStore()?.reviewId;
+}
+
 export async function insertLlmCalls(reviewId: string, calls: LlmCallEntry[]): Promise<void> {
   if (calls.length === 0) return;
   try {
