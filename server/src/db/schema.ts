@@ -438,6 +438,13 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `CREATE INDEX IF NOT EXISTS idx_llm_calls_review ON llm_calls (review_id)`,
     ],
   },
+  {
+    id: "020",
+    description: "Add per-provider custom HTTP headers",
+    sql: [
+      `ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS custom_headers TEXT`,
+    ],
+  },
 ];
 
 function buildTimestampMigrations(): string[] {
