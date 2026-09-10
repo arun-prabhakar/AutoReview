@@ -15,8 +15,8 @@ The app supports both manual review from the UI and scheduled automatic review t
 - **Automatic review endpoint**: `/api/cron/auto-review` can poll configured repositories for new commits and PR updates.
 - **Re-review history**: re-run a review for the same commit or PR while preserving older reviews in a linked history chain.
 - **AI overview**: each completed review gets a compact, complete overview sentence for dashboards and email drafts.
-- **Raw AI response storage**: stores the model's raw review output in `reviews.ai_response` for admin inspection.
-- **Admin AI response viewer**: admins can open a formatted raw-response viewer from the review detail page.
+- **Raw AI response storage**: stores the model's raw review output in `reviews.ai_response` for audit purposes.
+- **LLM call logging and viewer**: every request and response exchanged with the model is stored per iteration (`llm_calls`) — single-pass, each multi-pass, every agent turn, and retries — with pass, tokens, and finish reason. Admins can inspect them via the LLM Calls viewer on the review detail page (successful calls show a green tag).
 - **Structured findings**: findings are grouped as `must_fix`, `should_fix_soon`, and `ignore`, with file, line, category, explanation, suggested fix, calibrated confidence (0-100, below 50 auto-filtered), test-gap grounding, and the pass that produced them.
 - **Configurable review strictness**: per-repository strictness controls how aggressively issues are flagged.
 - **Prompt templates**: admins can manage prompt templates, view the fixed output format, test prompts, and enhance prompts with an LLM.
@@ -32,7 +32,8 @@ The app supports both manual review from the UI and scheduled automatic review t
 - **Cost analytics**: admins can inspect token usage, estimated cost, cost by model, and per-review cost.
 - **Repository analytics**: endpoints expose findings over time, top files, and finding density.
 - **User management**: admins can create users, update roles, reset passwords, and delete users.
-- **Provider management**: configure OpenAI-compatible LLM providers, test provider connectivity, and fetch available models.
+- **Provider management**: configure OpenAI-compatible LLM providers, test provider connectivity, and fetch available models. Providers support custom HTTP headers (JSON) — values may include the `${reviewId}` placeholder, substituted per request so session-style headers (e.g. `x-opencode-session`) carry the current review's id for routing and prompt caching.
+- **Centralized LLM defaults**: set a global provider, model, token limit, and temperature; repositories inherit them unless they define explicit overrides.
 - **Secure secrets**: API keys, SMTP passwords, and Bitbucket app passwords are encrypted with AES-256-GCM.
 - **JWT auth with cookies**: login uses JWT auth, an HTTP-only cookie, and role-based access controls.
 
@@ -179,7 +180,7 @@ All application APIs live under `/api`. Most endpoints require authentication; a
 | `POST` | `/api/reviews/pr` | User | Run PR review |
 | `POST` | `/api/reviews/:id/rereview` | User | Re-run an existing review |
 | `GET` | `/api/reviews/:id/chain` | User | Get linked re-review history |
-| `GET` | `/api/reviews/:id/ai-response` | Admin | Get raw stored AI response |
+| `GET` | `/api/reviews/:id/llm-calls` | Admin | Get every stored LLM request/response for a review |
 | `DELETE` | `/api/reviews/:id` | Admin | Delete review and findings |
 | `GET` | `/api/reviews/authors` | User | List commit authors for filtering |
 | `GET` | `/api/reviews/open-prs/:repositoryId` | User | Fetch open Bitbucket PRs |
@@ -206,7 +207,9 @@ All application APIs live under `/api`. Most endpoints require authentication; a
 | `POST` | `/api/providers/:id/test` | Admin | Test provider |
 | `GET` | `/api/providers/:id/models` | Admin | Fetch provider models |
 | `GET` | `/api/settings/llm` | Admin | List repository LLM settings |
-| `PUT` | `/api/settings/llm/:repo_id` | Admin | Update repository LLM settings |
+| `GET` | `/api/settings/llm-global` | Admin | Get global LLM defaults |
+| `PUT` | `/api/settings/llm-global` | Admin | Update global LLM defaults |
+| `PUT` | `/api/settings/llm/:repo_id` | Admin | Update repository LLM settings (empty values inherit global defaults) |
 | `POST` | `/api/settings/llm/test` | Admin | Test LLM settings |
 | `GET` | `/api/settings/smtp` | Admin | List SMTP settings |
 | `PUT` | `/api/settings/smtp/:repo_id` | Admin | Update SMTP settings |

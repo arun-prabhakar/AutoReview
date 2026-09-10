@@ -245,9 +245,6 @@ export default function ReviewDetail() {
   const [shareLoading, setShareLoading] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
   const [diffVisible, setDiffVisible] = useState(false);
-  const [aiResponseOpen, setAiResponseOpen] = useState(false);
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
-  const [aiResponseLoading, setAiResponseLoading] = useState(false);
   const [llmCallsOpen, setLlmCallsOpen] = useState(false);
   const [llmCalls, setLlmCalls] = useState<LlmCallRow[] | null>(null);
   const [llmCallsLoading, setLlmCallsLoading] = useState(false);
@@ -462,23 +459,6 @@ export default function ReviewDetail() {
     setTimeout(() => setShareCopied(false), 2000);
   };
 
-  const handleOpenAiResponse = async () => {
-    if (!id) return;
-    setAiResponseOpen(true);
-    if (aiResponse !== null) return;
-
-    setAiResponseLoading(true);
-    try {
-      const result = await api.get<{ ai_response: string }>(`/api/reviews/${id}/ai-response`);
-      setAiResponse(result.ai_response || "");
-    } catch (err) {
-      toast({ title: "Failed to load AI response", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
-      setAiResponseOpen(false);
-    } finally {
-      setAiResponseLoading(false);
-    }
-  };
-
   const handleOpenLlmCalls = async () => {
     if (!id) return;
     setLlmCallsOpen(true);
@@ -606,14 +586,6 @@ export default function ReviewDetail() {
   const repoName = String(review.repository_name || review.repository_id);
   const branch = String(review.branch || "N/A");
   const aiOverview = String(review.ai_overview || "Review completed.");
-  const formattedAiResponse = (() => {
-    if (!aiResponse) return "";
-    try {
-      return JSON.stringify(JSON.parse(aiResponse), null, 2);
-    } catch {
-      return aiResponse;
-    }
-  })();
 
   const totalFindings = findings.length;
   const durationSeconds = review.completed_at ? Math.max(0, Math.round((new Date(review.completed_at).getTime() - new Date(review.created_at).getTime()) / 1000)) : null;
@@ -792,12 +764,6 @@ AutoReview`;
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
               {rereviewing ? "Reviewing..." : review?.status === "failed" || review?.status === "cancelled" ? "Retry" : "Re-review"}
             </Button>
-            {user?.role === "admin" && (
-              <Button variant="outline" size="sm" onClick={handleOpenAiResponse}>
-                <FileCode className="h-3.5 w-3.5 mr-1.5" />
-                AI Response
-              </Button>
-            )}
             {user?.role === "admin" && (
               <Button variant="outline" size="sm" onClick={handleOpenLlmCalls}>
                 <MessagesSquare className="h-3.5 w-3.5 mr-1.5" />
@@ -1251,45 +1217,6 @@ AutoReview`;
         </div>
       </div>
 
-      <Dialog open={aiResponseOpen} onOpenChange={setAiResponseOpen}>
-        <DialogContent className="sm:max-w-5xl h-[86vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileCode className="h-4 w-4" />
-              AI Response
-            </DialogTitle>
-            <DialogDescription className="pt-1">
-              Raw model output captured for this review. Only admins can view it.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-secondary/50">
-            {aiResponseLoading ? (
-              <div className="p-4 space-y-2">
-                <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-5/6" />
-              </div>
-            ) : formattedAiResponse ? (
-              <div className="h-full max-h-full overflow-auto">
-                <pre className="min-w-max whitespace-pre p-4 text-xs font-mono leading-relaxed text-foreground">{formattedAiResponse}</pre>
-              </div>
-            ) : (
-              <p className="p-4 text-sm text-muted-foreground">No AI response was stored for this review.</p>
-            )}
-          </div>
-          <DialogFooter className="gap-2 sm:gap-0" aria-live="polite">
-            <CopyButton
-              variant="outline"
-              value={formattedAiResponse}
-              label="Copy AI response"
-              toastLabel="AI response"
-              disabled={!formattedAiResponse}
-            />
-            <Button variant="outline" onClick={() => setAiResponseOpen(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={llmCallsOpen} onOpenChange={setLlmCallsOpen}>
         <DialogContent className="sm:max-w-5xl h-[86vh] overflow-hidden flex flex-col">
           <DialogHeader>
@@ -1323,9 +1250,11 @@ AutoReview`;
                       <span className="font-mono text-xs text-muted-foreground shrink-0">#{index + 1}</span>
                       <span className="text-sm font-medium capitalize">{call.pass.replace(/_/g, " ")}</span>
                       {call.attempt > 1 && <span className="rounded bg-warning/10 px-1.5 py-0.5 text-xs text-warning">retry {call.attempt}</span>}
-                      {call.finish_reason && call.finish_reason !== "stop" && (
+                      {call.finish_reason === "stop" ? (
+                        <span className="rounded bg-success/10 px-1.5 py-0.5 text-xs text-success">success</span>
+                      ) : call.finish_reason ? (
                         <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive">{call.finish_reason}</span>
-                      )}
+                      ) : null}
                       <span className="ml-auto flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
                         <span className="font-mono">{call.model ?? "unknown model"}</span>
                         <span>{call.total_tokens ?? 0} tok</span>

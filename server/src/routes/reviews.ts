@@ -231,20 +231,6 @@ reviewsRouter.get("/open-prs/:repositoryId", async (req: Request, res: Response,
   }
 });
 
-reviewsRouter.get("/:id/ai-response", requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const review = await get<{ id: string; ai_response: string | null }>(
-      "SELECT id, ai_response FROM reviews WHERE id = $1",
-      [req.params.id]
-    );
-
-    if (!review) throw new NotFoundError("Review not found");
-    res.json({ ai_response: review.ai_response ?? "" });
-  } catch (err) {
-    next(err);
-  }
-});
-
 reviewsRouter.get("/:id/llm-calls", requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const review = await get<{ id: string }>("SELECT id FROM reviews WHERE id = $1", [req.params.id]);
