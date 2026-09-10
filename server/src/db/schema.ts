@@ -463,6 +463,13 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `ALTER TABLE repositories ALTER COLUMN llm_model DROP DEFAULT`,
     ],
   },
+  {
+    id: "022",
+    description: "Add global email notification enable toggle",
+    sql: [
+      `ALTER TABLE smtp_settings ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT true`,
+    ],
+  },
 ];
 
 function buildTimestampMigrations(): string[] {

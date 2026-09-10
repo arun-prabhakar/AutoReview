@@ -42,19 +42,31 @@ settingsRouter.put("/llm-global", async (req, res) => {
 });
 
 settingsRouter.get("/smtp", async (_req, res) => {
-  const row = await get("SELECT id, smtp_host, smtp_port, smtp_user, smtp_from_address FROM smtp_settings WHERE id = 'global'");
-  res.json(row || { id: "global", smtp_host: null, smtp_port: null, smtp_user: null, smtp_from_address: null });
+  const row = await get("SELECT id, smtp_host, smtp_port, smtp_user, smtp_from_address, enabled FROM smtp_settings WHERE id = 'global'");
+  res.json(row || { id: "global", smtp_host: null, smtp_port: null, smtp_user: null, smtp_from_address: null, enabled: true });
 });
 
 settingsRouter.put("/smtp", async (req, res) => {
-  const { smtp_host, smtp_port, smtp_user, smtp_password, smtp_from_address } = req.body;
+  const { smtp_host, smtp_port, smtp_user, smtp_password, smtp_from_address, enabled } = req.body;
   try {
-    const encryptedPassword = smtp_password ? encrypt(smtp_password) : null;
+    const existing = await get<{ smtp_host: string | null; smtp_port: number | null; smtp_user: string | null; smtp_password_encrypted: string | null; smtp_from_address: string | null; enabled: boolean }>(
+      "SELECT smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address, enabled FROM smtp_settings WHERE id = 'global'"
+    );
+    const host = smtp_host !== undefined ? smtp_host : existing?.smtp_host ?? null;
+    const port = smtp_port !== undefined ? smtp_port : existing?.smtp_port ?? null;
+    const user = smtp_user !== undefined ? smtp_user : existing?.smtp_user ?? null;
+    const fromAddress = smtp_from_address !== undefined ? smtp_from_address : existing?.smtp_from_address ?? null;
+    const isEnabled = enabled !== undefined ? Boolean(enabled) : existing?.enabled ?? true;
+    const encryptedPassword = smtp_password === undefined
+      ? existing?.smtp_password_encrypted ?? null
+      : smtp_password
+        ? encrypt(smtp_password)
+        : null;
     await run(
-      `INSERT INTO smtp_settings (id, smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address, created_at, updated_at)
-       VALUES ('global', $1, $2, $3, $4, $5, NOW(), NOW())
-       ON CONFLICT (id) DO UPDATE SET smtp_host = $1, smtp_port = $2, smtp_user = $3, smtp_password_encrypted = $4, smtp_from_address = $5, updated_at = NOW()`,
-      [smtp_host, smtp_port, smtp_user, encryptedPassword, smtp_from_address]
+      `INSERT INTO smtp_settings (id, smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address, enabled, created_at, updated_at)
+       VALUES ('global', $1, $2, $3, $4, $5, $6, NOW(), NOW())
+       ON CONFLICT (id) DO UPDATE SET smtp_host = $1, smtp_port = $2, smtp_user = $3, smtp_password_encrypted = $4, smtp_from_address = $5, enabled = $6, updated_at = NOW()`,
+      [host, port, user, encryptedPassword, fromAddress, isEnabled]
     );
     res.json({ updated: true });
   } catch (error) {

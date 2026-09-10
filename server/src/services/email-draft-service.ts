@@ -2,6 +2,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import type { RawFinding } from "./review-engine.js";
 import { get } from "../db/queries.js";
 import { decrypt } from "./encryption-service.js";
+import { logger } from "../middleware/index.js";
 
 export type ReviewMetadata = {
   repoName: string;
@@ -118,8 +119,8 @@ export async function sendReviewEmail(
   const [smtpConfig, repo] = await Promise.all([
     get<{
       smtp_host: string; smtp_port: number; smtp_user: string;
-      smtp_password_encrypted: string; smtp_from_address: string;
-    }>("SELECT smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address FROM smtp_settings WHERE id = 'global'"),
+      smtp_password_encrypted: string; smtp_from_address: string; enabled: boolean;
+    }>("SELECT smtp_host, smtp_port, smtp_user, smtp_password_encrypted, smtp_from_address, enabled FROM smtp_settings WHERE id = 'global'"),
     get<{ notification_recipients: string | null }>(
       "SELECT notification_recipients FROM repositories WHERE id = $1",
       [repoId]
@@ -127,6 +128,11 @@ export async function sendReviewEmail(
   ]);
 
   if (!smtpConfig || !smtpConfig.smtp_host) throw new Error("SMTP not configured");
+
+  if (smtpConfig.enabled === false) {
+    logger.info("Email notifications disabled globally; skipping send", { repoId });
+    return;
+  }
 
   const smtpPassword = smtpConfig.smtp_password_encrypted ? decrypt(smtpConfig.smtp_password_encrypted) : "";
 
