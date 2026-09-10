@@ -6,6 +6,7 @@ import { getDecryptedApiKey, getProviderById } from "./provider-service.js";
 import { analyzeDiff, buildFeedbackContext, extractFilePaths, fallbackOverview, filterSuppressedFindings, INITIAL_ANALYSIS_TOKENS, LlmResponseError, multiPassReview, prepareDiffForAnalysis, type RawFinding } from "./review-engine.js";
 import { runAgentReview } from "./agent-review.js";
 import { indexChangedFiles, retrieveCodeContext } from "./rag-service.js";
+import { withLlmCallLogging, insertLlmCalls } from "./llm-call-log.js";
 import { SPECIALIZED_PROMPTS } from "../prompts/index.js";
 import { type ProviderConfig } from "./llm/index.js";
 import { sendReviewEmail, type ReviewMetadata } from "./email-draft-service.js";
@@ -268,47 +269,49 @@ async function executeReview(ctx: ReviewContext, createdBy?: string, parentRevie
     let tokenUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
     let aiResponse: string;
 
-    if (ctx.repo.agent_review) {
-      await run("UPDATE reviews SET progress_stage = 'Exploring repository with AI agent' WHERE id = $1", [reviewId]);
-      const agentCreds = credentials ?? (await resolveCredentials(ctx.repo));
-      const agentResult = await runAgentReview({
-        diff: ctx.diff,
-        commit: ctx.commit,
-        repo: ctx.repo,
-        promptTemplate: template,
-        provider,
-        credentials: agentCreds,
-        truncated: ctx.truncated,
-        projectContext,
-        feedbackContext,
-        retrievedContext,
-        signal: abortController.signal,
-        onProgress: (turn, maxTurns, detail) => {
-          void run(
-            "UPDATE reviews SET progress_stage = $1 WHERE id = $2",
-            [`Exploring repository with AI agent (turn ${turn}/${maxTurns}): ${detail}`.substring(0, 200), reviewId]
-          ).catch(() => undefined);
-        },
-      });
-      rawFindings = agentResult.findings;
-      incomplete = ctx.truncated;
-      tokenUsage = agentResult.tokenUsage;
-      aiResponse = agentResult.aiResponse;
-    } else if (ctx.repo.multi_pass_review) {
-      await run("UPDATE reviews SET progress_stage = 'Running specialized AI passes' WHERE id = $1", [reviewId]);
-      const multiResult = await multiPassReview(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal, feedbackContext, retrievedContext);
-      rawFindings = multiResult.findings;
-      incomplete = ctx.truncated;
-      tokenUsage = multiResult.tokenUsage;
-      aiResponse = multiResult.aiResponse;
-    } else {
+    const analysis = await withLlmCallLogging(reviewId, async () => {
+      if (ctx.repo.agent_review) {
+        await run("UPDATE reviews SET progress_stage = 'Exploring repository with AI agent' WHERE id = $1", [reviewId]);
+        const agentCreds = credentials ?? (await resolveCredentials(ctx.repo));
+        const agentResult = await runAgentReview({
+          diff: ctx.diff,
+          commit: ctx.commit,
+          repo: ctx.repo,
+          promptTemplate: template,
+          provider,
+          credentials: agentCreds,
+          truncated: ctx.truncated,
+          projectContext,
+          feedbackContext,
+          retrievedContext,
+          signal: abortController.signal,
+          onProgress: (turn, maxTurns, detail) => {
+            void run(
+              "UPDATE reviews SET progress_stage = $1 WHERE id = $2",
+              [`Exploring repository with AI agent (turn ${turn}/${maxTurns}): ${detail}`.substring(0, 200), reviewId]
+            ).catch(() => undefined);
+          },
+        });
+        return { rawFindings: agentResult.findings, incomplete: ctx.truncated, tokenUsage: agentResult.tokenUsage, aiResponse: agentResult.aiResponse };
+      }
+      if (ctx.repo.multi_pass_review) {
+        await run("UPDATE reviews SET progress_stage = 'Running specialized AI passes' WHERE id = $1", [reviewId]);
+        const multiResult = await multiPassReview(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal, feedbackContext, retrievedContext);
+        return { rawFindings: multiResult.findings, incomplete: ctx.truncated, tokenUsage: multiResult.tokenUsage, aiResponse: multiResult.aiResponse };
+      }
       await run("UPDATE reviews SET progress_stage = 'Analyzing changes with AI' WHERE id = $1", [reviewId]);
       const singleResult = await analyzeDiff(ctx.diff, ctx.commit, ctx.repo, template, provider, ctx.truncated, projectContext, abortController.signal, feedbackContext, retrievedContext);
-      rawFindings = singleResult.findings.map((f) => ({ ...f, source_pass: f.source_pass ?? "base" }));
-      incomplete = singleResult.incomplete;
-      tokenUsage = singleResult.tokenUsage;
-      aiResponse = singleResult.aiResponse;
-    }
+      return {
+        rawFindings: singleResult.findings.map((f) => ({ ...f, source_pass: f.source_pass ?? "base" })),
+        incomplete: singleResult.incomplete,
+        tokenUsage: singleResult.tokenUsage,
+        aiResponse: singleResult.aiResponse,
+      };
+    });
+
+    await insertLlmCalls(reviewId, analysis.calls);
+    if (!analysis.ok) throw analysis.error;
+    ({ rawFindings, incomplete, tokenUsage, aiResponse } = analysis.result);
 
     rawFindings = filterSuppressedFindings(rawFindings, falsePositives);
 
