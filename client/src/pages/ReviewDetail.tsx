@@ -19,7 +19,7 @@ import { formatDate } from "@/lib/format";
 import { FindingCard } from "@/components/review/FindingCard";
 import { CopyButton, EmptyState, Kbd, PageHeader, StatCard, StatusBadge, type SeverityLevel } from "@/components/shared";
 import { fadeInUp, useReducedMotionVariants } from "@/lib/motion";
-import { Trash2, Mail, ChevronDown, ChevronUp, ChevronRight, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2, XCircle, Search, ShieldAlert, TriangleAlert, Info, ListChecks } from "lucide-react";
+import { Trash2, Mail, ChevronDown, ChevronUp, ChevronRight, GitCommitHorizontal, GitBranch, Shield, FileSearch, Clock, RotateCcw, Coins, FileText, History, Share2, Link2, Copy, Check, AlertCircle, FileCode, Loader2, XCircle, Search, ShieldAlert, TriangleAlert, Info, ListChecks, MessagesSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type DiffLineType = "file" | "meta" | "hunk" | "add" | "del" | "context";
@@ -201,6 +201,20 @@ function DiffViewer({ sections, highlightId }: { sections: DiffSection[]; highli
 type GroupMode = "severity" | "file";
 const GROUP_MODE_STORAGE_KEY = "autoreview:review-detail:group-mode";
 const KNOWN_CATEGORIES = ["security", "performance", "correctness", "maintainability", "style"];
+
+type LlmCallRow = {
+  id: string;
+  pass: string;
+  attempt: number;
+  model: string | null;
+  request_text: string;
+  response_text: string | null;
+  finish_reason: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  created_at: string;
+};
 const SEVERITY_LEVELS: SeverityLevel[] = ["must_fix", "should_fix_soon", "ignore"];
 
 interface FileGroup {
@@ -234,6 +248,10 @@ export default function ReviewDetail() {
   const [aiResponseOpen, setAiResponseOpen] = useState(false);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [aiResponseLoading, setAiResponseLoading] = useState(false);
+  const [llmCallsOpen, setLlmCallsOpen] = useState(false);
+  const [llmCalls, setLlmCalls] = useState<LlmCallRow[] | null>(null);
+  const [llmCallsLoading, setLlmCallsLoading] = useState(false);
+  const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
   const [findingSearch, setFindingSearch] = useState("");
   const [findingStatus, setFindingStatus] = useState("open");
   const [findingLimit, setFindingLimit] = useState(10);
@@ -458,6 +476,23 @@ export default function ReviewDetail() {
       setAiResponseOpen(false);
     } finally {
       setAiResponseLoading(false);
+    }
+  };
+
+  const handleOpenLlmCalls = async () => {
+    if (!id) return;
+    setLlmCallsOpen(true);
+    if (llmCalls !== null) return;
+
+    setLlmCallsLoading(true);
+    try {
+      const result = await api.get<{ calls: LlmCallRow[] }>(`/api/reviews/${id}/llm-calls`);
+      setLlmCalls(result.calls || []);
+    } catch (err) {
+      toast({ title: "Failed to load LLM calls", description: err instanceof Error ? err.message : "Unknown error", variant: "destructive" });
+      setLlmCallsOpen(false);
+    } finally {
+      setLlmCallsLoading(false);
     }
   };
 
@@ -761,6 +796,12 @@ AutoReview`;
               <Button variant="outline" size="sm" onClick={handleOpenAiResponse}>
                 <FileCode className="h-3.5 w-3.5 mr-1.5" />
                 AI Response
+              </Button>
+            )}
+            {user?.role === "admin" && (
+              <Button variant="outline" size="sm" onClick={handleOpenLlmCalls}>
+                <MessagesSquare className="h-3.5 w-3.5 mr-1.5" />
+                LLM Calls
               </Button>
             )}
             {user?.role === "admin" && (
@@ -1245,6 +1286,78 @@ AutoReview`;
               disabled={!formattedAiResponse}
             />
             <Button variant="outline" onClick={() => setAiResponseOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={llmCallsOpen} onOpenChange={setLlmCallsOpen}>
+        <DialogContent className="sm:max-w-5xl h-[86vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessagesSquare className="h-4 w-4" />
+              LLM Calls {llmCalls ? `(${llmCalls.length})` : ""}
+            </DialogTitle>
+            <DialogDescription className="pt-1">
+              Every request and response exchanged with the model for this review, per iteration. Only admins can view it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto space-y-3 pr-1">
+            {llmCallsLoading ? (
+              <div className="p-4 space-y-2">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            ) : llmCalls && llmCalls.length > 0 ? (
+              llmCalls.map((call, index) => {
+                const expanded = expandedCallId === call.id;
+                return (
+                  <div key={call.id} className="rounded-lg border border-border bg-card">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                      onClick={() => setExpandedCallId(expanded ? null : call.id)}
+                      aria-expanded={expanded}
+                    >
+                      {expanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                      <span className="font-mono text-xs text-muted-foreground shrink-0">#{index + 1}</span>
+                      <span className="text-sm font-medium capitalize">{call.pass.replace(/_/g, " ")}</span>
+                      {call.attempt > 1 && <span className="rounded bg-warning/10 px-1.5 py-0.5 text-xs text-warning">retry {call.attempt}</span>}
+                      {call.finish_reason && call.finish_reason !== "stop" && (
+                        <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs text-destructive">{call.finish_reason}</span>
+                      )}
+                      <span className="ml-auto flex shrink-0 items-center gap-3 text-xs text-muted-foreground">
+                        <span className="font-mono">{call.model ?? "unknown model"}</span>
+                        <span>{call.total_tokens ?? 0} tok</span>
+                      </span>
+                    </button>
+                    {expanded && (
+                      <div className="space-y-3 border-t border-border px-4 py-3">
+                        <div>
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Request ({call.prompt_tokens ?? 0} prompt tokens)</span>
+                            <CopyButton variant="ghost" value={call.request_text} label="Copy request" toastLabel="Request" />
+                          </div>
+                          <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-secondary p-3 text-xs font-mono leading-relaxed">{call.request_text}</pre>
+                        </div>
+                        <div>
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Response ({call.completion_tokens ?? 0} completion tokens)</span>
+                            <CopyButton variant="ghost" value={call.response_text ?? ""} label="Copy response" toastLabel="Response" disabled={!call.response_text} />
+                          </div>
+                          <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-secondary p-3 text-xs font-mono leading-relaxed">{call.response_text ?? "(empty)"}</pre>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="p-4 text-sm text-muted-foreground">No LLM calls were recorded for this review. Calls are captured for reviews run after this feature was deployed.</p>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setLlmCallsOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

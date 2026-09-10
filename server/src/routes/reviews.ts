@@ -245,6 +245,20 @@ reviewsRouter.get("/:id/ai-response", requireRole("admin"), async (req: Request,
   }
 });
 
+reviewsRouter.get("/:id/llm-calls", requireRole("admin"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const review = await get<{ id: string }>("SELECT id FROM reviews WHERE id = $1", [req.params.id]);
+    if (!review) throw new NotFoundError("Review not found");
+    const calls = await all(
+      "SELECT id, pass, attempt, model, request_text, response_text, finish_reason, prompt_tokens, completion_tokens, total_tokens, created_at FROM llm_calls WHERE review_id = $1 ORDER BY created_at ASC, attempt ASC",
+      [req.params.id]
+    );
+    res.json({ calls });
+  } catch (err) {
+    next(err);
+  }
+});
+
 reviewsRouter.get("/:id", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const review = await get<{
