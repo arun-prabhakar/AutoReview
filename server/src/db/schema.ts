@@ -445,6 +445,24 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `ALTER TABLE llm_providers ADD COLUMN IF NOT EXISTS custom_headers TEXT`,
     ],
   },
+  {
+    id: "021",
+    description: "Add centralized LLM defaults; repository LLM fields become inheritable",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS llm_settings (
+        id TEXT PRIMARY KEY,
+        provider_id TEXT,
+        model TEXT,
+        max_tokens INTEGER,
+        temperature REAL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `INSERT INTO llm_settings (id) VALUES ('global') ON CONFLICT (id) DO NOTHING`,
+      `ALTER TABLE repositories ALTER COLUMN llm_provider DROP DEFAULT`,
+      `ALTER TABLE repositories ALTER COLUMN llm_model DROP DEFAULT`,
+    ],
+  },
 ];
 
 function buildTimestampMigrations(): string[] {
