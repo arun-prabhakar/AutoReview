@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2 } from "lucide-react";
 import type { Provider } from "./types";
 
@@ -22,7 +23,36 @@ export function LlmTab({ providers, loading, repositoryId = "all" }: { providers
   const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({});
   const [savingLlm, setSavingLlm] = useState<Record<string, boolean>>({});
   const [fetchingModels, setFetchingModels] = useState<Record<string, boolean>>({});
+  const [globalSettings, setGlobalSettings] = useState<{ provider_id: string; model: string; max_tokens: number; temperature: number } | null>(null);
+  const [savingGlobal, setSavingGlobal] = useState(false);
   const visibleRepos = repositoryId === "all" ? repos : repos.filter((repo) => String(repo.id) === repositoryId);
+
+  useEffect(() => {
+    api.get<{ provider_id: string | null; model: string | null; max_tokens: number | null; temperature: number | null }>("/api/settings/llm-global")
+      .then((data) => setGlobalSettings({
+        provider_id: data.provider_id || "",
+        model: data.model || "",
+        max_tokens: data.max_tokens || 4096,
+        temperature: data.temperature ?? 0.2,
+      }))
+      .catch(() => undefined);
+  }, []);
+
+  const saveGlobal = async () => {
+    if (!globalSettings?.provider_id || !globalSettings.model) {
+      toast({ title: "Provider and model are required", variant: "destructive" });
+      return;
+    }
+    setSavingGlobal(true);
+    try {
+      await api.put("/api/settings/llm-global", globalSettings);
+      toast({ title: "Global LLM defaults saved", description: "Repositories without explicit settings will use these.", variant: "success" });
+    } catch (err) {
+      toast({ title: "Error", description: err instanceof Error ? err.message : "Failed to save", variant: "destructive" });
+    } finally {
+      setSavingGlobal(false);
+    }
+  };
 
   const handleFetchModels = useCallback(async (providerId: string) => {
     if (!providerId || fetchedModels[providerId] || fetchingModels[providerId]) return;
@@ -67,7 +97,51 @@ export function LlmTab({ providers, loading, repositoryId = "all" }: { providers
 
   return (
     <>
-      <p className="text-sm text-muted-foreground">Assign LLM provider and model per repository</p>
+      <p className="text-sm text-muted-foreground">Set global LLM defaults; per-repository settings override them when set</p>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base">Global Defaults</CardTitle>
+            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">All repositories</Badge>
+          </div>
+          {savingGlobal && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {globalSettings ? (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Provider</Label>
+                  <Select value={globalSettings.provider_id} onValueChange={(v) => setGlobalSettings((prev) => prev ? { ...prev, provider_id: v, model: "" } : prev)}>
+                    <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
+                    <SelectContent>{providers.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Model</Label>
+                  {(fetchedModels[globalSettings.provider_id] || []).length > 0 ? (
+                    <Select value={globalSettings.model} onValueChange={(v) => setGlobalSettings((prev) => prev ? { ...prev, model: v } : prev)}>
+                      <SelectTrigger><SelectValue placeholder="Select model" /></SelectTrigger>
+                      <SelectContent>{(fetchedModels[globalSettings.provider_id] || []).map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                    </Select>
+                  ) : (
+                    <Input value={globalSettings.model} onChange={(e) => setGlobalSettings((prev) => prev ? { ...prev, model: e.target.value } : prev)} placeholder="Model name" />
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2"><Label>Max Tokens</Label><Input type="number" min="256" max="8192" value={globalSettings.max_tokens} onChange={(e) => setGlobalSettings((prev) => prev ? { ...prev, max_tokens: Number(e.target.value) || 4096 } : prev)} /></div>
+                <div className="space-y-2"><Label>Temperature</Label><Input type="number" min="0" max="1" step="0.1" value={globalSettings.temperature} onChange={(e) => setGlobalSettings((prev) => prev ? { ...prev, temperature: Number(e.target.value) || 0.2 } : prev)} /></div>
+              </div>
+              <Button size="sm" onClick={saveGlobal} disabled={savingGlobal}>{savingGlobal ? "Saving..." : "Save Global Defaults"}</Button>
+            </>
+          ) : (
+            <div className="space-y-2"><Skeleton className="h-4 w-2/3" /><Skeleton className="h-4 w-full" /></div>
+          )}
+        </CardContent>
+      </Card>
+
       {visibleRepos.map((repo) => {
         const providerId = String(repo.llm_provider_id || "");
         const provider = providers.find((p) => p.id === providerId);
@@ -77,11 +151,11 @@ export function LlmTab({ providers, loading, repositoryId = "all" }: { providers
         const saveLlm = (patch: Record<string, unknown>) => {
           setSavingLlm((prev) => ({ ...prev, [String(repo.id)]: true }));
           api.put(`/api/settings/llm/${String(repo.id)}`, {
-            llm_provider: provider?.name || String(repo.llm_provider),
-            llm_provider_id: providerId,
-            llm_model: String(repo.llm_model),
-            llm_max_tokens: Number(repo.llm_max_tokens),
-            llm_temperature: Number(repo.llm_temperature),
+            llm_provider: provider?.name || repo.llm_provider || null,
+            llm_provider_id: providerId || null,
+            llm_model: repo.llm_model || null,
+            llm_max_tokens: repo.llm_max_tokens ?? null,
+            llm_temperature: repo.llm_temperature ?? null,
             ...patch,
           }).then(() => { toast({ title: "Updated", variant: "success" }); dispatch(fetchRepositories()); }).catch(() => toast({ title: "Error", variant: "destructive" })).finally(() => setSavingLlm((prev) => ({ ...prev, [String(repo.id)]: false })));
         };
@@ -97,19 +171,30 @@ export function LlmTab({ providers, loading, repositoryId = "all" }: { providers
                 <div className="space-y-2">
                   <Label>Provider</Label>
                   <Select
-                    defaultValue={providerId}
+                    defaultValue={providerId || "__inherit__"}
                     onValueChange={(v) => {
+                      if (v === "__inherit__") {
+                        setSavingLlm((prev) => ({ ...prev, [String(repo.id)]: true }));
+                        api.put(`/api/settings/llm/${String(repo.id)}`, {
+                          llm_provider: null, llm_provider_id: null, llm_model: null,
+                          llm_max_tokens: repo.llm_max_tokens ?? null, llm_temperature: repo.llm_temperature ?? null,
+                        }).then(() => { toast({ title: "Inheriting global defaults", variant: "success" }); dispatch(fetchRepositories()); }).catch(() => toast({ title: "Error updating provider", variant: "destructive" })).finally(() => setSavingLlm((prev) => ({ ...prev, [String(repo.id)]: false })));
+                        return;
+                      }
                       const p = providers.find((x) => x.id === v);
                       setSavingLlm((prev) => ({ ...prev, [String(repo.id)]: true }));
                       api.put(`/api/settings/llm/${String(repo.id)}`, {
                         llm_provider: p?.name || "", llm_provider_id: v, llm_model: "",
-                        llm_max_tokens: Number(repo.llm_max_tokens), llm_temperature: Number(repo.llm_temperature),
+                        llm_max_tokens: repo.llm_max_tokens ?? null, llm_temperature: repo.llm_temperature ?? null,
                       }).then(() => { toast({ title: "Provider updated", variant: "success" }); dispatch(fetchRepositories()); }).catch(() => toast({ title: "Error updating provider", variant: "destructive" })).finally(() => setSavingLlm((prev) => ({ ...prev, [String(repo.id)]: false })));
                     }}
                     disabled={savingLlm[String(repo.id)]}
                   >
                     <SelectTrigger><SelectValue placeholder="Select provider" /></SelectTrigger>
-                    <SelectContent>{providers.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      <SelectItem value="__inherit__">Inherit global default</SelectItem>
+                      {providers.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">

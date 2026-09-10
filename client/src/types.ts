@@ -72,11 +72,11 @@ export interface Repository {
   excluded_paths: string | null;
   notification_recipients: string | null;
   include_commit_author: number;
-  llm_provider: string;
+  llm_provider: string | null;
   llm_provider_id: string | null;
-  llm_model: string;
-  llm_max_tokens: number;
-  llm_temperature: number;
+  llm_model: string | null;
+  llm_max_tokens: number | null;
+  llm_temperature: number | null;
   multi_pass_review: number;
   agent_review: number;
   policy_fail_on_must_fix?: boolean | number;
@@ -116,11 +116,11 @@ export interface PromptTemplate {
 export interface LlmSettings {
   id: string;
   name: string;
-  llm_provider: string;
+  llm_provider: string | null;
   llm_provider_id: string | null;
-  llm_model: string;
-  llm_max_tokens: number;
-  llm_temperature: number;
+  llm_model: string | null;
+  llm_max_tokens: number | null;
+  llm_temperature: number | null;
 }
 
 export interface SmtpSettings {
