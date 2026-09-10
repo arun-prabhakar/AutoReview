@@ -417,6 +417,27 @@ const MIGRATIONS: { id: string; description: string; sql: string[] }[] = [
       `ALTER TABLE findings ADD COLUMN IF NOT EXISTS source_pass TEXT`,
     ],
   },
+  {
+    id: "019",
+    description: "Store every LLM request and response per review iteration",
+    sql: [
+      `CREATE TABLE IF NOT EXISTS llm_calls (
+        id TEXT PRIMARY KEY,
+        review_id TEXT NOT NULL,
+        pass TEXT NOT NULL,
+        attempt INTEGER NOT NULL DEFAULT 1,
+        model TEXT,
+        request_text TEXT NOT NULL,
+        response_text TEXT,
+        finish_reason TEXT,
+        prompt_tokens INTEGER,
+        completion_tokens INTEGER,
+        total_tokens INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_llm_calls_review ON llm_calls (review_id)`,
+    ],
+  },
 ];
 
 function buildTimestampMigrations(): string[] {

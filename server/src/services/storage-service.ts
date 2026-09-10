@@ -117,6 +117,7 @@ export async function deleteReview(reviewId: string): Promise<void> {
   try {
     await client.query("BEGIN");
     await client.query("DELETE FROM findings WHERE review_id = $1", [reviewId]);
+    await client.query("DELETE FROM llm_calls WHERE review_id = $1", [reviewId]);
     await client.query("DELETE FROM reviews WHERE id = $1", [reviewId]);
     await client.query("COMMIT");
   } catch (error) {
