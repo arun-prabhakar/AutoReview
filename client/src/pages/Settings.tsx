@@ -5,7 +5,6 @@ import type { AppDispatch, RootState } from "@/store";
 import { fetchRepositories } from "@/store/repositoriesSlice";
 import { api } from "@/services/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Cpu, KeyRound, FolderGit2, Settings2, Brain, FileText, Bell, CheckCircle2, Circle } from "lucide-react";
@@ -60,8 +59,7 @@ export default function Settings() {
   const repositories = useSelector((state: RootState) => state.repositories.items);
   const repositoriesLoading = useSelector((state: RootState) => state.repositories.loading);
   const activeTab = searchParams.get("tab") || "providers";
-  const selectedRepository = searchParams.get("repo") || "all";
-  const setTab = (tab: string) => setSearchParams(selectedRepository === "all" ? { tab } : { tab, repo: selectedRepository }, { replace: true });
+  const setTab = (tab: string) => setSearchParams({ tab }, { replace: true });
 
   useEffect(() => {
     dispatch(fetchRepositories());
@@ -120,47 +118,47 @@ export default function Settings() {
 
       {showWizard && <SetupWizard steps={wizardSteps} onStart={setTab} onSkip={dismissWizard} />}
 
-      <div className="space-y-2 border-b border-border pb-4">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span className="text-sm font-medium">Setup</span>
-          <div
-            role="progressbar"
-            aria-label="Setup progress"
-            aria-valuemin={0}
-            aria-valuemax={wizardSteps.length}
-            aria-valuenow={completedSteps}
-            className="h-1.5 w-28 overflow-hidden rounded-full bg-secondary"
-          >
+      {setupIncomplete && (
+        <div className="space-y-2 border-b border-border pb-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="text-sm font-medium">Setup</span>
             <div
-              className="h-full rounded-full bg-primary transition-all duration-slow"
-              style={{ width: `${(completedSteps / wizardSteps.length) * 100}%` }}
-            />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            {setupIncomplete ? `${completedSteps} of ${wizardSteps.length} required steps complete` : "All required steps complete"}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {wizardSteps.map((step) => (
-            <button
-              key={step.key}
-              onClick={() => setTab(step.tab)}
-              aria-label={`${step.done ? "Completed" : "Pending"}: ${step.label}`}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                !step.done && "text-interactive"
-              )}
+              role="progressbar"
+              aria-label="Setup progress"
+              aria-valuemin={0}
+              aria-valuemax={wizardSteps.length}
+              aria-valuenow={completedSteps}
+              className="h-1.5 w-28 overflow-hidden rounded-full bg-secondary"
             >
-              {step.done
-                ? <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-                : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
-              {step.label}
-            </button>
-          ))}
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-slow"
+                style={{ width: `${(completedSteps / wizardSteps.length) * 100}%` }}
+              />
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {completedSteps} of {wizardSteps.length} required steps complete
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {wizardSteps.map((step) => (
+              <button
+                key={step.key}
+                onClick={() => setTab(step.tab)}
+                aria-label={`${step.done ? "Completed" : "Pending"}: ${step.label}`}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  !step.done && "text-interactive"
+                )}
+              >
+                {step.done
+                  ? <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                  : <Circle className="h-3.5 w-3.5 text-muted-foreground" />}
+                {step.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {repositories.length > 1 && <div className="flex items-center gap-3"><span className="text-sm font-medium">Repository scope</span><Select value={selectedRepository} onValueChange={(repo) => setSearchParams(repo === "all" ? { tab: activeTab } : { tab: activeTab, repo }, { replace: true })}><SelectTrigger className="w-full max-w-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All repositories</SelectItem>{repositories.map((repo) => <SelectItem key={String(repo.id)} value={String(repo.id)}>{String(repo.name)}</SelectItem>)}</SelectContent></Select></div>}
+      )}
 
       <Tabs value={activeTab} onValueChange={setTab}>
         <div className="relative">
@@ -215,11 +213,11 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="review" className="space-y-3 mt-2">
-          <ReviewConfigTab repositoryId={selectedRepository} />
+          <ReviewConfigTab />
         </TabsContent>
 
         <TabsContent value="llm" className="space-y-3 mt-2">
-          <LlmTab providers={providers} loading={loadingProviders} repositoryId={selectedRepository} />
+          <LlmTab providers={providers} loading={loadingProviders} />
         </TabsContent>
 
         <TabsContent value="prompt" className="space-y-3 mt-2">
@@ -227,7 +225,7 @@ export default function Settings() {
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-3 mt-2">
-          <NotificationsTab repositoryId={selectedRepository} />
+          <NotificationsTab />
         </TabsContent>
       </Tabs>
     </div>
