@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { all, run, get } from "../db/queries.js";
 import { encrypt } from "../services/encryption-service.js";
-import { getDecryptedApiKey, getProviderById } from "../services/provider-service.js";
+import { getDecryptedApiKey, getProviderById, parseCustomHeaders } from "../services/provider-service.js";
 import { createAdapter } from "../services/llm/index.js";
 import { logger } from "../middleware/index.js";
 import { CONNECTION_TEST_PROMPT } from "../prompts/index.js";
@@ -71,6 +71,7 @@ settingsRouter.post("/llm/test", async (req, res) => {
       apiBase: provider.api_base,
       apiKey,
       awsRegion: provider.aws_region || undefined,
+      customHeaders: parseCustomHeaders(provider.custom_headers),
     });
     const modelName = model || "gpt-4";
 

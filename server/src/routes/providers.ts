@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import { getAllProviders, createProvider, updateProvider, deleteProvider, getDecryptedApiKey, getProviderById } from "../services/provider-service.js";
+import { getAllProviders, createProvider, updateProvider, deleteProvider, getDecryptedApiKey, getProviderById, parseCustomHeaders } from "../services/provider-service.js";
 import { createAdapter } from "../services/llm/index.js";
 import { logger } from "../middleware/index.js";
 import { NotFoundError } from "../errors.js";
@@ -16,7 +16,7 @@ providersRouter.get("/", async (_req: Request, res: Response, next: NextFunction
 });
 
 providersRouter.post("/", async (req: Request, res: Response, next: NextFunction) => {
-  const { name, api_base, api_key, provider_type, aws_region } = req.body;
+  const { name, api_base, api_key, provider_type, aws_region, custom_headers } = req.body;
 
   if (!name || !api_key) {
     res.status(400).json({ error: "name and api_key are required" });
@@ -24,7 +24,7 @@ providersRouter.post("/", async (req: Request, res: Response, next: NextFunction
   }
 
   try {
-    const provider = await createProvider(name, api_base || "https://api.openai.com/v1", api_key, provider_type, aws_region);
+    const provider = await createProvider(name, api_base || "https://api.openai.com/v1", api_key, provider_type, aws_region, typeof custom_headers === "string" ? custom_headers : undefined);
     res.status(201).json(provider);
   } catch (err) {
     next(err);
@@ -32,10 +32,10 @@ providersRouter.post("/", async (req: Request, res: Response, next: NextFunction
 });
 
 providersRouter.put("/:id", async (req: Request, res: Response, next: NextFunction) => {
-  const { name, api_base, api_key, provider_type, aws_region } = req.body;
+  const { name, api_base, api_key, provider_type, aws_region, custom_headers } = req.body;
 
   try {
-    await updateProvider(String(req.params.id), name, api_base, api_key, provider_type, aws_region);
+    await updateProvider(String(req.params.id), name, api_base, api_key, provider_type, aws_region, typeof custom_headers === "string" ? custom_headers : undefined);
     res.json({ updated: true });
   } catch (err) {
     next(err);
@@ -62,6 +62,7 @@ providersRouter.post("/:id/test", async (req: Request, res: Response, next: Next
       apiBase: provider.api_base,
       apiKey,
       awsRegion: provider.aws_region || undefined,
+      customHeaders: parseCustomHeaders(provider.custom_headers),
     });
 
     await adapter.testConnection();
@@ -84,6 +85,7 @@ providersRouter.get("/:id/models", async (req: Request, res: Response, next: Nex
       apiBase: provider.api_base,
       apiKey,
       awsRegion: provider.aws_region || undefined,
+      customHeaders: parseCustomHeaders(provider.custom_headers),
     });
 
     const models = await adapter.listModels();
