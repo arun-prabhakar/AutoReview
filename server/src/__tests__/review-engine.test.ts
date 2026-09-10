@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseFindings, filterExcludedPaths, filterLowConfidence, filterSuppressedFindings, extractFilePaths, cleanOverviewText, fallbackOverview, isUsableOverview, MAX_REVIEW_DIFF_CHARS, prepareDiffForAnalysis, buildFeedbackContext, renderFeedbackContext } from "../services/review-engine.js";
 import type { RawFinding } from "../services/review-engine.js";
 import type { CommitInfo } from "../services/bitbucket-client.js";
-import type { RepositoryConfig } from "../services/repository-service.js";
+import type { EffectiveRepositoryConfig } from "../services/repository-service.js";
 
 describe("prepareDiffForAnalysis", () => {
   it("removes excluded file chunks before sending a diff to the LLM", () => {
@@ -299,7 +299,7 @@ describe("multiPassReview source pass tagging", () => {
     const { multiPassReview } = await import("../services/review-engine.js");
 
     const commit: CommitInfo = { hash: "abc123", message: "m", author: { raw: "dev" }, date: "2024-01-01" };
-    const repo: RepositoryConfig = {
+    const repo: EffectiveRepositoryConfig = {
       id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
       branch: "main", strictness: "strict", llm_model: "gpt-test",
       llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
@@ -364,7 +364,7 @@ describe("false-positive feedback context", () => {
     const { analyzeDiff } = await import("../services/review-engine.js");
 
     const commit: CommitInfo = { hash: "abc123", message: "fix bug", author: { raw: "dev" }, date: "2024-01-01" };
-    const repo: RepositoryConfig = {
+    const repo: EffectiveRepositoryConfig = {
       id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
       branch: "main", strictness: "strict", llm_model: "gpt-test",
       llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
@@ -411,7 +411,7 @@ describe("analyzeDiff", () => {
     const { analyzeDiff } = await import("../services/review-engine.js");
 
     const commit: CommitInfo = { hash: "abc123", message: "fix bug", author: { raw: "dev" }, date: "2024-01-01" };
-    const repo: RepositoryConfig = {
+    const repo: EffectiveRepositoryConfig = {
       id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
       branch: "main", strictness: "strict", llm_model: "gemini-flash-latest",
       llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
@@ -449,7 +449,7 @@ describe("analyzeDiff", () => {
     const { analyzeDiff, LlmResponseError } = await import("../services/review-engine.js");
 
     const commit: CommitInfo = { hash: "abc123", message: "fix bug", author: { raw: "dev" }, date: "2024-01-01" };
-    const repo: RepositoryConfig = {
+    const repo: EffectiveRepositoryConfig = {
       id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
       branch: "main", strictness: "strict", llm_model: "gemini-flash-latest",
       llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
@@ -491,7 +491,7 @@ describe("analyzeDiff", () => {
     const { analyzeDiff } = await import("../services/review-engine.js");
 
     const commit: CommitInfo = { hash: "abc123", message: "fix bug", author: { raw: "dev" }, date: "2024-01-01" };
-    const repo: RepositoryConfig = {
+    const repo: EffectiveRepositoryConfig = {
       id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
       branch: "main", strictness: "strict", llm_model: "gemini-flash-latest",
       llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",
@@ -532,7 +532,7 @@ describe("analyzeDiff", () => {
     const { analyzeDiff } = await import("../services/review-engine.js");
 
     const commit: CommitInfo = { hash: "abc123", message: "fix bug", author: { raw: "dev" }, date: "2024-01-01" };
-    const repo: RepositoryConfig = {
+    const repo: EffectiveRepositoryConfig = {
       id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
       branch: "main", strictness: "strict", llm_model: "gemini-flash-latest",
       llm_max_tokens: 4096, llm_temperature: 0.3, excluded_paths: "",

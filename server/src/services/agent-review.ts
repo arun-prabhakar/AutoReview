@@ -1,6 +1,6 @@
 import type { CommitInfo } from "./bitbucket-client.js";
 import { fetchFileFromRepoAtRef, fetchRepoDirListing } from "./bitbucket-client.js";
-import type { RepositoryConfig } from "./repository-service.js";
+import type { EffectiveRepositoryConfig } from "./repository-service.js";
 import { createAdapter, type ProviderConfig } from "./llm/index.js";
 import type { LlmAdapter, LlmMessage } from "./llm/types.js";
 import { parseFindings, filterExcludedPaths, prepareDiffForAnalysis, renderFeedbackContext, renderRetrievedContext, type RawFinding, type TokenUsage } from "./review-engine.js";
@@ -80,7 +80,7 @@ function sanitizePath(raw: unknown): string | null {
 async function dispatchTool(
   tool: string,
   args: { path?: string },
-  repo: RepositoryConfig,
+  repo: EffectiveRepositoryConfig,
   commitHash: string,
   credentials: AgentCredentials
 ): Promise<string> {
@@ -144,7 +144,7 @@ export type AgentProgressFn = (turn: number, maxTurns: number, detail: string) =
 export async function runAgentReview(params: {
   diff: string;
   commit: CommitInfo;
-  repo: RepositoryConfig;
+  repo: EffectiveRepositoryConfig;
   promptTemplate: string;
   provider: ProviderConfig;
   credentials: AgentCredentials;

@@ -1,6 +1,6 @@
 import { findExistingReview, findFindingsByReviewId, createReview, updateReviewStatus, insertFindings, deleteReview, createNotification, getReviewChain, findSimilarOpenFindings, linkFindings, findPreviousPrReview, getFalsePositiveFeedback, type FalsePositiveRow, type RawFindingInput } from "./storage-service.js";
 import { fetchCommitDiff, fetchPrDiff, fetchPrDiffSince, fetchPrInfo, findPullRequestForCommit, postPrComment, postInlinePrComment, postBuildStatus, fetchFileFromRepo, type CommitInfo } from "./bitbucket-client.js";
-import { getRepoById, type RepositoryConfig } from "./repository-service.js";
+import { getRepoById, getEffectiveRepo, type RepositoryConfig, type EffectiveRepositoryConfig } from "./repository-service.js";
 import { getDecryptedPassword } from "./credential-service.js";
 import { getDecryptedApiKey, getProviderById, parseCustomHeaders } from "./provider-service.js";
 import { analyzeDiff, buildFeedbackContext, extractFilePaths, fallbackOverview, filterSuppressedFindings, INITIAL_ANALYSIS_TOKENS, LlmResponseError, multiPassReview, prepareDiffForAnalysis, type RawFinding } from "./review-engine.js";
@@ -42,7 +42,7 @@ type DedupKey = string;
 type ReviewMode = "manual" | "pr";
 
 interface ReviewContext {
-  repo: RepositoryConfig;
+  repo: EffectiveRepositoryConfig;
   diff: string;
   commit: CommitInfo;
   truncated: boolean;
@@ -528,7 +528,7 @@ async function linkDuplicateFindings(repositoryId: string, findings: RawFindingI
 }
 
 export async function runManualReview(repositoryId: string, commitHash: string, force = false, createdBy?: string, onCreated?: (reviewId: string) => void) {
-  const repo = await getRepoById(repositoryId);
+  const repo = await getEffectiveRepo(await getRepoById(repositoryId));
   if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
 
   const { password, username } = await resolveCredentials(repo);
@@ -554,7 +554,7 @@ export async function runManualReview(repositoryId: string, commitHash: string, 
 }
 
 export async function runPrReview(repositoryId: string, prId: string, force = false, createdBy?: string, onCreated?: (reviewId: string) => void) {
-  const repo = await getRepoById(repositoryId);
+  const repo = await getEffectiveRepo(await getRepoById(repositoryId));
   if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
 
   const { password, username } = await resolveCredentials(repo);
@@ -641,7 +641,7 @@ export async function preflightReview(
   mode: "manual" | "pr",
   target: string,
 ) {
-  const repo = await getRepoById(repositoryId);
+  const repo = await getEffectiveRepo(await getRepoById(repositoryId));
   if (!repo) throw new NotFoundError(`Repository ${repositoryId} not found`);
   const { password, username } = await resolveCredentials(repo);
 

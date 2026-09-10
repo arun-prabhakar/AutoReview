@@ -1,5 +1,5 @@
 import type { CommitInfo } from "./bitbucket-client.js";
-import type { RepositoryConfig } from "./repository-service.js";
+import type { EffectiveRepositoryConfig } from "./repository-service.js";
 import { createAdapter, type ProviderConfig } from "./llm/index.js";
 import type { LlmAdapter } from "./llm/types.js";
 import { logger } from "../middleware/index.js";
@@ -111,7 +111,7 @@ ${retrievedContext.slice(0, 6500)}`;
 export async function analyzeDiff(
   diff: string,
   commit: CommitInfo,
-  repo: RepositoryConfig,
+  repo: EffectiveRepositoryConfig,
   promptTemplate: string,
   provider: ProviderConfig,
   truncated = false,
@@ -309,7 +309,7 @@ function addTokenUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
 
 async function requestAnalysisCompletion(
   adapter: LlmAdapter,
-  repo: RepositoryConfig,
+  repo: EffectiveRepositoryConfig,
   prompt: string,
   maxTokens: number,
   signal?: AbortSignal,
@@ -410,7 +410,7 @@ export function prepareDiffForAnalysis(diff: string, excludedPaths: string | nul
 export async function generateDiffOverview(
   diff: string,
   commit: CommitInfo,
-  repo: RepositoryConfig,
+  repo: EffectiveRepositoryConfig,
   provider: ProviderConfig
 ): Promise<string> {
   const truncated = diff.length > 8000;
@@ -741,7 +741,7 @@ export type MultiPassResult = {
 export async function multiPassReview(
   diff: string,
   commit: CommitInfo,
-  repo: RepositoryConfig,
+  repo: EffectiveRepositoryConfig,
   baseTemplate: string,
   provider: ProviderConfig,
   truncated: boolean,

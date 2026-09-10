@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { CommitInfo } from "../services/bitbucket-client.js";
-import type { RepositoryConfig } from "../services/repository-service.js";
+import type { EffectiveRepositoryConfig } from "../services/repository-service.js";
 
-function makeRepo(overrides: Partial<RepositoryConfig> = {}): RepositoryConfig {
+function makeRepo(overrides: Partial<EffectiveRepositoryConfig> = {}): EffectiveRepositoryConfig {
   return {
     id: "repo-1", name: "test-repo", workspace: "ws", slug: "test", credential_id: "cred-1",
     branch: "main", strictness: "strict", llm_model: "gpt-test",
