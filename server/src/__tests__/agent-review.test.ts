@@ -104,6 +104,46 @@ describe("runAgentReview", () => {
     expect(completeMock.mock.calls[0][0].messages[0].content).toContain("Agent Mode");
   });
 
+  it("salvages a bare findings array when the model ignores the protocol", async () => {
+    const bareFindings = [
+      { file_index: 1, line_start: 3, title: "Salvaged issue", explanation: "e", risk: "must_fix", confidence: 88, suggested_fix: null, category: "correctness", test_gap: "no test" },
+    ];
+    const completeMock = vi.fn(async () => ({
+      content: JSON.stringify(bareFindings),
+      finishReason: "stop",
+      tokenUsage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+    }));
+
+    vi.doMock("../services/llm/index.js", () => ({
+      createAdapter: () => ({ complete: completeMock, testConnection: async () => ({ message: "ok" }), listModels: async () => [] }),
+      ProviderConfig: {},
+    }));
+    vi.doMock("../services/bitbucket-client.js", () => ({
+      fetchFileFromRepoAtRef: vi.fn(async () => "content"),
+      fetchRepoDirListing: vi.fn(async () => []),
+    }));
+
+    const { runAgentReview } = await import("../services/agent-review.js");
+
+    const commit: CommitInfo = { hash: "abc123", message: "m", author: { raw: "dev" }, date: "2024-01-01" };
+    const diff = "diff --git a/src/app.ts b/src/app.ts\n@@ -1 +1 @@\n-old\n+new";
+    const result = await runAgentReview({
+      diff,
+      commit,
+      repo: makeRepo(),
+      promptTemplate: "Review: {{diff}}",
+      provider: { providerType: "openai_compatible", apiBase: "https://api.example.com/v1", apiKey: "k" },
+      credentials: { password: "pw", username: "user" },
+      truncated: false,
+    });
+
+    expect(completeMock).toHaveBeenCalledTimes(1);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0].summary).toBe("Salvaged issue");
+    expect(result.findings[0].source_pass).toBe("agent");
+    expect(result.turns).toBe(1);
+  });
+
   it("blocks repeated reads of the same file and path traversal", async () => {
     const findingsJson = "[]";
     const completeMock = vi

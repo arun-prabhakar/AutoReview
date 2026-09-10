@@ -3,6 +3,7 @@ import type { RepositoryConfig } from "./repository-service.js";
 import { createAdapter, type ProviderConfig } from "./llm/index.js";
 import type { LlmAdapter } from "./llm/types.js";
 import { logger } from "../middleware/index.js";
+import { recordLlmCall } from "./llm-call-log.js";
 import { buildRetryPrompt, buildSpecializedTemplate, FIXED_OUTPUT_FORMAT as CENTRAL_FIXED_OUTPUT_FORMAT, REVIEW_METHOD_RULES, SPECIALIZED_PROMPTS } from "../prompts/index.js";
 
 export const FIXED_OUTPUT_FORMAT = `
@@ -118,6 +119,7 @@ export async function analyzeDiff(
   signal?: AbortSignal,
   feedbackContext?: string,
   retrievedContext?: string,
+  passLabel = "base",
 ): Promise<{ findings: RawFinding[]; incomplete: boolean; tokenUsage: TokenUsage; aiResponse: string }> {
   const reviewDiff = prepareDiffForAnalysis(diff, repo.excluded_paths);
   const effectiveIncomplete = truncated || reviewDiff.length === MAX_REVIEW_DIFF_CHARS;
@@ -157,7 +159,7 @@ export async function analyzeDiff(
 
   const dynamicTokens = Math.max(2048, Math.min(repo.llm_max_tokens, Math.ceil(reviewDiff.length / 8)));
   const initialTokens = Math.min(dynamicTokens, INITIAL_ANALYSIS_TOKENS);
-  const initialResponse = await requestAnalysisCompletion(adapter, repo, prompt, initialTokens, signal);
+  const initialResponse = await requestAnalysisCompletion(adapter, repo, prompt, initialTokens, signal, passLabel, 1);
   let response = initialResponse;
   let totalUsage = initialResponse.tokenUsage;
 
@@ -183,6 +185,8 @@ export async function analyzeDiff(
       buildRetryPrompt(prompt),
       retryTokens,
       signal,
+      passLabel,
+      2,
     );
     totalUsage = addTokenUsage(totalUsage, response.tokenUsage);
   }
@@ -309,6 +313,8 @@ async function requestAnalysisCompletion(
   prompt: string,
   maxTokens: number,
   signal?: AbortSignal,
+  passLabel = "base",
+  attempt = 1,
 ): Promise<AnalysisCompletion> {
   const result = await adapter.complete({
     model: repo.llm_model,
@@ -321,6 +327,18 @@ async function requestAnalysisCompletion(
   const content = result.content;
   const tokenUsage: TokenUsage = result.tokenUsage;
   const finishReason = result.finishReason;
+
+  recordLlmCall({
+    pass: passLabel,
+    attempt,
+    model: repo.llm_model,
+    request_text: prompt,
+    response_text: content,
+    finish_reason: finishReason ?? null,
+    prompt_tokens: tokenUsage.prompt_tokens,
+    completion_tokens: tokenUsage.completion_tokens,
+    total_tokens: tokenUsage.total_tokens,
+  });
 
   logger.info("LLM response received", {
     model: repo.llm_model,
@@ -589,8 +607,18 @@ function parseFindingsStrict(content: string, changedFiles: string[]): RawFindin
   }
 
   try {
+    // Some models emit 0-based file indexes despite the 1-based contract; an array
+    // that uses index 0 and fits the file list is unambiguously 0-based.
+    const indexes = parsed.map((item: Record<string, unknown>) => {
+      const value = item.file_index ?? item.changed_file_index;
+      const index = typeof value === "number" ? value : Number(value);
+      return Number.isInteger(index) ? index : null;
+    });
+    const numericIndexes = indexes.filter((i: number | null): i is number => i !== null);
+    const zeroBased = numericIndexes.includes(0) && numericIndexes.every((i: number) => i >= 0 && i < changedFiles.length);
+
     const mapped: RawFinding[] = parsed.map((item: Record<string, unknown>) => {
-      const filePath = resolveFindingFilePath(item, changedFiles);
+      const filePath = resolveFindingFilePath(item, changedFiles, zeroBased);
       if (!filePath) {
         throw new Error("finding did not reference a valid changed file");
       }
@@ -619,11 +647,14 @@ function parseFindingsStrict(content: string, changedFiles: string[]): RawFindin
   }
 }
 
-function resolveFindingFilePath(item: Record<string, unknown>, changedFiles: string[]): string {
+function resolveFindingFilePath(item: Record<string, unknown>, changedFiles: string[], zeroBased: boolean): string {
   const fileIndexValue = item.file_index ?? item.changed_file_index;
   const fileIndex = typeof fileIndexValue === "number" ? fileIndexValue : Number(fileIndexValue);
-  if (Number.isInteger(fileIndex) && fileIndex >= 1 && fileIndex <= changedFiles.length) {
-    return changedFiles[fileIndex - 1];
+  if (Number.isInteger(fileIndex)) {
+    const resolved = zeroBased ? fileIndex : fileIndex - 1;
+    if (resolved >= 0 && resolved < changedFiles.length) {
+      return changedFiles[resolved];
+    }
   }
 
   // Backward compatibility for older stored prompts or providers that still echo a path.
@@ -730,7 +761,7 @@ export async function multiPassReview(
     focuses.map(async (focus) => {
       const template = buildSpecializedTemplate(baseTemplate, focus);
 
-      const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext, signal, feedbackContext, retrievedContext);
+      const { findings, tokenUsage, aiResponse } = await analyzeDiff(diff, commit, repo, template, provider, truncated, projectContext, signal, feedbackContext, retrievedContext, focus);
       return { focus, findings, tokenUsage, aiResponse };
     })
   );

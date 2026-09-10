@@ -53,6 +53,15 @@ describe("parseFindings", () => {
     expect(result[0].summary).toBe("s");
   });
 
+  it("should map 0-based file_index responses when index 0 appears", () => {
+    const content = '[{"file_index":0,"line_start":1,"title":"a","explanation":"e","risk":"must_fix","suggested_fix":null,"category":null},{"file_index":1,"line_start":2,"title":"b","explanation":"e","risk":"must_fix","suggested_fix":null,"category":null}]';
+    const result = parseFindings(content, ["src/a.ts", "src/b.ts"]);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].file_path).toBe("src/a.ts");
+    expect(result[1].file_path).toBe("src/b.ts");
+  });
+
   it("should return empty array for invalid JSON", () => {
     expect(parseFindings("no json here")).toEqual([]);
     expect(parseFindings("")).toEqual([]);

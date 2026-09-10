@@ -4,6 +4,7 @@ import type { RepositoryConfig } from "./repository-service.js";
 import { createAdapter, type ProviderConfig } from "./llm/index.js";
 import type { LlmAdapter, LlmMessage } from "./llm/types.js";
 import { parseFindings, filterExcludedPaths, prepareDiffForAnalysis, renderFeedbackContext, renderRetrievedContext, type RawFinding, type TokenUsage } from "./review-engine.js";
+import { recordLlmCall } from "./llm-call-log.js";
 import { FIXED_OUTPUT_FORMAT, REVIEW_METHOD_RULES } from "../prompts/index.js";
 import { logger } from "../middleware/index.js";
 
@@ -190,9 +191,10 @@ export async function runAgentReview(params: {
 
   while (turns < MAX_AGENT_TURNS) {
     turns++;
+    const messagesForCall = [...messages];
     const result = await adapter.complete({
       model: params.repo.llm_model,
-      messages,
+      messages: messagesForCall,
       maxTokens: AGENT_TURN_TOKENS,
       temperature: 0.0,
       signal: params.signal,
@@ -200,6 +202,17 @@ export async function runAgentReview(params: {
     tokenUsage.prompt_tokens += result.tokenUsage.prompt_tokens;
     tokenUsage.completion_tokens += result.tokenUsage.completion_tokens;
     tokenUsage.total_tokens += result.tokenUsage.total_tokens;
+    recordLlmCall({
+      pass: `agent:turn ${turns}`,
+      attempt: 1,
+      model: params.repo.llm_model,
+      request_text: messagesForCall.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n"),
+      response_text: result.content,
+      finish_reason: result.finishReason ?? null,
+      prompt_tokens: result.tokenUsage.prompt_tokens,
+      completion_tokens: result.tokenUsage.completion_tokens,
+      total_tokens: result.tokenUsage.total_tokens,
+    });
 
     const turn = parseAgentTurn(result.content);
     const entry: { turn: number; assistant: string; toolResult?: string } = { turn: turns, assistant: result.content };
@@ -218,6 +231,17 @@ export async function runAgentReview(params: {
     }
 
     if (turn.action === "INVALID") {
+      const salvaged = parseFindings(result.content, changedFiles);
+      if (salvaged.length > 0) {
+        const findings = filterExcludedPaths(salvaged, params.repo.excluded_paths)
+          .map((f) => ({ ...f, source_pass: f.source_pass ?? "agent" }));
+        logger.info("Agent review salvaged findings from non-protocol response", {
+          turns,
+          findings: findings.length,
+          repository: params.repo.name,
+        });
+        return { findings, tokenUsage, aiResponse: JSON.stringify(transcript, null, 2), turns, toolsUsed };
+      }
       invalidStreak++;
       if (invalidStreak >= MAX_TOOL_FAILURES + 1) {
         messages.push({ role: "assistant", content: result.content });
@@ -254,9 +278,10 @@ export async function runAgentReview(params: {
   }
 
   messages.push({ role: "user", content: `Turn budget exhausted. Return {"action":"FINAL","content":"<findings JSON array as string>"} now.` });
+  const finalMessages = [...messages];
   const final = await adapter.complete({
     model: params.repo.llm_model,
-    messages,
+    messages: finalMessages,
     maxTokens: AGENT_TURN_TOKENS,
     temperature: 0.0,
     signal: params.signal,
@@ -264,6 +289,17 @@ export async function runAgentReview(params: {
   tokenUsage.prompt_tokens += final.tokenUsage.prompt_tokens;
   tokenUsage.completion_tokens += final.tokenUsage.completion_tokens;
   tokenUsage.total_tokens += final.tokenUsage.total_tokens;
+  recordLlmCall({
+    pass: `agent:turn ${turns + 1} (forced final)`,
+    attempt: 1,
+    model: params.repo.llm_model,
+    request_text: finalMessages.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join("\n\n"),
+    response_text: final.content,
+    finish_reason: final.finishReason ?? null,
+    prompt_tokens: final.tokenUsage.prompt_tokens,
+    completion_tokens: final.tokenUsage.completion_tokens,
+    total_tokens: final.tokenUsage.total_tokens,
+  });
   transcript.push({ turn: turns + 1, assistant: final.content });
 
   const turn = parseAgentTurn(final.content);
